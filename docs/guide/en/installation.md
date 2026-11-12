@@ -9,7 +9,8 @@
 | Node.js | 20 or later. Heirloom uses only Node built-in modules, so no `npm install` is needed. |
 | git | The project you work on must be a git repository. The target branch comes from `origin/HEAD` or the project setting `baseBranch`. |
 | Claude Code | The only supported host for now. |
-| `gh` (optional) | Needed only to open pull requests. The remote must be on github.com and `gh auth login` must be done. Without it, Heirloom writes the record files and you open the PR yourself. |
+| `gh` (optional) | Needed only to open pull requests on github.com. `gh auth login` must be done. GitHub Enterprise hosts are not supported. |
+| `glab` (optional) | Needed only to open merge requests on GitLab: gitlab.com, or a self-hosted GitLab that `glab auth login --hostname <host>` was done for (any other host counts as unsupported). The commands Heirloom uses follow glab 1.36. |
 | Operating system | Linux, macOS, WSL. The Windows keychain is not used yet (the key is kept in a file). |
 
 If Node is missing or older than 20, Heirloom does not block the session. The session start shows one line, "Heirloom 비활성: Node 20 이상이 필요합니다." (Heirloom inactive: Node 20 or later is required), and everything else stays off.

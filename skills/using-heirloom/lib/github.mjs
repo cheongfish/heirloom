@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import { HeirloomError, classifyError, withRetry } from './errors.mjs';
+import { baseBranchName, parseRemote } from './remote.mjs';
 
 const execFileP = promisify(execFile);
 
@@ -14,22 +15,13 @@ const execFileP = promisify(execFile);
  * @returns {{ owner: string, repo: string } | null}
  */
 export function parseGithubRemote(url) {
-  if (!url) return null;
-  const m =
-    /^(?:[\w.-]+@)?github\.com:([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(url) ??
-    /^(?:ssh|https?|git):\/\/(?:[^@/\s]+@)?github\.com(?::\d+)?\/([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(url);
-  return m ? { owner: m[1], repo: m[2] } : null;
+  const parsed = parseRemote(url);
+  if (parsed?.host !== 'github.com') return null;
+  const parts = parsed.path.split('/');
+  return parts.length === 2 ? { owner: parts[0], repo: parts[1] } : null;
 }
 
-/**
- * Split a base ref such as `origin/main` into remote and branch name.
- * @param {string} ref
- * @param {string[]} remotes
- */
-export function baseBranchName(ref, remotes) {
-  const remote = remotes.find((r) => ref.startsWith(`${r}/`));
-  return remote ? { remote, branch: ref.slice(remote.length + 1) } : { remote: null, branch: ref };
-}
+export { baseBranchName };
 
 /**
  * @param {string[]} args

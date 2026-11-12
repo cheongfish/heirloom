@@ -13,13 +13,15 @@ import { appendEvent, deriveState, readEvents } from './events.mjs';
 import { readJson, writeFileAtomic } from './fsx.mjs';
 import { buildCurationReview, curationReviewPath } from './curation.mjs';
 import { verifiedApprovalRecord } from './baseline.mjs';
-import { git, listRemotes, readTreeTexts, repoInfo, tryGit } from './git.mjs';
-import { baseBranchName, findOpenPr, ghReady, parseGithubRemote } from './github.mjs';
+import { git, readTreeTexts, repoInfo } from './git.mjs';
+import { findOpenPr, ghReady } from './github.mjs';
+import { findOpenMr, glabReady, parseMrUrl } from './gitlab.mjs';
 import { readIds } from './ids.mjs';
 import { taskPaths } from './paths.mjs';
 import { checkPrExpiry } from './pr-expiry.mjs';
-import { findProjectRules } from './project-rules.mjs';
+import { findMrTemplates, findProjectRules } from './project-rules.mjs';
 import { planRecordChanges } from './record-changes.mjs';
+import { remoteProvider, taskRemote } from './remote.mjs';
 import { appliedTaskMerged } from './record-status.mjs';
 import { parseRecord, readRecords, recordPath, writeRecord } from './records.mjs';
 import { currentSourceState, hashMaterial } from './state.mjs';
@@ -63,10 +65,17 @@ export async function listPendingApprovals({ home, cwd }) {
 }
 
 /**
- * PR template selection: one template is used; several are listed and not chosen.
+ * PR or MR template selection: one template is used; several are listed and not chosen.
+ * GitLab's own rule applies to MR templates: among several, `Default.md` is the default.
  * @param {string} root
+ * @param {import('./remote.mjs').Provider | null} [provider]
  */
-export async function prTemplateChoice(root) {
+export async function prTemplateChoice(root, provider = 'github') {
+  if (provider === 'gitlab') {
+    const templates = await findMrTemplates(root);
+    const fallback = templates.find((t) => path.posix.basename(t).toLowerCase() === 'default.md') ?? null;
+    return { template: templates.length === 1 ? templates[0] : fallback, templates };
+  }
   const { prTemplates } = await findProjectRules(root);
   return { template: prTemplates.length === 1 ? prTemplates[0] : null, templates: prTemplates };
 }
@@ -111,14 +120,13 @@ async function stateMatches(input, approval) {
 }
 
 /**
- * What the agent needs to open (or find) the PR. Never fails the apply: problems are
+ * What the agent needs to open (or find) the PR or MR. Never fails the apply: problems are
  * reported as `available: false` with a reason; the records are still written.
  * @param {any} input
  */
 async function prMaterial(input) {
   const root = input.repo.root;
-  const remotes = await listRemotes(root).catch(() => []);
-  const { remote, branch: base } = baseBranchName(input.base.ref, remotes);
+  const { remote, branch: base, url } = await taskRemote(root, input.base.ref);
   /** @type {{ fetched: boolean | null, note: string | null }} */
   const fetch = { fetched: null, note: null };
   if (remote) {
@@ -131,27 +139,35 @@ async function prMaterial(input) {
       process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     }
   }
-  const url = await tryGit(['remote', 'get-url', remote ?? 'origin'], { cwd: root });
-  const github = parseGithubRemote(url);
-  const templates = await prTemplateChoice(root);
+  const { provider, host, repo } = await remoteProvider({ cwd: root, url });
+  const templates = await prTemplateChoice(root, provider);
   const pr = {
     available: false,
     /** @type {string | null} */
     reason: null,
+    provider,
+    host: provider ? host : null,
     base,
     head: input.branch,
-    repo: github ? `${github.owner}/${github.repo}` : null,
+    repo: provider ? repo : null,
     remote: remote ?? 'origin',
-    /** @type {{ number: number, url: string, base: string } | null} */
+    /** GitHub: `{ number, url, base }`; GitLab: `{ iid, url, base }`. */
+    /** @type {{ number: number, url: string, base: string } | { iid: number, url: string, base: string } | null} */
     existing: null,
     ...templates,
     ...fetch,
   };
   if (!input.branch) return { ...pr, reason: 'detached_head' };
-  if (!github) return { ...pr, reason: 'not_github' };
-  const ready = await ghReady(root);
-  if (!ready.ok) return { ...pr, reason: ready.reason };
-  pr.existing = await findOpenPr({ cwd: root, repo: /** @type {string} */ (pr.repo), head: input.branch });
+  if (!provider || !host || !repo) return { ...pr, reason: 'unsupported_remote' };
+  if (provider === 'gitlab') {
+    const ready = await glabReady({ cwd: root, host });
+    if (!ready.ok) return { ...pr, reason: ready.reason };
+    pr.existing = await findOpenMr({ cwd: root, host, repo, head: input.branch });
+  } else {
+    const ready = await ghReady(root);
+    if (!ready.ok) return { ...pr, reason: ready.reason };
+    pr.existing = await findOpenPr({ cwd: root, repo, head: input.branch });
+  }
   return { ...pr, available: true };
 }
 
@@ -337,25 +353,43 @@ const RECORD_FILE = /^\.heirloom\/(decisions|axioms)\/[^/]+\.md$/;
 const PR_URL = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/;
 
 /**
- * Record that the PR exists (PR creation is its own state, after the records are written).
+ * The provider of a PR or MR URL: a github.com pull request, or a merge request on a host
+ * that counts as GitLab (gitlab.com, or a host glab is logged in to).
+ * @param {string} url
+ * @param {string} cwd
+ * @returns {Promise<import('./remote.mjs').Provider>}
+ */
+async function reviewUrlProvider(url, cwd) {
+  if (PR_URL.test(url)) return 'github';
+  const mr = parseMrUrl(url);
+  if (mr && (await remoteProvider({ cwd, url: `https://${mr.host}/${mr.repo}` })).provider === 'gitlab') return 'gitlab';
+  throw new HeirloomError('E_INPUT', `GitHub PR URL이나 GitLab MR URL이 아님: ${url}`, {
+    hint: 'https://github.com/<owner>/<repo>/pull/<번호> 또는 https://<GitLab 호스트>/<그룹>/<프로젝트>/-/merge_requests/<번호> 형식으로 준다. 자체 호스팅 GitLab은 glab이 그 호스트에 로그인되어 있어야 한다.',
+  });
+}
+
+/**
+ * Record that the PR or MR exists (its creation is its own state, after the records are written).
  * @param {{ home: string, taskId: string, prUrl: string }} options
  */
 export async function completePr({ home, taskId, prUrl }) {
-  if (!PR_URL.test(prUrl)) throw new HeirloomError('E_INPUT', `GitHub PR URL이 아님: ${prUrl}`, { hint: 'https://github.com/<owner>/<repo>/pull/<번호> 형식으로 준다.' });
   const paths = taskPaths(home, taskId);
   if (!(await exists(paths.events))) throw new HeirloomError('E_INPUT', `작업이 없음: ${taskId}`);
+  const input = /** @type {any} */ (await readJson(paths.input));
+  const cwd = typeof input?.repo?.root === 'string' && (await exists(input.repo.root)) ? input.repo.root : home;
+  const provider = await reviewUrlProvider(prUrl, cwd);
   return withTaskLock(home, taskId, async () => {
     const events = await readEvents(paths.events);
     const state = deriveState(events);
     const done = lastOf(events, 'pr_created');
     if (state === 'pr_created') {
-      if (done?.url === prUrl) return { taskId, state, prUrl };
+      if (done?.url === prUrl) return { taskId, state, prUrl, provider };
       throw new HeirloomError('E_CONFLICT', `이미 다른 PR이 기록됨: ${String(done?.url)}`);
     }
     if (state !== 'applied') throw new HeirloomError('E_CONFLICT', `기록 반영 전에는 PR 완료를 기록할 수 없음 (현재 상태: ${state ?? '없음'})`, { hint: 'apply.mjs를 먼저 실행한다.' });
     const approvalId = lastOf(events, 'records_written')?.approvalId;
-    const next = await appendEvent(paths.events, { type: 'pr_created', approvalId, url: prUrl });
-    return { taskId, state: next, prUrl };
+    const next = await appendEvent(paths.events, { type: 'pr_created', approvalId, url: prUrl, provider });
+    return { taskId, state: next, prUrl, provider };
   });
 }
 

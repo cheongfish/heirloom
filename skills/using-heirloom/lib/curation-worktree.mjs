@@ -10,7 +10,7 @@ import { loadProjectConfig } from './config.mjs';
 import { HeirloomError } from './errors.mjs';
 import { readJson, writeJsonAtomic } from './fsx.mjs';
 import { git, listRemotes, repoInfo, resolveBase, tryGit } from './git.mjs';
-import { baseBranchName } from './github.mjs';
+import { baseBranchName } from './remote.mjs';
 import { newTaskId, randomBase32, resolveIds } from './ids.mjs';
 import { ensureDir, homePaths, taskPaths } from './paths.mjs';
 import { readIndex, taskKey, updateIndex } from './store.mjs';

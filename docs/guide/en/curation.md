@@ -46,6 +46,6 @@ A run that fails, times out (30 minutes) or cannot start (the command is missing
 
 ## Limits
 
-- The headless agent runs with your user's permissions and uses your `gh` login. Its tools are limited per step (see [Security](security.md#headless-curation-runs)).
-- Only github.com remotes get a PR. With another remote, the records are committed in the curation worktree; push and merge the branch yourself. GitLab support is planned ([Roadmap](roadmap.md)).
+- The headless agent runs with your user's permissions and uses your `gh` or `glab` login. Its tools are limited per step (see [Security](security.md#headless-curation-runs)).
+- Only github.com and GitLab remotes get a PR (an MR on GitLab). With another remote, the records are committed in the curation worktree; push and merge the branch yourself.
 - The command comes from the user setting `curation.agent` ([Configuration](configuration.md#user-settings)). Only the Claude Code profile exists so far.

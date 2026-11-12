@@ -1,12 +1,13 @@
-// Expiry of tasks whose PR was closed without merge.
-// Only gh tells whether a PR was closed. When gh is missing, unauthenticated or offline the
-// task keeps waiting: nothing is guessed.
+// Expiry of tasks whose PR or MR was closed without merge.
+// Only gh (GitHub PRs) or glab (GitLab MRs) tells whether it was closed. When the tool is
+// missing, unauthenticated or offline the task keeps waiting: nothing is guessed.
 
 import { access } from 'node:fs/promises';
 
 import { appendEvent, deriveState, readEvents } from './events.mjs';
 import { readJson } from './fsx.mjs';
 import { prState } from './github.mjs';
+import { mrState, parseMrUrl } from './gitlab.mjs';
 import { taskPaths } from './paths.mjs';
 import { withTaskLock } from './task-lock.mjs';
 
@@ -21,6 +22,15 @@ async function exists(p) {
 }
 
 /**
+ * State of a GitHub PR or a GitLab MR, chosen by the shape of its URL.
+ * @param {{ cwd: string, url: string }} options
+ * @returns {Promise<'OPEN' | 'CLOSED' | 'MERGED'>}
+ */
+export function reviewState({ cwd, url }) {
+  return parseMrUrl(url) ? mrState({ cwd, url }) : prState({ cwd, url });
+}
+
+/**
  * @typedef {object} ExpiryCheck
  * @property {string | null} state task state after the check
  * @property {'OPEN' | 'CLOSED' | 'MERGED' | null} pr null when it could not be checked
@@ -28,11 +38,11 @@ async function exists(p) {
  */
 
 /**
- * Check the PR of a `pr_created` task and record `expired` when it was closed without merge.
- * @param {{ home: string, taskId: string, lookup?: typeof prState }} options
+ * Check the PR or MR of a `pr_created` task and record `expired` when it was closed without merge.
+ * @param {{ home: string, taskId: string, lookup?: typeof reviewState }} options
  * @returns {Promise<ExpiryCheck>}
  */
-export async function checkPrExpiry({ home, taskId, lookup = prState }) {
+export async function checkPrExpiry({ home, taskId, lookup = reviewState }) {
   const paths = taskPaths(home, taskId);
   const events = await readEvents(paths.events);
   const state = deriveState(events);
@@ -58,10 +68,10 @@ export async function checkPrExpiry({ home, taskId, lookup = prState }) {
 /**
  * Check every `pr_created` task, remembering answers: a merged PR is never asked again,
  * an open or unknown one again after `ttlMs`. Used by the dashboard list.
- * @param {{ home: string, taskIds: string[], cache: Map<string, { pr: string | null, at: number }>, now?: number, ttlMs?: number, lookup?: typeof prState }} options
+ * @param {{ home: string, taskIds: string[], cache: Map<string, { pr: string | null, at: number }>, now?: number, ttlMs?: number, lookup?: typeof reviewState }} options
  * @returns {Promise<string[]>} task ids that expired in this call
  */
-export async function refreshPrExpiry({ home, taskIds, cache, now = Date.now(), ttlMs = 5 * 60_000, lookup = prState }) {
+export async function refreshPrExpiry({ home, taskIds, cache, now = Date.now(), ttlMs = 5 * 60_000, lookup = reviewState }) {
   const due = taskIds.filter((id) => {
     const hit = cache.get(id);
     return !hit || (hit.pr !== 'MERGED' && now - hit.at >= ttlMs);

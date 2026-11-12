@@ -33,8 +33,8 @@ A [context curation](curation.md) is the only case where Heirloom starts an agen
 
 - The command comes from the user setting `curation.agent`. A request to the dashboard cannot choose or change it; the run request must have an empty body, and it needs the session token like an approval.
 - The prompt is fixed text: task ID, worktree path and the skill to follow. No request content or record text goes on the command line.
-- The agent runs in the dedicated worktree with a limited tool list. Drafting: read tools, writing its `draft.json`, and the curation and submit scripts. Applying: read tools, writing the PR body file, the apply scripts, `git add .heirloom*`, `git commit`, `git push`, `gh pr create` and `gh pr edit`.
-- It runs with your user's permissions and your `gh` login. A program that can take the dashboard's session token can also start a curation; this is the same level as the approval limit below.
+- The agent runs in the dedicated worktree with a limited tool list. Drafting: read tools, writing its `draft.json`, and the curation and submit scripts. Applying: read tools, writing the PR body file, the apply scripts, `git add .heirloom*`, `git commit`, `git push`, `gh pr create`, `gh pr edit`, `glab mr create` and `glab mr update`.
+- It runs with your user's permissions and your `gh` or `glab` login. A program that can take the dashboard's session token can also start a curation; this is the same level as the approval limit below.
 
 ## Known limits
 

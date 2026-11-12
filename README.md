@@ -10,7 +10,7 @@ Heirloom does not do the development work, and a handoff is not an approval. Onl
 
 ## Installation
 
-Requires Node 20 or later, git and Claude Code. `gh` with a github.com remote is needed only to open PRs. There are no runtime dependencies to install.
+Requires Node 20 or later, git and Claude Code. Opening the PR needs `gh` for a github.com remote, or `glab` for a GitLab remote (gitlab.com or self-hosted). There are no runtime dependencies to install.
 
 Install from the `release` branch, which holds only the plugin files:
 
@@ -27,7 +27,7 @@ To try a checkout for one session without installing: `claude --plugin-dir /path
 
 1. **Handoff.** The agent hands off finished spec-based work. Source quotes in its drafts are checked mechanically.
 2. **Approval.** You review the summary and each decision and axiom in the dashboard. Approvals are signed.
-3. **Records and PR.** The agent verifies the approval, writes `.heirloom/` records and opens the PR with the approved summary verbatim. A session still waiting for the approval does this as soon as you approve.
+3. **Records and PR.** The agent verifies the approval, writes `.heirloom/` records and opens the PR (a merge request on GitLab) with the approved summary verbatim. A session still waiting for the approval does this as soon as you approve.
    - If the code changes after approval, even after the PR is open, only the items the change touches come back to you. The rest keep their approval.
 4. **Recall.** Later sessions start with the active axioms and a decision index, and the agent fetches the full text of related records. A record becomes active once it is merged into the target branch.
 
@@ -69,7 +69,6 @@ Approvals are signed with a per-user ed25519 key. The dashboard listens on `127.
 Planned:
 
 - Codex and Antigravity hosts,
-- GitLab,
 - Windows keychain.
 
 → [Roadmap](docs/guide/en/roadmap.md)

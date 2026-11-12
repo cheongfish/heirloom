@@ -181,13 +181,13 @@ export async function createDashboardServer(options) {
     });
 
   const tasksDir = homePaths(home).tasks;
-  /** PR states already asked for, so the list does not call gh on every request. */
+  /** PR and MR states already asked for, so the list does not call gh or glab on every request. */
   /** @type {Map<string, { pr: string | null, at: number }>} */
   const prCache = new Map();
   let prCheckRunning = false;
 
   /**
-   * Ask gh about PRs in the background: the list never waits for the network.
+   * Ask gh or glab about PRs and MRs in the background: the list never waits for the network.
    * An `expired` event changes events.jsonl, and the watcher then tells open screens.
    * @param {string[]} taskIds
    */

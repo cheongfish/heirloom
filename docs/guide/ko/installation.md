@@ -9,7 +9,8 @@
 | Node.js | 20 이상. Heirloom은 Node 내장 모듈만 쓰므로 `npm install`이 필요 없습니다. |
 | git | 소비 프로젝트가 git 저장소여야 합니다. 대상 브랜치는 `origin/HEAD` 또는 프로젝트 설정의 `baseBranch`로 정합니다. |
 | Claude Code | 현재 지원하는 유일한 호스트입니다. |
-| `gh` (선택) | PR을 만들 때만 필요합니다. 원격이 github.com이어야 하고 `gh auth login`이 되어 있어야 합니다. 없으면 기록 파일까지만 쓰고 PR은 직접 만들게 됩니다. |
+| `gh` (선택) | github.com에서 PR을 만들 때만 필요합니다. `gh auth login`이 되어 있어야 합니다. GitHub Enterprise 호스트는 지원하지 않습니다. |
+| `glab` (선택) | GitLab에서 MR을 만들 때만 필요합니다. gitlab.com이거나, `glab auth login --hostname <호스트>`를 해 둔 자체 호스팅 GitLab이어야 합니다(그 밖의 호스트는 지원하지 않는 원격으로 봅니다). Heirloom이 쓰는 명령은 glab 1.36 기준입니다. |
 | 운영체제 | Linux, macOS, WSL. Windows 키체인은 아직 쓰지 않습니다(파일로 보관). |
 
 Node를 찾지 못하거나 버전이 20 미만이면 Heirloom은 세션을 막지 않습니다. 세션 시작 때 "Heirloom 비활성: Node 20 이상이 필요합니다."라는 한 줄만 보이고 나머지 기능은 꺼집니다.

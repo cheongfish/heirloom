@@ -236,7 +236,7 @@ test('PR step unavailable: records are still written and the reason is reported'
   const a = await applyAny({ home: notGithub.home, taskId: notGithub.taskId });
   assert.equal(a.state, 'applied');
   assert.equal(a.pr.available, false);
-  assert.equal(a.pr.reason, 'not_github');
+  assert.equal(a.pr.reason, 'unsupported_remote');
   assert.equal(a.files.length, 1);
 
   const noGh = await approvedTask({ gh: null });

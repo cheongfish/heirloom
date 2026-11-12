@@ -1,4 +1,4 @@
-// A task whose PR cannot be opened (the remote is not GitHub) ends when its approval reaches
+// A task whose PR cannot be opened (the remote is neither GitHub nor GitLab) ends when its approval reaches
 // the target branch (decision 2026-11-12, MVP-PLAN 2절 'PR 없이 끝나는 작업').
 
 import { test } from 'node:test';
@@ -35,7 +35,7 @@ async function appliedLocalTask({ records = true } = {}) {
     },
   });
   const applied = /** @type {any} */ (await applyApproval({ home: t.home, taskId: t.taskId }));
-  assert.equal(applied.pr.reason, 'not_github');
+  assert.equal(applied.pr.reason, 'unsupported_remote');
   t.repo.commitAll('feat: a를 2로 바꿈');
   return t;
 }
@@ -58,7 +58,7 @@ test('local remote, before merge: listed as waiting for a manual merge, not as a
   const t = await appliedLocalTask();
   assert.equal(await appliedTaskMerged({ home: t.home, taskId: t.taskId }), false);
   const ctx = await context(t);
-  assert.match(ctx, new RegExp(`${t.taskId}: 기록 파일을 썼고 PR은 만들 수 없음`));
+  assert.match(ctx, new RegExp(`${t.taskId}: 기록 파일을 썼고 PR·MR은 만들 수 없음\\(지원하지 않는 원격\\)`));
   assert.doesNotMatch(ctx, /PR이 아직 없음/);
   assert.deepEqual((await listPendingApprovals({ home: t.home, cwd: t.repo.dir })).map((p) => p.state), ['applied']);
 });

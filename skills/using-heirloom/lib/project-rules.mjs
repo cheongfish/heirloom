@@ -1,5 +1,5 @@
-// Discover the consumer project's PR templates and commit message guides.
-// Only paths are reported; the agent reads the contents.
+// Discover the consumer project's PR templates (GitHub), MR templates (GitLab) and commit
+// message guides. Only paths are reported; the agent reads the contents.
 
 import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -15,6 +15,7 @@ const PR_TEMPLATE_FILES = [
   'PULL_REQUEST_TEMPLATE.md',
 ];
 const PR_TEMPLATE_DIRS = ['.github/PULL_REQUEST_TEMPLATE', '.github/pull_request_template', 'docs/PULL_REQUEST_TEMPLATE'];
+const MR_TEMPLATE_DIR = '.gitlab/merge_request_templates';
 const COMMIT_GUIDE_FILES = ['.gitmessage', 'CONTRIBUTING.md'];
 
 /**
@@ -60,4 +61,18 @@ export async function findProjectRules(root) {
   const template = await tryGit(['config', '--get', 'commit.template'], { cwd: root });
   const guides = template ? [template, ...COMMIT_GUIDE_FILES] : [...COMMIT_GUIDE_FILES];
   return { prTemplates: await existingUnique(root, templates), commitGuides: await existingUnique(root, guides) };
+}
+
+/**
+ * GitLab merge request templates, sorted by name.
+ * @param {string} root repository root
+ * @returns {Promise<string[]>}
+ */
+export async function findMrTemplates(root) {
+  try {
+    const names = (await readdir(path.join(root, MR_TEMPLATE_DIR))).filter((n) => n.toLowerCase().endsWith('.md')).sort();
+    return existingUnique(root, names.map((n) => `${MR_TEMPLATE_DIR}/${n}`));
+  } catch {
+    return [];
+  }
 }

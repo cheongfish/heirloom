@@ -46,14 +46,14 @@ If the session that made the handoff is still waiting, it starts this as soon as
 1. **Check the approval.** Verify the signature, and check that the current draft is the approved draft. If either check fails, the handoff is treated as not approved.
 2. **Check the state.** Confirm that the approved branch and source state are unchanged. If the code changed after approval, nothing is written and the task needs a re-check (see [Changes after approval](#changes-after-approval)). A rebase that leaves the task's own files unchanged does not count as a change.
 3. **Write the records.** Write record files to `.heirloom/decisions/` and `.heirloom/axioms/`. Superseded or deprecated records are marked inactive, never deleted.
-4. **Commit and open the PR.** Commit the record files and open the PR with `gh`, using the approved summary verbatim. The summary goes into the summary section of the project's PR template, or to the top of the body if there is none.
+4. **Commit and open the PR.** Commit the record files and open the PR with `gh` (GitHub) or the merge request with `glab` (GitLab), using the approved summary verbatim. The summary goes into the summary section of the project's template, or to the top of the body if there is none. On GitLab the templates are `.gitlab/merge_request_templates/*.md`; when there are several, `Default.md` is used, and without it the agent asks you which one.
 5. **If a PR already exists.** When the branch already has a PR, no second one is created.
 
 Applying the same approval more than once writes the records only once.
 
-If no PR can be opened (the remote is not on github.com, `gh` is missing or not logged in), the records are written and committed, and you open the PR or merge the branch yourself. Once the approved records are on the target branch, the task counts as finished: it leaves the session start list, and the dashboard shows it as merged.
+If no PR can be opened (the remote is neither github.com nor GitLab, or `gh`/`glab` is missing or not logged in), the records are written and committed, and you open the PR or merge the branch yourself. Once the approved records are on the target branch, the task counts as finished: it leaves the session start list, and the dashboard shows it as merged.
 
-If the PR is closed without merge, the task expires and its records never become active. Heirloom notices this through `gh` when the agent applies the task again or when the dashboard overview is shown. Without `gh`, or offline, the task keeps waiting.
+If the PR or MR is closed without merge, the task expires and its records never become active. Heirloom notices this through `gh` or `glab` when the agent applies the task again or when the dashboard overview is shown. Without the tool, or offline, the task keeps waiting.
 
 ## Changes after approval
 
