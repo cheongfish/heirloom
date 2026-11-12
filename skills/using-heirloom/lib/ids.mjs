@@ -1,4 +1,4 @@
-// Identifiers. See docs/HEIRLOOM-MVP-PLAN.md section 4.
+// Identifiers: random repository, worktree, task, approval and record ids.
 // Note: ids.mjs and store.mjs import each other; both only use the other's exports at call time.
 
 import { randomBytes } from 'node:crypto';

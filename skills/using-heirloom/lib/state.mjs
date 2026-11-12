@@ -1,5 +1,5 @@
-// Source and material state hashing. See docs/HEIRLOOM-PLAN.md section 5.2 and
-// docs/HEIRLOOM-MVP-PLAN.md section 7.3.
+// Source and material state hashing. A state is the content of the task's changes, not a
+// commit id: committing the same content keeps the state.
 
 import { createHash } from 'node:crypto';
 import { lstat, readFile, readlink } from 'node:fs/promises';
@@ -81,7 +81,7 @@ export async function hashMaterial(root, ref) {
 /**
  * Source state of a commit relative to the merge-base, computed from git objects only.
  * Produces the same hash as computeSourceState for a clean working tree at that commit,
- * so a review that covered `commit` can be compared with the current state (PLAN 5.2, 9).
+ * so a review that covered `commit` can be compared with the current state.
  * @param {{ root: string, mergeBase: string, commit: string }} options
  * @returns {Promise<{ hash: string, files: FileState[] }>}
  */

@@ -1,4 +1,4 @@
-// GitHub remote detection and the few gh calls apply needs (PLAN 16.2, MVP-PLAN 7.2).
+// GitHub remote detection and the few gh calls apply needs.
 // gh creates nothing here: the agent runs `gh pr create` itself.
 
 import { execFile } from 'node:child_process';
@@ -69,7 +69,7 @@ export async function ghReady(cwd) {
 }
 
 /**
- * The open PR whose head is `head`, or null. Network errors are retried once (PLAN 8).
+ * The open PR whose head is `head`, or null. Network errors are retried once.
  * @param {{ cwd: string, repo: string, head: string }} options
  * @returns {Promise<{ number: number, url: string, base: string } | null>}
  */
@@ -90,7 +90,7 @@ export async function findOpenPr({ cwd, repo, head }) {
 
 /**
  * State of a pull request by URL: 'OPEN', 'CLOSED' (closed without merge) or 'MERGED'.
- * Network errors are retried once (PLAN 8).
+ * Network errors are retried once.
  * @param {{ cwd: string, url: string }} options
  * @returns {Promise<'OPEN' | 'CLOSED' | 'MERGED'>}
  */

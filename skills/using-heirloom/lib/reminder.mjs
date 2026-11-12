@@ -1,6 +1,5 @@
 // Stop-hook decision: remind the agent once about handing off, only when every
-// mechanical condition holds (PLAN 7.3, 7.5; MVP-PLAN 7.4). Never infers completion
-// from the conversation.
+// mechanical condition holds. Never infers completion from the conversation.
 
 import { matchesAny } from './glob.mjs';
 import { isMarkdownCodePath } from './schema.mjs';
@@ -54,7 +53,7 @@ export async function evaluateStop({ cwd, home, stopHookActive }) {
   const state = await computeSourceState({ root: info.root, mergeBase: base.mergeBase });
   if (!state.files.length) return { remind: false, reason: 'no_changes' };
   // Work changes are non-Markdown files: a phase that only wrote spec/plan documents is not
-  // ready to hand off (same criterion as related code paths, PLAN 9).
+  // ready to hand off (same criterion as related code paths).
   if (!state.files.some((f) => !isMarkdownCodePath(f.path))) return { remind: false, reason: 'no_code_changes' };
   const specs = state.files.filter((f) => f.status !== 'D' && matchesAny(f.path, config.specGlobs)).map((f) => f.path);
   if (!specs.length) return { remind: false, reason: 'no_spec' };

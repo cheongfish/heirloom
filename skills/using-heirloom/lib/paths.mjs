@@ -1,4 +1,4 @@
-// Storage locations. See docs/HEIRLOOM-MVP-PLAN.md section 3.
+// Storage locations: ~/.heirloom (HEIRLOOM_HOME) for local state, <repo>/.heirloom for records.
 
 import { chmod, mkdir } from 'node:fs/promises';
 import os from 'node:os';

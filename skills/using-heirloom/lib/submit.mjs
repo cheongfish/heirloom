@@ -1,4 +1,4 @@
-// Check and register the agent's draft (PLAN 9 steps 3-4, MVP-PLAN 7.2 submit-draft.mjs).
+// Check and register the agent's draft.
 
 import { access } from 'node:fs/promises';
 
@@ -108,7 +108,7 @@ export async function submitDraft({ home, taskId }) {
 /**
  * submit-draft.mjs: register the draft, then make sure the dashboard runs and open it once
  * per task. A dashboard problem never fails the submit: the draft and the waiting state are
- * kept and the hint tells the user how to reach the screen (PLAN 11.3).
+ * kept and the hint tells the user how to reach the screen.
  * @param {{ home: string, taskId: string } & Pick<import('./dashboard-open.mjs').OpenOptions, 'ensure' | 'open'>} options
  */
 export async function submitAndOpen({ home, taskId, ensure, open }) {

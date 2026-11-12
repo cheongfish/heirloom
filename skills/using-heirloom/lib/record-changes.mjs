@@ -1,4 +1,5 @@
-// Turn a verified approval into decision/axiom record changes (PLAN 14.2, MVP-PLAN 5.1).
+// Turn a verified approval into decision/axiom record changes. Records are never deleted:
+// superseded and deprecated ones are marked inactive.
 // Pure: takes the draft, the approval and the existing records; returns the files to write.
 // Running it again for the same approval yields the same files (crash recovery).
 

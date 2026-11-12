@@ -1,4 +1,4 @@
-// Turn a human's dashboard decision into a signed approval record (PLAN 11.2, 11.4, 12).
+// Turn a human's dashboard decision into a signed approval record.
 // The record is saved first; the `approved` event is the notification that follows.
 
 import path from 'node:path';

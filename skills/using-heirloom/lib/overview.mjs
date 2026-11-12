@@ -1,4 +1,4 @@
-// Dashboard overview helpers (MVP-PLAN 6.4): unhanded changes per registered worktree and
+// Dashboard overview helpers: unhanded changes per registered worktree and
 // stale open tasks. Read-only: never issues ids, never writes the index.
 
 import { access } from 'node:fs/promises';
@@ -15,7 +15,7 @@ import { readIndex, tasksForWorktree } from './store.mjs';
 const FINISHED = new Set(['pr_created', 'discarded', 'expired']);
 
 /**
- * An open task whose last event is `days` or more old (PLAN 12.2: listed, never expired by time).
+ * An open task whose last event is `days` or more old (listed, never expired by time).
  * An applied task that already reached its target branch (`merged`) is finished.
  * @param {{ state: string | null, updatedAt: string, merged?: boolean | null }} task
  * @param {number} now epoch ms

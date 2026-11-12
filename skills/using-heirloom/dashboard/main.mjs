@@ -1,5 +1,5 @@
 // Dashboard server process, started detached by lib/server-control.mjs.
-// Writes ~/.heirloom/server/server.json while running and exits when idle (MVP-PLAN 6.2).
+// Writes ~/.heirloom/server/server.json while running and exits when idle.
 
 import { appendFile, rm } from 'node:fs/promises';
 import path from 'node:path';

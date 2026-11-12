@@ -1,4 +1,4 @@
-// Open a URL in the user's browser (MVP-PLAN 6.5). Never throws: on failure the caller
+// Open a URL in the user's browser. Never throws: on failure the caller
 // prints the URL instead.
 
 import { spawn } from 'node:child_process';

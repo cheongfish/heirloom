@@ -1,4 +1,4 @@
-// Heirloom dashboard (MVP-PLAN 6, PLAN 11). Vanilla JS on top of the vendored SEED Design CSS.
+// Heirloom dashboard. Vanilla JS on top of the vendored SEED Design CSS.
 // SEED class names are written out in full (never assembled from parts) so the layout test
 // can check that each one exists in the vendored CSS.
 
@@ -201,7 +201,7 @@ const fieldBlock = (label, control, description) =>
 
 /**
  * Approve / reject / hold control: a radio group styled as a SEED segmented control.
- * Starts with nothing selected; the human must choose (PLAN 11.2).
+ * Starts with nothing selected; the human must choose.
  * @param {{ label: string, value: Decision | null, onchange: (value: Decision) => void }} o
  */
 function decisionControl({ label, value, onchange }) {
@@ -1116,7 +1116,7 @@ function drawForm(task) {
 
 /**
  * Fetch the task and redraw. The editable form is rebuilt only when nothing is being
- * edited; otherwise a banner offers to load the new version (PLAN 11.3, MVP-PLAN 6.5).
+ * edited; otherwise a banner offers to load the new version.
  * @param {string} taskId
  * @param {{ force?: boolean }} [options]
  */

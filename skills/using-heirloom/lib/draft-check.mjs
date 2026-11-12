@@ -1,6 +1,6 @@
-// Mechanical checks of an agent-written draft against the frozen input (PLAN 9 step 3,
-// MVP-PLAN 5.4). Content quality is the human's job; these checks only verify that what
-// the draft cites exists and that related code paths point at real changed code.
+// Mechanical checks of an agent-written draft against the frozen input. Content quality is
+// the human's job; these checks only verify that what the draft cites exists and that
+// related code paths point at real changed code.
 
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';

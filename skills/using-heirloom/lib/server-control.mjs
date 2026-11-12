@@ -1,4 +1,4 @@
-// Start, reuse or restart the single per-user dashboard server (MVP-PLAN 6.1).
+// Start, reuse or restart the single per-user dashboard server.
 
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';

@@ -1,5 +1,4 @@
 // Atomic writes, mkdir-based locks and JSON/JSONL helpers.
-// See docs/HEIRLOOM-MVP-PLAN.md section 3.2.
 
 import { randomBytes } from 'node:crypto';
 import { appendFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';

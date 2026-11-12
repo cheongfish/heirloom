@@ -1,5 +1,5 @@
 // Human-readable handoff file (~/.heirloom/tasks/<id>/handoff.md). Self-contained so that
-// the PR can be written later from this file and the approval alone (PLAN 12.1).
+// the PR can be written later from this file and the approval alone.
 
 /** @param {string | null | undefined} h */
 const short = (h) => (h ? h.replace(/^sha256:/, '').slice(0, 12) : '없음');

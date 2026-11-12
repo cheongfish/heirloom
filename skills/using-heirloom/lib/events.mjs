@@ -1,5 +1,5 @@
-// Task event log and state machine. See docs/HEIRLOOM-MVP-PLAN.md section 5.6 and
-// docs/HEIRLOOM-PLAN.md section 12 (approval, receipt and PR are separate states).
+// Task event log and state machine. The human's approval, the agent's receipt of it and the
+// PR are separate states, so none of them is taken for another.
 
 import { HeirloomError } from './errors.mjs';
 import { appendJsonLine, readJsonl, withLock } from './fsx.mjs';
@@ -112,7 +112,7 @@ export async function appendEvent(file, event) {
 }
 
 /**
- * Number of prepare runs recorded for a source state (PLAN 8: at most two).
+ * Number of prepare runs recorded for a source state (at most two: one transient retry).
  * @param {TaskEvent[]} events
  * @param {string} sourceHash
  */

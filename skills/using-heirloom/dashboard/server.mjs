@@ -1,4 +1,4 @@
-// Local approval dashboard server (MVP-PLAN 6). Binds 127.0.0.1 only; rejects foreign
+// Local approval dashboard server. Binds 127.0.0.1 only; rejects foreign
 // Host/Origin; state-changing requests need the session token embedded in the page.
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
@@ -163,7 +163,7 @@ export async function createDashboardServer(options) {
   let prCheckRunning = false;
 
   /**
-   * Ask gh about PRs in the background (MVP-PLAN 7.5): the list never waits for the network.
+   * Ask gh about PRs in the background: the list never waits for the network.
    * An `expired` event changes events.jsonl, and the watcher then tells open screens.
    * @param {string[]} taskIds
    */

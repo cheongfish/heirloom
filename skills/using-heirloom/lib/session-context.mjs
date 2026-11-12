@@ -1,5 +1,5 @@
-// Session-start context: the handoff convention plus a short project index
-// (PLAN 14.4, MVP-PLAN 7.4). Read-only: never creates ids or files.
+// Session-start context: the handoff convention plus a short project index.
+// Read-only: never creates ids or files.
 
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -19,7 +19,7 @@ import { readIndex, tasksForWorktree } from './store.mjs';
 const PENDING_SHOWN = 10;
 
 /**
- * Whether the task's target remote is not GitHub, so its PR step cannot run (MVP-PLAN 2절).
+ * Whether the task's target remote is not GitHub, so its PR step cannot run.
  * @param {string} home
  * @param {string} taskId
  */

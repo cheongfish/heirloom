@@ -1,4 +1,4 @@
-// Expiry of tasks whose PR was closed without merge (PLAN 12.2, 14.3; MVP-PLAN 7.5).
+// Expiry of tasks whose PR was closed without merge.
 // Only gh tells whether a PR was closed. When gh is missing, unauthenticated or offline the
 // task keeps waiting: nothing is guessed.
 

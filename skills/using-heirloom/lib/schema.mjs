@@ -1,4 +1,5 @@
-// Hand-written validators for the data formats in docs/HEIRLOOM-MVP-PLAN.md section 5.
+// Hand-written validators for Heirloom's data formats (records, input, draft, approval,
+// events, index, config).
 // A validator pushes "<json path>: <message>" strings into `errors`.
 
 import { HeirloomError } from './errors.mjs';
@@ -9,7 +10,8 @@ const MARKDOWN_EXT = /\.(md|mdx|markdown)$/i;
 const MARKDOWN_BRACES = /\.\{([^}]*)\}$/;
 
 /**
- * True when a code path or glob points only at Markdown documents (PLAN 9).
+ * True when a code path or glob points only at Markdown documents. Documents are linked as
+ * sources, never as related code paths.
  * @param {string} p
  */
 export function isMarkdownCodePath(p) {
@@ -164,7 +166,7 @@ const approvalId = str({ pattern: PATTERNS.approvalId });
 export const codePath = str({
   nonEmpty: true,
   check: (p) => {
-    if (isMarkdownCodePath(p)) return '마크다운 문서는 연관 코드 경로에 넣을 수 없음. 문서는 sources로 연결한다 (PLAN 9)';
+    if (isMarkdownCodePath(p)) return '마크다운 문서는 연관 코드 경로에 넣을 수 없음. 문서는 sources로 연결한다';
     if (p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p)) return '저장소 기준 상대경로여야 함';
     if (p.split(/[\\/]/).includes('..')) return '`..`을 포함할 수 없음';
     return null;

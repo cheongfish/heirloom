@@ -1,5 +1,4 @@
 // ~/.heirloom/index.json: worktree registry, task-key mapping, reminders, fetch times.
-// See docs/HEIRLOOM-MVP-PLAN.md section 5.7.
 
 import { readJson, withLock, writeJsonAtomic } from './fsx.mjs';
 import { newTaskId } from './ids.mjs';

@@ -1,4 +1,4 @@
-// Discover the consumer project's PR templates and commit message guides (PLAN 16.1, 16.2).
+// Discover the consumer project's PR templates and commit message guides.
 // Only paths are reported; the agent reads the contents.
 
 import { readdir, stat } from 'node:fs/promises';

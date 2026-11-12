@@ -1,4 +1,4 @@
-// Freeze the handoff input (PLAN 9 step 1, MVP-PLAN 7.2 prepare.mjs).
+// Freeze the handoff input: scope, source state, materials and project rules.
 // One run per source/material state: the same state returns the existing task.
 
 import { rm } from 'node:fs/promises';

@@ -48,6 +48,7 @@ The planning documents are the source of truth for agreed behavior. If code and 
   - Never add Karrot (당근) brand resources such as logos, names or characters.
 - **No test material in `skills/`.** Fixtures, eval scenarios and test notes go under `tests/` or `evals/`. Agents reading a skill directory may mistake scenario text for real instructions.
 - **No legacy code.** Do not use the old Bouncer project's source or structure as a reference.
+- **No planning-document references in runtime code.** Comments in the JavaScript files under `skills/` (`*.mjs`, `*.js`) must not cite the planning documents: no `PLAN 13`, `MVP-PLAN 7.2`, `PHASE3-PLAN 5.4`, `DESIGN 4.2`, no `docs/HEIRLOOM-*.md` paths, and no decision dates that point at their tables. Those documents are local only and are not shipped, so the reference means nothing to someone reading the installed plugin. Explain the behavior or the reason in the comment itself.
 
 ## 3. Development commands
 

@@ -1,5 +1,4 @@
 // Project (.heirloom/config.json) and user (~/.heirloom/config.json) settings with defaults.
-// See docs/HEIRLOOM-MVP-PLAN.md section 5.8.
 
 import { readJson } from './fsx.mjs';
 import { homePaths, repoPaths } from './paths.mjs';

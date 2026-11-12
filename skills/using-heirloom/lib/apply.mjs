@@ -1,9 +1,8 @@
 // Apply a signed approval: verify it, check the current state, write the approved records
-// into the consumer repository and gather what the agent needs to open the PR
-// (PLAN 11.4, 12, 14.2, 16; MVP-PLAN 7.2 apply.mjs and complete.mjs).
+// into the consumer repository and gather what the agent needs to open the PR.
 //
 // The approval record is the source of truth; events only tell what was already done, so
-// running apply again never writes twice and never needs a second approval (PLAN 12).
+// running apply again never writes twice and never needs a second approval.
 
 import { access } from 'node:fs/promises';
 import path from 'node:path';
@@ -43,7 +42,7 @@ async function exists(p) {
 const lastOf = (events, type) => events.filter((e) => e.type === type).at(-1);
 
 /**
- * Handoffs in the current worktree that were approved but not finished (PLAN 12.1). An applied
+ * Handoffs in the current worktree that were approved but not finished. An applied
  * task whose approval is already on the target branch is finished even without a PR.
  * @param {{ home: string, cwd: string }} options
  */
@@ -64,7 +63,7 @@ export async function listPendingApprovals({ home, cwd }) {
 }
 
 /**
- * PR template selection (PLAN 16.2): one template is used; several are listed and not chosen.
+ * PR template selection: one template is used; several are listed and not chosen.
  * @param {string} root
  */
 export async function prTemplateChoice(root) {
@@ -74,7 +73,7 @@ export async function prTemplateChoice(root) {
 
 /**
  * Load the latest approval of a task and check it end to end. Throws E_VERIFY when the
- * approval is unsigned, forged, or does not match the current draft (PLAN 11.4).
+ * approval is unsigned, forged, or does not match the current draft.
  * @param {string} home
  * @param {string} taskId
  * @param {TaskEvent[]} events
@@ -122,7 +121,7 @@ async function stateMatches(input, approval) {
 
 /**
  * What the agent needs to open (or find) the PR. Never fails the apply: problems are
- * reported as `available: false` with a reason (decision 2026-11-12).
+ * reported as `available: false` with a reason; the records are still written.
  * @param {any} input
  */
 async function prMaterial(input) {
@@ -172,7 +171,7 @@ export async function applyApproval({ home, taskId }) {
   const paths = taskPaths(home, taskId);
   if (!(await exists(paths.events))) throw new HeirloomError('E_INPUT', `작업이 없음: ${taskId}`);
 
-  // A PR closed without merge ends the task (PLAN 12.2). Unknown PR state keeps it waiting.
+  // A PR closed without merge ends the task. Unknown PR state keeps it waiting.
   if (deriveState(await readEvents(paths.events)) === 'pr_created') {
     const check = await checkPrExpiry({ home, taskId });
     if (check.state === 'expired') {
@@ -274,7 +273,7 @@ export async function applyApproval({ home, taskId }) {
 
 /**
  * A failure after the records were written: keep its code, and say that the records are
- * already written, so the agent does not report them as missing (acceptance A8).
+ * already written, so the agent does not report them as missing.
  * @param {unknown} err
  * @param {string[]} files
  */
@@ -290,7 +289,7 @@ function recordsKept(err, files) {
 const PR_URL = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/;
 
 /**
- * Record that the PR exists (PLAN 12: PR creation is its own state).
+ * Record that the PR exists (PR creation is its own state, after the records are written).
  * @param {{ home: string, taskId: string, prUrl: string }} options
  */
 export async function completePr({ home, taskId, prUrl }) {
