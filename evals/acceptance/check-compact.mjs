@@ -18,6 +18,19 @@ const entries = readFileSync(file, 'utf8').trim().split('\n').flatMap((l) => {
   }
 });
 
+// 권한 거부로 실행되지 않은 도구 호출. 실행됐다가 실패한 호출(종료 코드 2 등)은 여기에 들지 않는다.
+const DENIED = /requires approval|requested permissions to|haven't granted/;
+/** @type {Set<string>} */
+const denied = new Set();
+for (const e of entries) {
+  if (e.type !== 'user' || !Array.isArray(e.message?.content)) continue;
+  for (const block of e.message.content) {
+    if (block.type !== 'tool_result' || !block.is_error) continue;
+    const text = typeof block.content === 'string' ? block.content : JSON.stringify(block.content ?? '');
+    if (DENIED.test(text)) denied.add(block.tool_use_id);
+  }
+}
+
 /** @type {{ at: number, kind: string, detail: string }[]} */
 const timeline = [];
 entries.forEach((e, at) => {
@@ -32,9 +45,10 @@ entries.forEach((e, at) => {
     for (const block of e.message?.content ?? []) {
       if (block.type !== 'tool_use') continue;
       const input = JSON.stringify(block.input ?? {});
-      if (block.name === 'Skill' && input.includes('prepare-handoff')) timeline.push({ at, kind: 'handoff-skill', detail: input.slice(0, 120) });
+      const suffix = denied.has(block.id) ? '-denied' : '';
+      if (block.name === 'Skill' && input.includes('prepare-handoff')) timeline.push({ at, kind: `handoff-skill${suffix}`, detail: input.slice(0, 120) });
       if (block.name === 'Bash' && /prepare-handoff\/scripts\/(prepare|submit-draft)\.mjs/.test(input)) {
-        timeline.push({ at, kind: 'handoff-script', detail: (input.match(/(prepare|submit-draft)\.mjs/) ?? [''])[0] });
+        timeline.push({ at, kind: suffix ? 'handoff-denied' : 'handoff-script', detail: (input.match(/(prepare|submit-draft)\.mjs/) ?? [''])[0] });
       }
     }
   }
@@ -46,7 +60,11 @@ for (const t of timeline) console.log(`${String(t.at).padStart(5)}  ${t.kind.pad
 const compacts = timeline.filter((t) => t.kind === 'compact');
 const reinjected = compacts.map((c) => timeline.some((t) => t.kind === 'session-start' && t.at > c.at && t.detail === 'Heirloom 규약 포함'));
 const prepares = timeline.filter((t) => t.kind === 'handoff-script' && t.detail === 'prepare.mjs');
+const deniedPrepares = timeline.filter((t) => t.kind === 'handoff-denied' && t.detail === 'prepare.mjs');
 console.log('\n판정 보조');
 console.log(`- 압축 횟수: ${compacts.length}`);
 console.log(`- 압축마다 뒤에 Heirloom 규약 재주입: ${reinjected.length ? reinjected.map((r) => (r ? '예' : '아니오')).join(', ') : '압축 없음'}`);
-console.log(`- prepare.mjs 실행 횟수: ${prepares.length}${compacts.length && prepares.length ? ` (첫 압축 ${prepares[0].at > compacts[0].at ? '뒤' : '앞'})` : ''}`);
+console.log(
+  `- prepare.mjs 실행 횟수: ${prepares.length}${compacts.length && prepares.length ? ` (첫 압축 ${prepares[0].at > compacts[0].at ? '뒤' : '앞'})` : ''}` +
+    (deniedPrepares.length ? ` / 권한 거부로 제외: ${deniedPrepares.length}` : ''),
+);
