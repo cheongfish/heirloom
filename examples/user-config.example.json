@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "dashboard": {
+    "port": 17380,
+    "idleMinutes": 30,
+    "openBrowser": true,
+    "staleDays": 7
+  }
+}
