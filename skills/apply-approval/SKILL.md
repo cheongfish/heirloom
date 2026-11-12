@@ -90,7 +90,7 @@ A PR for this branch already exists. Do not create another one.
   # GitHub
   gh pr edit <pr.existing.number> --body-file <file>
   # GitLab
-  glab mr update <pr.existing.iid> --repo https://<pr.host>/<pr.repo> --description "$(cat <file>)"
+  node <this skill>/scripts/open-mr.mjs --task <taskId> --iid <pr.existing.iid> --body-file <file>
   ```
 
 - Go to step 5 with `pr.existing.url`.
@@ -121,10 +121,12 @@ A PR for this branch already exists. Do not create another one.
    # GitHub
    gh pr create --repo <pr.repo> --base <pr.base> --head <pr.head> --title "<title>" --body-file <file>
    # GitLab
-   glab mr create --repo https://<pr.host>/<pr.repo> --source-branch <pr.head> --target-branch <pr.base> --title "<title>" --description "$(cat <file>)" --yes
+   node <this skill>/scripts/open-mr.mjs --task <taskId> --title "<title>" --body-file <file>
    ```
 
-5. **If creating fails,** run `apply.mjs --task <taskId>` again before anything else.
+   On GitLab, always use `open-mr.mjs`. Do not run `glab mr create` or `glab mr update` yourself: glab has no body-file option, and a body passed on the command line cannot be checked by the permission rules. The script reads the file and passes the body to glab unchanged. It prints `data.url`; `data.action` is `created`, or `found` when the MR already existed (then nothing was created).
+
+5. **If creating fails,** run `apply.mjs --task <taskId>` again before anything else. (`open-mr.mjs` already looks for an existing MR before it creates one.)
    - If `pr.existing` is now set, the PR was created. Use its URL.
    - Otherwise report the error to the user. Do not retry in a loop.
 

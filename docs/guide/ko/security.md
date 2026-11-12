@@ -30,7 +30,7 @@ Heirloom이 에이전트를 직접 실행하는 경우는 [맥락 정리](curati
 
 - 실행 명령은 사용자 설정 `curation.agent`에서 읽습니다. 대시보드 요청으로는 고르거나 바꿀 수 없습니다. 실행 요청의 본문은 비어 있어야 하고, 승인처럼 세션 토큰이 필요합니다.
 - 프롬프트는 작업 ID, worktree 경로, 따를 스킬만 담은 고정 문장입니다. 요청 내용이나 기록 본문을 명령줄에 넣지 않습니다.
-- 에이전트는 전용 worktree에서, 단계마다 제한된 도구만 쓰고 실행됩니다. 초안 단계: 읽기 도구, 자신의 `draft.json` 쓰기, 정리·제출 스크립트. 반영 단계: 읽기 도구, PR 본문 파일 쓰기, 반영 스크립트, `git add .heirloom*`, `git commit`, `git push`, `gh pr create`, `gh pr edit`, `glab mr create`, `glab mr update`.
+- 에이전트는 전용 worktree에서, 단계마다 제한된 도구만 쓰고 실행됩니다. 초안 단계: 읽기 도구, 자신의 `draft.json` 쓰기, 정리·제출 스크립트. 반영 단계: 읽기 도구, PR 본문 파일 쓰기, 반영 스크립트, `git add .heirloom*`, `git commit`, `git push`, `gh pr create`, `gh pr edit`. GitLab MR은 반영 스크립트 `open-mr.mjs`로 만들므로 `glab` 명령은 직접 허용하지 않습니다.
 - 사용자 권한과 사용자의 `gh`·`glab` 로그인으로 실행됩니다. 대시보드 세션 토큰을 얻을 수 있는 프로그램은 정리도 시작할 수 있습니다. 아래 승인 한계와 같은 수준입니다.
 
 ## 알려진 한계

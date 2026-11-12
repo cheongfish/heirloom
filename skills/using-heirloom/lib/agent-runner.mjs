@@ -64,8 +64,6 @@ export function agentInvocation({ agent, phase, taskId, worktree, taskDir, plugi
       'Bash(git push *)',
       'Bash(gh pr create *)',
       'Bash(gh pr edit *)',
-      'Bash(glab mr create *)',
-      'Bash(glab mr update *)',
     ];
     prompt = [
       `Heirloom context curation, task ${taskId}: the human approved it in the dashboard.`,

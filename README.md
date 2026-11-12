@@ -35,7 +35,7 @@ To try a checkout for one session without installing: `claude --plugin-dir /path
 
 ## Context curation
 
-When decisions pile up, the dashboard suggests a curation. If you run it, a headless agent reviews a batch of decisions in a dedicated worktree and proposes duplicate clean-up, relations and axiom candidates. You approve each proposal, giving a reason for any candidate you hold or reject, and the result arrives as a PR.
+When decisions pile up, the dashboard suggests a curation. If you run it, a headless agent reviews a batch of decisions in a dedicated worktree and proposes duplicate clean-up, relations and axiom candidates. You approve each proposal, giving a reason for any candidate you hold or reject, and the result arrives as a PR (a merge request on GitLab).
 
 → [Context curation](docs/guide/en/curation.md)
 

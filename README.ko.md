@@ -35,7 +35,7 @@ Node 20 이상, git, Claude Code가 필요합니다. PR을 만들 때만 github.
 
 ## 맥락 정리
 
-decision이 쌓이면 대시보드가 정리를 제안합니다. 실행을 고르면 헤드리스 에이전트가 전용 worktree에서 decision 묶음을 검토하고 중복 정리, 관계, axiom 후보를 제안합니다. 제안을 항목마다 승인하고(보류·거절한 후보에는 이유를 적습니다), 결과는 PR로 올라옵니다.
+decision이 쌓이면 대시보드가 정리를 제안합니다. 실행을 고르면 헤드리스 에이전트가 전용 worktree에서 decision 묶음을 검토하고 중복 정리, 관계, axiom 후보를 제안합니다. 제안을 항목마다 승인하고(보류·거절한 후보에는 이유를 적습니다), 결과는 PR(GitLab은 MR)로 올라옵니다.
 
 → [맥락 정리](docs/guide/ko/curation.md)
 

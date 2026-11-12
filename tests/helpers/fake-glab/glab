@@ -3,7 +3,9 @@
 // { "hosts": ["gitlab.com"], "mrs": [{ "iid", "web_url", "state", "source_branch", "target_branch", "project" }],
 //   "fail": "network", "createUrl": "…" }
 // `hosts` are the hosts `glab auth status --hostname` accepts. `project` is the project path.
-import { appendFileSync, readFileSync } from 'node:fs';
+// `mr create` and `mr update` write back to the state file, so a later lookup finds the MR and
+// its description can be checked (used by the acceptance runs).
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
 if (process.env.FAKE_GLAB_LOG) appendFileSync(process.env.FAKE_GLAB_LOG, `${JSON.stringify(args)}\n`);
@@ -12,6 +14,16 @@ try {
   state = { ...state, ...JSON.parse(readFileSync(String(process.env.FAKE_GLAB_STATE), 'utf8')) };
 } catch {
   // defaults
+}
+function save() {
+  if (process.env.FAKE_GLAB_STATE) writeFileSync(process.env.FAKE_GLAB_STATE, JSON.stringify(state, null, 2));
+}
+/** `--repo` given as a URL (https://host/group/project) or as a path. */
+function repoOf() {
+  const repo = flag('--repo') ?? flag('-R');
+  if (!repo) return { host: 'gitlab.com', project: 'acme/widgets' };
+  const m = /^https?:\/\/([^/]+)\/(.+?)(?:\.git)?\/?$/.exec(repo);
+  return m ? { host: m[1], project: m[2] } : { host: 'gitlab.com', project: repo };
 }
 const flag = (name) => {
   const i = args.indexOf(name);
@@ -55,9 +67,23 @@ if (args[0] === '--version') {
     process.stdout.write(JSON.stringify(mrs.filter((mr) => (!source || mr.source_branch === source) && (!wanted || mr.state === wanted))));
   }
 } else if (args[0] === 'mr' && args[1] === 'create') {
-  process.stdout.write(`${state.createUrl ?? 'https://gitlab.com/acme/widgets/-/merge_requests/1'}\n`);
+  const { host, project } = repoOf();
+  const iid = state.mrs.reduce((n, m) => Math.max(n, m.iid), 0) + 1;
+  const web_url = state.createUrl ?? `https://${host}/${project}/-/merge_requests/${iid}`;
+  state.mrs.push({ iid, web_url, state: 'opened', source_branch: flag('--source-branch'), target_branch: flag('--target-branch'), project, title: flag('--title'), description: flag('--description') ?? '' });
+  save();
+  // Real glab prints a progress line before the URL.
+  process.stdout.write(`\nCreating merge request for ${flag('--source-branch')} into ${flag('--target-branch')} in ${project}\n\n!${iid} ${flag('--title')} (${flag('--source-branch')})\n ${web_url}\n\n`);
 } else if (args[0] === 'mr' && args[1] === 'update') {
-  process.stdout.write('updated\n');
+  const mr = state.mrs.find((m) => String(m.iid) === args[2]);
+  if (!mr) {
+    process.stderr.write(`404 Not Found: merge request ${args[2]}\n`);
+    process.exit(1);
+  }
+  if (flag('--description') !== undefined) mr.description = flag('--description');
+  if (flag('--title') !== undefined) mr.title = flag('--title');
+  save();
+  process.stdout.write(`${mr.web_url}\n`);
 } else {
   process.stderr.write(`fake glab: unsupported ${args.join(' ')}\n`);
   process.exit(2);

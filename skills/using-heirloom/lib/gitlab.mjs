@@ -1,5 +1,5 @@
-// The few glab calls apply and expiry need. glab creates nothing here: the agent runs
-// `glab mr create` itself.
+// The glab calls apply, expiry and open-mr.mjs need. Merge requests are created only by
+// open-mr.mjs, which the agent runs after the records are committed.
 //
 // Merge requests are read through `glab api` (GitLab REST API v4) rather than `glab mr list`
 // or `glab mr view`: their JSON output flags differ between glab versions, while the API
@@ -111,4 +111,28 @@ export async function mrState({ cwd, url }) {
   if (!mr) throw new HeirloomError('E_INPUT', `GitLab MR URL이 아님: ${url}`);
   const text = await withRetry(() => glab(['api', '--hostname', mr.host, `${projectRef(mr.repo)}/merge_requests/${mr.iid}`], { cwd }));
   return normalizeMrState(parseJson(text, 'glab api merge_request')?.state);
+}
+
+/**
+ * Create a merge request. The body is passed as one argument without a shell, so headings,
+ * quotes and `$` reach GitLab unchanged. Not retried: a network error may still have
+ * created it, and the caller looks it up first on the next run.
+ * @param {{ cwd: string, host: string, repo: string, head: string, base: string, title: string, body: string }} options
+ * @returns {Promise<string | null>} the URL glab printed, or null when it printed none
+ */
+export async function createMr({ cwd, host, repo, head, base, title, body }) {
+  const out = await glab(
+    ['mr', 'create', '--repo', `https://${host}/${repo}`, '--source-branch', head, '--target-branch', base, '--title', title, '--description', body, '--yes'],
+    { cwd, timeoutMs: 60_000 },
+  );
+  const urls = out.match(/https:\/\/\S+\/-\/merge_requests\/\d+/g);
+  return urls ? urls[urls.length - 1] : null;
+}
+
+/**
+ * Replace the description of an existing merge request.
+ * @param {{ cwd: string, host: string, repo: string, iid: number, body: string }} options
+ */
+export async function updateMrBody({ cwd, host, repo, iid, body }) {
+  await glab(['mr', 'update', String(iid), '--repo', `https://${host}/${repo}`, '--description', body], { cwd, timeoutMs: 60_000 });
 }

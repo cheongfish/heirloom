@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +18,7 @@ import { HeirloomError } from '../../skills/using-heirloom/lib/errors.mjs';
 import { deriveState, readEvents } from '../../skills/using-heirloom/lib/events.mjs';
 import { readJson } from '../../skills/using-heirloom/lib/fsx.mjs';
 import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
+import { openMergeRequest } from '../../skills/using-heirloom/lib/merge-request.mjs';
 import { checkPrExpiry } from '../../skills/using-heirloom/lib/pr-expiry.mjs';
 import { buildSessionContext } from '../../skills/using-heirloom/lib/session-context.mjs';
 
@@ -208,4 +209,75 @@ test('MR templates: one is used, Default.md wins among several, otherwise they a
   await writeFile(path.join(dir, '.github', 'pull_request_template.md'), '## Summary\n');
   assert.deepEqual(await prTemplateChoice(dir, 'github'), { template: '.github/pull_request_template.md', templates: ['.github/pull_request_template.md'] });
   assert.equal((await prTemplateChoice(dir, 'gitlab')).templates.includes('.github/pull_request_template.md'), false);
+});
+
+test('open-mr: creates the MR from a body file without a shell; a second run finds it instead of creating another', async () => {
+  const t = await approvedTask();
+  await applyAny({ home: t.home, taskId: t.taskId });
+  const dir = await tempDir('body');
+  const bodyFile = path.join(dir, 'body.md');
+  const body = "## 요약\n\n- a를 2로 바꿨다\n- spec을 추가했다 (\"따옴표\", 'apostrophe', `code`, $HOME)\n\n## 테스트\n";
+  await writeFile(bodyFile, body);
+
+  const first = await openMergeRequest({ home: t.home, taskId: t.taskId, title: 'feat: a 변경', bodyFile });
+  assert.deepEqual(first, { action: 'created', iid: 1, url: 'https://gitlab.com/group/sub/widgets/-/merge_requests/1' });
+  const state = JSON.parse(await readFile(t.glabState, 'utf8'));
+  assert.equal(state.mrs.length, 1);
+  assert.equal(state.mrs[0].description, body, 'the body arrives byte for byte');
+  assert.equal(state.mrs[0].source_branch, 'feat');
+  assert.equal(state.mrs[0].target_branch, 'main');
+  const create = (await calls(t.log)).find((a) => a[0] === 'mr' && a[1] === 'create');
+  assert.ok(create?.includes('https://gitlab.com/group/sub/widgets'), 'the project is named with its host');
+
+  const again = await openMergeRequest({ home: t.home, taskId: t.taskId, title: 'feat: a 변경', bodyFile });
+  assert.deepEqual(again, { action: 'found', iid: 1, url: first.url });
+  assert.equal(JSON.parse(await readFile(t.glabState, 'utf8')).mrs.length, 1);
+
+  await writeFile(bodyFile, '## 요약\n\n- 새 요약\n');
+  const updated = await openMergeRequest({ home: t.home, taskId: t.taskId, bodyFile, iid: 1 });
+  assert.deepEqual(updated, { action: 'updated', iid: 1, url: first.url });
+  assert.equal(JSON.parse(await readFile(t.glabState, 'utf8')).mrs[0].description, '## 요약\n\n- 새 요약\n');
+
+  // After the MR is recorded its body can still be updated, but no new MR is created.
+  await completePr({ home: t.home, taskId: t.taskId, prUrl: first.url });
+  assert.equal((await openMergeRequest({ home: t.home, taskId: t.taskId, bodyFile, iid: 1 })).action, 'updated');
+  await rejectsWith(openMergeRequest({ home: t.home, taskId: t.taskId, title: 't', bodyFile }), 'E_CONFLICT');
+});
+
+test('open-mr: refuses before the records are written, on a GitHub remote, and without glab', async () => {
+  const dir = await tempDir('body');
+  const bodyFile = path.join(dir, 'body.md');
+  await writeFile(bodyFile, '- 요약\n');
+
+  const early = await approvedTask();
+  await rejectsWith(openMergeRequest({ home: early.home, taskId: early.taskId, title: 't', bodyFile }), 'E_CONFLICT');
+
+  const github = await approvedTask({ remote: 'git@github.com:acme/widgets.git' });
+  await applyAny({ home: github.home, taskId: github.taskId });
+  await rejectsWith(openMergeRequest({ home: github.home, taskId: github.taskId, title: 't', bodyFile }), 'E_INPUT');
+
+  const noGlab = await approvedTask({ glab: null });
+  await applyAny({ home: noGlab.home, taskId: noGlab.taskId });
+  await rejectsWith(openMergeRequest({ home: noGlab.home, taskId: noGlab.taskId, title: 't', bodyFile }), 'E_INPUT');
+
+  const t = await approvedTask();
+  await applyAny({ home: t.home, taskId: t.taskId });
+  await rejectsWith(openMergeRequest({ home: t.home, taskId: t.taskId, title: 't', bodyFile: path.join(dir, 'missing.md') }), 'E_INPUT');
+  await rejectsWith(openMergeRequest({ home: t.home, taskId: t.taskId, bodyFile }), 'E_INPUT');
+});
+
+test('open-mr.mjs script: prints one JSON object and records nothing by itself', async () => {
+  const t = await approvedTask();
+  await applyAny({ home: t.home, taskId: t.taskId });
+  const dir = await tempDir('body');
+  const bodyFile = path.join(dir, 'body.md');
+  await writeFile(bodyFile, '- 요약\n');
+  const script = path.join(ROOT, 'skills', 'apply-approval', 'scripts', 'open-mr.mjs');
+  const env = { ...process.env, HEIRLOOM_HOME: t.home };
+  const ok = spawnSync(process.execPath, [script, '--task', t.taskId, '--title', 'feat: x', '--body-file', bodyFile], { cwd: t.repo.dir, env, encoding: 'utf8' });
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  assert.equal(JSON.parse(ok.stdout).data.action, 'created');
+  assert.equal(deriveState(await readEvents(t.paths.events)), 'applied', 'complete.mjs still records the MR');
+  const bad = spawnSync(process.execPath, [script, '--task', t.taskId], { cwd: t.repo.dir, env, encoding: 'utf8' });
+  assert.equal(bad.status, 2);
 });
