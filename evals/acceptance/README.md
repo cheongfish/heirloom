@@ -102,6 +102,7 @@ HEIRLOOM_HOME=$F/home node $H/evals/acceptance/inspect.mjs --events <taskId>
 
 확인하지 못한 것:
 - `CLAUDE_CODE_AUTO_COMPACT_WINDOW`와 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`를 함께 썼을 때 실제로 언제 자동 압축되는지. 아래 1안을 돌린 뒤 `check-compact.mjs`로 `trigger: auto` 압축이 있었는지 확인하고, 없으면 2안으로 한다.
+  - 2026-11-12 haiku 관찰([기록](results/2026-11-12-a2-haiku.md)): `PCT_OVERRIDE=40`이면 약 33k 토큰에서 자동 압축됐지만, 압축 뒤 약 11k에서 스킬 하나만 불러와도 다시 기준에 닿아 `autocompact_thrashing`으로 세션이 끝났다. `55`이면 작업이 끝날 때까지 압축되지 않았다. 1안이 이렇게 끝나면 2안으로 한다.
 
 준비(점검 에이전트가 실행):
 
@@ -112,11 +113,11 @@ $H/evals/acceptance/setup-fixture.sh $F
 mkdir -p $F/home && echo '{"schemaVersion":1,"dashboard":{"openBrowser":false}}' > $F/home/config.json
 cd $F/work
 export HEIRLOOM_HOME=$F/home HEIRLOOM_PORT=17390
-COMMON=(--plugin-dir $H --permission-mode acceptEdits --allowedTools "Bash(node *)" "Bash(git *)" "Bash(npm *)"
+COMMON=(--plugin-dir $H --add-dir $F/home --permission-mode acceptEdits --allowedTools "Bash(node *)" "Bash(git *)" "Bash(npm *)"
         --max-budget-usd 5 --output-format stream-json --verbose)
 ```
 
-모델은 실제로 쓰는 모델을 고르고(`--model`) 기록표에 적는다. 브라우저는 열지 않는다(`openBrowser: false`). 대시보드 URL은 결과에 남는다.
+모델은 실제로 쓰는 모델을 고르고(`--model`) 기록표에 적는다. 브라우저는 열지 않는다(`openBrowser: false`). 대시보드 URL은 결과에 남는다. `--add-dir $F/home`은 에이전트가 작업 디렉터리 밖의 `HEIRLOOM_HOME`에 `draft.json`을 쓰게 하려고 넣는다. 없으면 `acceptEdits`에서 쓰기가 거부된다.
 
 **1안: 자동 압축(권장).** 한 턴 안에서 작업 도중 자동 압축이 일어나게 한다.
 
@@ -126,11 +127,11 @@ CLAUDE_CODE_AUTO_COMPACT_WINDOW=100000 CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=40 \
   "${COMMON[@]}" > $F/run1.jsonl
 ```
 
-**2안: 수동 압축.** 1안에서 자동 압축이 일어나지 않았을 때 쓴다. 첫 턴은 구현 도중에 멈추게 하고, `/compact` 뒤 이어서 진행한다.
+**2안: 수동 압축.** 1안에서 자동 압축이 일어나지 않았을 때 쓴다. 첫 턴은 구현 도중에 멈추게 하고, `/compact` 뒤 이어서 진행한다. `--verbose`와 함께 쓴 `--output-format json`은 메시지 배열을 출력하므로 세션 ID는 마지막 원소(`result`)에서 꺼낸다.
 
 ```sh
 id=$(claude -p "docs/superpowers/specs/2026-11-12-kelvin.md를 구현해 줘. celsiusToKelvin 하나만 작성한 뒤, 나머지는 다음 지시를 기다려." \
-  "${COMMON[@]/stream-json/json}" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).session_id))")
+  "${COMMON[@]/stream-json/json}" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).at(-1).session_id))")
 claude -p "/compact" --resume $id "${COMMON[@]}" > $F/run2-compact.jsonl
 claude -p "계속해서 spec 전체를 구현하고 테스트와 최종 리뷰까지 마쳐 줘." --resume $id "${COMMON[@]}" > $F/run2-rest.jsonl
 ```
