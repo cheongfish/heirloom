@@ -1,0 +1,30 @@
+# Sourced by the hook scripts. Sets NODE_BIN to a Node 20+ executable, or leaves it
+# empty and sets NODE_PROBLEM. HEIRLOOM_NODE overrides the PATH lookup.
+NODE_BIN=""
+NODE_PROBLEM=""
+
+heirloom_find_node() {
+  local candidate="${HEIRLOOM_NODE:-}"
+  if [ -z "$candidate" ]; then
+    candidate="$(command -v node 2>/dev/null || true)"
+  fi
+  if [ -z "$candidate" ]; then
+    NODE_PROBLEM="missing"
+    return 0
+  fi
+  local version major
+  version="$("$candidate" --version 2>/dev/null || true)"
+  major="${version#v}"
+  major="${major%%.*}"
+  case "$major" in
+    '' | *[!0-9]*)
+      NODE_PROBLEM="unknown version"
+      return 0
+      ;;
+  esac
+  if [ "$major" -lt 20 ]; then
+    NODE_PROBLEM="too old ($version)"
+    return 0
+  fi
+  NODE_BIN="$candidate"
+}

@@ -1,0 +1,21 @@
+{
+  "package": "@seed-design/css",
+  "version": "3.2.1",
+  "license": "Apache-2.0",
+  "files": {
+    "LICENSE": "44b8c61c1d0f4fad76c7755a21e44067893ab23f5bcc2a0d7fbfdf1794e8d160",
+    "NOTICE": "be1bd7fc9f5a9a803d0df6738b21ced46165dd22825fc24a68ca5dbdf24a8ec5",
+    "base.min.css": "3877d1d28f7e264f5d89327d84dd6fdad10cbd934f31bc92b491cc9f6c4bf255",
+    "recipes/action-button.css": "9d6568b624d1ba0aa61887de11b907f01623358a86002c95e6646319962820ad",
+    "recipes/badge.css": "68aa843fcaf44f99d806fe0a5a800bc347c27879a281f8db646bfbe9b2bf3966",
+    "recipes/callout.css": "04f0b9b2c8b109d82b9446ef234c166ebd13812a443078a6c2fd231f6f902371",
+    "recipes/field.css": "4b1c79cc2d73e8f65940d30aaabc7e1c43465614e4835a0b09fb6e4a7173722b",
+    "recipes/field-label.css": "650062de296488364e4fd81a6c1c7c6fbb7584cdd85fbf214682f1a67271af4e",
+    "recipes/list-header.css": "2402758144bf977a8fc945484250f67235ff49b1659dc8391cb7d532749e9fdb",
+    "recipes/list-item.css": "f93e45b586401d280b2c96786aad1179a1fb9ed107c545e9edca7deb64f512bd",
+    "recipes/page-banner.css": "a906ba947a08ff62ec1de400b465d95dbcc0e33571223ebd462d6f67f9ff939a",
+    "recipes/segmented-control.css": "7245b287e6aa6ef5d4f96e70541bde0489c40bb6a79e2c9e12c6b8dbbbb8410a",
+    "recipes/tabs.css": "6be8d69b83c44d4942a83a21558d5da0f2737287e50570ad2efa1bf4a7dc03cf",
+    "recipes/text-input.css": "f460bae2e6c51956646b64755837b9fc09a09d86aae83d5d836fb631db38c605"
+  }
+}
