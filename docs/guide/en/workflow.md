@@ -6,7 +6,7 @@ Heirloom does not do the development work. It takes over work finished with an S
 
 ```
 1. Handoff  →  2. Dashboard approval  →  3. Records and PR  →  4. Recall in later work
-   (agent)        (human)                  (agent)               (agent, in progress)
+   (agent)        (human)                  (agent)               (agent)
 ```
 
 ## 1. Handoff
@@ -51,13 +51,25 @@ Ask the agent to "apply the approved handoff". The `apply-approval` skill then r
 
 Applying the same approval more than once writes the records only once.
 
-## 4. Recall in later work (in progress)
+If the PR is closed without merge, the task expires and its records never become active. Heirloom notices this through `gh` when the agent applies the task again or when the dashboard overview is shown. Without `gh`, or offline, the task keeps waiting.
 
-At session start the agent receives a summary of the active axioms and an index of decisions. Decisions related to the current changes come first.
+## 4. Recall in later work
 
-Not available yet:
+The agent does this.
 
-- the `recall-context` skill, which fetches the full text of related records,
-- active and pending states based on whether the records were merged into the default branch.
+- **At session start.** The agent receives a summary of the active axioms and an index of active decisions. Decisions related to the current changes come first.
+- **Once the task is known.** The agent runs the `recall-context` skill to fetch the full text of the records related to the files, topics or record IDs it is working on. Each result says why it matched. A path match is a hint; the agent still reads the record's scope.
+- **Limits.** Recall returns at most `recall.maxRecords` records within `recall.maxTokens` tokens ([Configuration](configuration.md#project-settings)). Records left out are listed by ID so the agent can ask for them.
 
-See the [Roadmap](roadmap.md).
+### When a record is active
+
+| State | Meaning | Served as a rule |
+| --- | --- | --- |
+| Active | The record file is merged into the target branch | Yes |
+| Pending merge | Approved and written on the task branch, not merged yet | Only to the task that approved it. Other tasks see its ID and title as a warning. |
+| Inactive | Its supersede or deprecation is merged | No. Kept as history. |
+| Unknown | The target branch cannot be resolved | The worktree's records are used and marked unconfirmed |
+
+- **No fetch.** Session start and recall compare with the local remote-tracking branch (for example `origin/main`) and never fetch. They report when the repository was last fetched, so a merge after that is not seen until the next fetch. Applying an approval fetches the target branch.
+- **Parallel work.** A supersede or deprecation approved in another worktree of the same repository is shown as a warning until it is merged.
+- **Edits during PR review.** The merged wording is what counts.

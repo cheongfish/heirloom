@@ -31,8 +31,8 @@ The files are JSON, so they cannot hold comments. Unknown keys and out-of-range 
 | --- | --- | --- |
 | `baseBranch` | none | Target branch of the PR. Without it, `origin/HEAD` is used. If neither exists, or several remotes make it unclear, Heirloom reports an error instead of guessing. |
 | `specGlobs` | `["docs/superpowers/specs/**", "**/specs/**/*.md"]` | Paths that count as spec documents. Used by the stop hook's handoff reminder. |
-| `recall.maxRecords` | `8` | Maximum number of records returned by context recall (in progress) |
-| `recall.maxTokens` | `6000` | Token budget for context recall (in progress) |
+| `recall.maxRecords` | `8` | Maximum number of records returned by context recall |
+| `recall.maxTokens` | `6000` | Token budget for context recall, estimated as UTF-8 bytes ÷ 3 (about one token per Hangul syllable) |
 | `sessionIndex.maxDecisions` | `30` | Number of decisions listed in the session-start index |
 
 ## Environment variables

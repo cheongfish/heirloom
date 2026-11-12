@@ -15,6 +15,7 @@ import { appendEvent, deriveState, readEvents } from '../lib/events.mjs';
 import { readJson } from '../lib/fsx.mjs';
 import { findUnhandedChanges, isStaleTask } from '../lib/overview.mjs';
 import { ensureDir, homePaths, taskPaths } from '../lib/paths.mjs';
+import { refreshPrExpiry } from '../lib/pr-expiry.mjs';
 import { readRecords } from '../lib/records.mjs';
 import { PATTERNS } from '../lib/schema.mjs';
 import { VERSION } from '../lib/version.mjs';
@@ -155,6 +156,28 @@ export async function createDashboardServer(options) {
     });
 
   const tasksDir = homePaths(home).tasks;
+  /** PR states already asked for, so the list does not call gh on every request. */
+  /** @type {Map<string, { pr: string | null, at: number }>} */
+  const prCache = new Map();
+  let prCheckRunning = false;
+
+  /**
+   * Ask gh about PRs in the background (MVP-PLAN 7.5): the list never waits for the network.
+   * An `expired` event changes events.jsonl, and the watcher then tells open screens.
+   * @param {string[]} taskIds
+   */
+  function checkClosedPrs(taskIds) {
+    if (prCheckRunning || !taskIds.length) return;
+    prCheckRunning = true;
+    refreshPrExpiry({ home, taskIds, cache: prCache })
+      .then((expired) => {
+        if (expired.length) log(`PR이 닫혀 만료됨: ${expired.join(', ')}`);
+      })
+      .catch((err) => log(`PR 상태 확인 실패: ${err instanceof Error ? err.message : String(err)}`))
+      .finally(() => {
+        prCheckRunning = false;
+      });
+  }
 
   async function listTasks() {
     let ids = [];
@@ -187,7 +210,9 @@ export async function createDashboardServer(options) {
   async function overview() {
     const { staleDays } = (await loadUserConfig(home)).dashboard;
     const at = now();
-    const tasks = (await listTasks()).map((t) => ({ ...t, stale: isStaleTask(t, at, staleDays) }));
+    const listed = await listTasks();
+    checkClosedPrs(listed.filter((t) => t.state === 'pr_created').map((t) => t.taskId));
+    const tasks = listed.map((t) => ({ ...t, stale: isStaleTask(t, at, staleDays) }));
     const { changes, unchecked } = await findUnhandedChanges({ home });
     return { tasks, unhanded: changes, unchecked, staleDays };
   }

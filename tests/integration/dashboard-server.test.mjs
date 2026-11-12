@@ -3,8 +3,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { readdir, readFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { submittedTask } from '../helpers/handoff-fixture.mjs';
 import { tempDir } from '../helpers/git-fixture.mjs';
@@ -306,4 +307,46 @@ test('task detail: targets of supersede/deprecate/update ops and the latest appr
   assert.equal(after.state, 'approved');
   assert.equal(after.latestApproval.summary.final[0], 'a를 2로 바꿨다 (사람이 고침)');
   assert.ok(!JSON.stringify(after).includes(s.token));
+});
+
+test('the overview checks PRs in the background and a closed one expires its task', async (t) => {
+  const home = await tempDir('home');
+  const taskId = 't-20261112-qqqqqqqq';
+  const url = 'https://github.com/acme/widgets/pull/3';
+  const events = taskPaths(home, taskId).events;
+  await mkdir(path.dirname(events), { recursive: true });
+  for (const e of [
+    { type: 'prepared', sourceHash: `sha256:${'b'.repeat(64)}`, attempt: 1 },
+    { type: 'draft_checked', ok: true },
+    { type: 'awaiting_approval' },
+    { type: 'approved', approvalId: 'ap-000000000001' },
+    { type: 'records_written', approvalId: 'ap-000000000001', files: [] },
+    { type: 'pr_created', approvalId: 'ap-000000000001', url },
+  ]) {
+    await appendEvent(events, /** @type {any} */ (e));
+  }
+  const ghDir = await tempDir('gh');
+  await writeFile(path.join(ghDir, 'state.json'), JSON.stringify({ prs: [{ number: 3, url, state: 'CLOSED', headRefName: 'feat', baseRefName: 'main' }] }));
+  const saved = { PATH: process.env.PATH, FAKE_GH_STATE: process.env.FAKE_GH_STATE };
+  const fakeGh = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'helpers', 'fake-gh');
+  process.env.PATH = `${fakeGh}${path.delimiter}${saved.PATH}`;
+  process.env.FAKE_GH_STATE = path.join(ghDir, 'state.json');
+  t.after(() => {
+    process.env.PATH = saved.PATH;
+    if (saved.FAKE_GH_STATE === undefined) delete process.env.FAKE_GH_STATE;
+    else process.env.FAKE_GH_STATE = saved.FAKE_GH_STATE;
+  });
+
+  const s = await start(home);
+  t.after(() => s.close());
+  const first = await request(s.port, { path: '/api/tasks' });
+  assert.equal(first.body.tasks.find((/** @type {any} */ x) => x.taskId === taskId).state, 'pr_created', 'the list does not wait for gh');
+  let state = 'pr_created';
+  for (let i = 0; i < 50 && state !== 'expired'; i += 1) {
+    await new Promise((r) => setTimeout(r, 100));
+    state = /** @type {string} */ (deriveState(await readEvents(events)));
+  }
+  assert.equal(state, 'expired');
+  const after = await request(s.port, { path: '/api/tasks' });
+  assert.equal(after.body.tasks.find((/** @type {any} */ x) => x.taskId === taskId).state, 'expired');
 });

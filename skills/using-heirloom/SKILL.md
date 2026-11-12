@@ -30,6 +30,10 @@ Do not guess the target branch, the task identifier or the spec. Pass what you k
 
 The `<heirloom-project>` block at session start lists the active axioms and an index of active decisions. Decisions related to the files you are changing are listed first.
 
+- A record is active once it is merged into the target branch. The block says which branch it was checked against and when the repository was last fetched.
+- `[머지 대기]` marks a record this task approved that is not merged yet. It applies to this task only.
+- Changes listed under other tasks' pending changes are not rules yet. Do not follow them; tell the user if one conflicts with your work.
+
 The index is a pointer, not the record. Once you know which files you will change, use the `recall-context` skill to read the full text of the related records before you rely on them.
 
 ## Approval boundary

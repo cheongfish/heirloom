@@ -20,6 +20,8 @@ The dashboard is a local web page where a human reviews and approves handoffs. O
 | 오래된 미처리 건 (stale) | Unfinished tasks whose last activity is older than `dashboard.staleDays` (default 7). They never expire just because time passed. |
 | 진행 중, 최근 끝난 작업 (in progress, recently finished) | All other tasks |
 
+When the overview is shown, tasks whose PR was created are checked with `gh` in the background, so the list never waits for the network. A PR closed without merge marks its task as expired (만료됨), and open screens update. A merged PR is not checked again; others are checked again after five minutes. Without `gh` nothing changes.
+
 ## Task screen
 
 The task screen has tabs. The approval bar stays at the bottom of every tab.

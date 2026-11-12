@@ -32,6 +32,17 @@ if (args[0] === '--version') {
   const wanted = flag('--state') ?? 'open';
   const prs = state.prs.filter((p) => p.headRefName === head && (wanted === 'all' || p.state.toLowerCase() === wanted));
   process.stdout.write(JSON.stringify(prs));
+} else if (args[0] === 'pr' && args[1] === 'view') {
+  if (state.fail === 'network') {
+    process.stderr.write('error connecting to api.github.com\n');
+    process.exit(1);
+  }
+  const pr = state.prs.find((p) => p.url === args[2]);
+  if (!pr) {
+    process.stderr.write(`no pull requests found for ${args[2]}\n`);
+    process.exit(1);
+  }
+  process.stdout.write(JSON.stringify({ state: pr.state }));
 } else {
   process.stderr.write(`fake gh: unsupported ${args.join(' ')}\n`);
   process.exit(2);

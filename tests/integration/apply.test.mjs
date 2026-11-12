@@ -286,3 +286,26 @@ test('scripts: apply.mjs lists, applies and exits 4 on a bad signature; complete
   assert.equal(bad.status, 4);
   assert.equal(JSON.parse(bad.stdout).error.code, 'E_VERIFY');
 });
+
+test('a PR closed without merge expires the task; merged or unknown PRs keep it', async () => {
+  const t = await approvedTask();
+  await applyAny({ home: t.home, taskId: t.taskId });
+  const url = 'https://github.com/acme/widgets/pull/7';
+  await completePr({ home: t.home, taskId: t.taskId, prUrl: url });
+  const pr = { number: 7, url, headRefName: 'feat', baseRefName: 'main' };
+
+  // gh cannot tell (network failure): the task keeps waiting.
+  await writeFile(t.ghState, JSON.stringify({ prs: [{ ...pr, state: 'CLOSED' }], fail: 'network' }));
+  // withRetry sleeps 2 s before its second attempt; the result must still be "unknown".
+  assert.equal((await applyAny({ home: t.home, taskId: t.taskId })).state, 'pr_created');
+
+  await writeFile(t.ghState, JSON.stringify({ prs: [{ ...pr, state: 'MERGED' }] }));
+  assert.equal((await applyAny({ home: t.home, taskId: t.taskId })).state, 'pr_created');
+
+  await writeFile(t.ghState, JSON.stringify({ prs: [{ ...pr, state: 'CLOSED' }] }));
+  await rejectsWith(applyAny({ home: t.home, taskId: t.taskId }), 'E_CONFLICT');
+  assert.equal(await stateOf(t.home, t.taskId), 'expired');
+  const events = await readEvents(t.paths.events);
+  assert.deepEqual({ ...events.at(-1), at: undefined }, { at: undefined, type: 'expired', reason: 'pr_closed', url });
+  assert.ok((await ghCalls(t.log)).some((args) => args[0] === 'pr' && args[1] === 'view' && args[2] === url));
+});

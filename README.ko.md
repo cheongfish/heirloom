@@ -23,7 +23,7 @@ claude --plugin-dir /path/to/heirloom
 1. **인계.** 에이전트가 끝낸 spec 기반 작업을 인계합니다. 초안의 출처 인용은 기계적으로 검사합니다.
 2. **승인.** 대시보드에서 요약과 decision·axiom을 항목별로 검토합니다. 승인에는 서명이 붙습니다.
 3. **반영과 PR.** 에이전트가 승인을 검증하고 `.heirloom/` 기록을 쓴 뒤, 승인된 요약을 그대로 넣어 PR을 엽니다.
-4. **맥락 조회.** 이후 세션은 활성 axiom과 decision 색인을 받고 시작합니다.
+4. **맥락 조회.** 이후 세션은 활성 axiom과 decision 색인을 받고 시작하고, 에이전트가 관련 기록의 원문을 가져옵니다. 기록은 대상 브랜치에 머지되면 활성이 됩니다.
 
 → [작업 흐름 가이드](docs/guide/ko/workflow.md)
 
@@ -56,8 +56,6 @@ claude --plugin-dir /path/to/heirloom
 
 다음 기능을 지원할 예정입니다.
 
-- 관련 기록 원문 조회
-- 머지 기준 활성·대기 판정
 - Codex·Antigravity 호스트
 - GitLab
 - 승인 이후 증분 재확인

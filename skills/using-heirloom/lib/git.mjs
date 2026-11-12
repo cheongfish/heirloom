@@ -1,7 +1,7 @@
 // Thin git wrapper: repository info, target branch resolution, changed files.
 // See docs/HEIRLOOM-MVP-PLAN.md section 7.3 and docs/HEIRLOOM-PLAN.md section 5.
 
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -182,4 +182,48 @@ export async function changedFiles({ root, mergeBase }) {
     .filter(([file]) => !file.startsWith(prefix))
     .map(([file, status]) => ({ path: file, status }))
     .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
+
+/**
+ * Text of the files under `dirs` in the tree of `ref`, read with one `ls-tree` and one
+ * `cat-file --batch` (merge detection reads every record file of the base branch).
+ * @param {{ cwd: string, ref: string, dirs: string[], timeoutMs?: number }} options
+ * @returns {Promise<Map<string, string>>} repository-relative path → UTF-8 text
+ */
+export async function readTreeTexts({ cwd, ref, dirs, timeoutMs = 10_000 }) {
+  const listing = await git(['ls-tree', '-r', '-z', '--full-tree', ref, '--', ...dirs], { cwd, timeoutMs });
+  /** @type {{ path: string, oid: string }[]} */
+  const blobs = [];
+  for (const entry of listing.split('\0')) {
+    const m = /^\d+ blob ([0-9a-f]+)\t(.+)$/s.exec(entry);
+    if (m) blobs.push({ oid: m[1], path: m[2] });
+  }
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  if (!blobs.length) return out;
+  const raw = await new Promise((resolve, reject) => {
+    const child = spawn('git', ['cat-file', '--batch'], { cwd, env: { ...process.env, LC_ALL: 'C' }, stdio: ['pipe', 'pipe', 'pipe'] });
+    /** @type {Buffer[]} */
+    const chunks = [];
+    const timer = setTimeout(() => child.kill(), timeoutMs);
+    child.stdout.on('data', (c) => chunks.push(c));
+    child.on('error', reject);
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve(Buffer.concat(chunks));
+      else reject(new HeirloomError('E_INTERNAL', `git cat-file --batch 실패 (${code})`));
+    });
+    child.stdin.end(blobs.map((b) => `${b.oid}\n`).join(''));
+  });
+  const buf = /** @type {Buffer} */ (raw);
+  let at = 0;
+  for (const blob of blobs) {
+    const nl = buf.indexOf(10, at);
+    const header = buf.subarray(at, nl).toString('latin1').split(' ');
+    const size = Number(header[2]);
+    if (header[1] !== 'blob' || !Number.isInteger(size)) throw new HeirloomError('E_INTERNAL', `git cat-file 출력 해석 실패: ${blob.path}`);
+    out.set(blob.path, buf.subarray(nl + 1, nl + 1 + size).toString('utf8'));
+    at = nl + 1 + size + 1;
+  }
+  return out;
 }

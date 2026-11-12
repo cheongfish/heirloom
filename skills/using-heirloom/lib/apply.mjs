@@ -16,6 +16,7 @@ import { git, listRemotes, repoInfo, tryGit } from './git.mjs';
 import { baseBranchName, findOpenPr, ghReady, parseGithubRemote } from './github.mjs';
 import { readIds } from './ids.mjs';
 import { taskPaths } from './paths.mjs';
+import { checkPrExpiry } from './pr-expiry.mjs';
 import { findProjectRules } from './project-rules.mjs';
 import { planRecordChanges } from './record-changes.mjs';
 import { readRecords, recordPath, writeRecord } from './records.mjs';
@@ -167,6 +168,16 @@ async function prMaterial(input) {
 export async function applyApproval({ home, taskId }) {
   const paths = taskPaths(home, taskId);
   if (!(await exists(paths.events))) throw new HeirloomError('E_INPUT', `작업이 없음: ${taskId}`);
+
+  // A PR closed without merge ends the task (PLAN 12.2). Unknown PR state keeps it waiting.
+  if (deriveState(await readEvents(paths.events)) === 'pr_created') {
+    const check = await checkPrExpiry({ home, taskId });
+    if (check.state === 'expired') {
+      throw new HeirloomError('E_CONFLICT', 'PR이 머지 없이 닫혀 작업이 만료됨', {
+        hint: '사용자에게 알린다. 같은 변경을 다시 올리려면 prepare-handoff로 새로 인계한다.',
+      });
+    }
+  }
 
   const written = await withTaskLock(home, taskId, async () => {
     const input = /** @type {any} */ (await readJson(paths.input));

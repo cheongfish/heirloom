@@ -146,15 +146,19 @@ test('session context: convention only outside a git repository', async () => {
 });
 
 test('session context: axioms, decision index with related ones first, cap, pending tasks', async () => {
-  const { repo, home } = await workRepo();
-  await record(repo.dir, 'a-00000001', 'axiom', '승인은 사람만 한다', ['skills/**']);
-  await record(repo.dir, 'a-00000002', 'axiom', '비활성 axiom', [], false);
-  await record(repo.dir, 'd-00000001', 'decision', '무관한 결정', ['lib/other.mjs']);
-  await record(repo.dir, 'd-00000002', 'decision', '관련 결정', ['src/**/*.mjs']);
-  await record(repo.dir, 'd-00000003', 'decision', '또 다른 무관한 결정', ['lib/x.mjs']);
-  await record(repo.dir, 'd-00000004', 'decision', '폐기된 결정', ['src/a.mjs'], false);
+  const { upstream, repo, home } = await workRepo();
+  // Records merged on the base branch are active (PLAN 14.3).
+  await record(upstream.dir, 'a-00000001', 'axiom', '승인은 사람만 한다', ['skills/**']);
+  await record(upstream.dir, 'a-00000002', 'axiom', '비활성 axiom', [], false);
+  await record(upstream.dir, 'd-00000001', 'decision', '무관한 결정', ['lib/other.mjs']);
+  await record(upstream.dir, 'd-00000002', 'decision', '관련 결정', ['src/**/*.mjs']);
+  await record(upstream.dir, 'd-00000003', 'decision', '또 다른 무관한 결정', ['lib/x.mjs']);
+  await record(upstream.dir, 'd-00000004', 'decision', '폐기된 결정', ['src/a.mjs'], false);
+  upstream.commitAll('records');
+  repo.git('fetch', '-q', 'origin');
+  repo.git('merge', '-q', 'origin/main');
   await repo.write('.heirloom/config.json', JSON.stringify({ schemaVersion: 1, sessionIndex: { maxDecisions: 2 } }));
-  repo.commitAll('records');
+  repo.commitAll('config');
   await repo.write('src/a.mjs', 'export const a = 2;\n');
 
   const info = await repoInfo(repo.dir);

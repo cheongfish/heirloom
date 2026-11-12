@@ -87,3 +87,21 @@ export async function findOpenPr({ cwd, repo, head }) {
   const pr = prs.find((p) => p.headRefName === head);
   return pr ? { number: pr.number, url: pr.url, base: pr.baseRefName } : null;
 }
+
+/**
+ * State of a pull request by URL: 'OPEN', 'CLOSED' (closed without merge) or 'MERGED'.
+ * Network errors are retried once (PLAN 8).
+ * @param {{ cwd: string, url: string }} options
+ * @returns {Promise<'OPEN' | 'CLOSED' | 'MERGED'>}
+ */
+export async function prState({ cwd, url }) {
+  const text = await withRetry(() => gh(['pr', 'view', url, '--json', 'state'], { cwd }));
+  let state;
+  try {
+    state = JSON.parse(text).state;
+  } catch {
+    throw new HeirloomError('E_INTERNAL', 'gh pr view 출력이 JSON이 아님');
+  }
+  if (state !== 'OPEN' && state !== 'CLOSED' && state !== 'MERGED') throw new HeirloomError('E_INTERNAL', `알 수 없는 PR 상태: ${String(state)}`);
+  return state;
+}

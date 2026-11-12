@@ -6,8 +6,6 @@ The following features are not supported yet and are planned for later versions.
 
 | Feature | Current behavior |
 | --- | --- |
-| Full-text recall of related records (`recall-context`) | Only the decision index is provided at session start. |
-| Active and pending record states based on merges | Records are shown as they are in the worktree. |
 | Codex and Antigravity hosts | Only Claude Code is supported. |
 | GitLab (`glab`) and remotes other than github.com | Record files are written; you open the PR yourself. |
 | Incremental re-check after approval | Any code change after approval requires a full new handoff. The earlier approval is kept. |

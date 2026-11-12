@@ -37,6 +37,7 @@ Failures:
 - `E_CONFLICT` (exit 3):
   - The code changed after approval (the task is now `stale`). Tell the user. A new handoff is needed (`prepare-handoff`). The old approval is kept.
   - Another branch is checked out. Follow the hint, or ask the user.
+  - The recorded PR was closed without merge (the task is now `expired`). Its records will not become active. Tell the user. A new handoff is needed if they want to submit the work again.
 - Exit 75: the script already retried once. Do not run it again. Report the failure and the hint.
 
 Never edit the written record files, and never write record files yourself.
