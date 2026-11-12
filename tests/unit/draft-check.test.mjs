@@ -194,3 +194,40 @@ test('schema errors are reported without crashing the other checks', async () =>
   assert.ok(errors.length > 0);
   assert.match(errors.join('\n'), /\$\.summary/);
 });
+
+test('relate: target and related record must be active and different; allowed in any handoff', async () => {
+  const root = await fixture();
+  const relate = (/** @type {string} */ target, /** @type {string} */ id) => ({ op: 'relate', target, relation: { type: 'exception', id, condition: '환불일 때' } });
+  const records = [existing('d-aaaaaaaa', true), existing('d-bbbbbbbb', true), existing('d-cccccccc', false)];
+  const d = draft();
+  d.records = [relate('d-aaaaaaaa', 'd-bbbbbbbb')];
+  assert.deepEqual((await run(root, d, records)).errors, []);
+
+  d.records = [relate('d-aaaaaaaa', 'd-cccccccc'), relate('d-cccccccc', 'd-aaaaaaaa'), relate('d-aaaaaaaa', 'd-aaaaaaaa'), relate('d-aaaaaaaa', 'd-zzzzzzzz')];
+  const errors = (await run(root, d, records)).errors.join('\n');
+  assert.match(errors, /records\[0\]\.relation\.id: 이미 비활성인 기록임 \(d-cccccccc\)/);
+  assert.match(errors, /records\[1\]\.target: 이미 비활성인 기록임/);
+  assert.match(errors, /records\[2\]\.relation\.id: 대상 기록 자신/);
+  assert.match(errors, /records\[3\]\.relation\.id: 관계 대상 기록이 없음 \(d-zzzzzzzz\)/);
+});
+
+test('curation handoff: summary code paths are not checked; candidate checks run', async () => {
+  const root = await fixture();
+  const curationInput = { ...input(), trigger: 'curation', source: { hash: SOURCE_HASH, files: [] }, materials: [], curation: { batch: ['d-aaaaaaaa', 'd-bbbbbbbb'], related: [], axioms: [], history: [] } };
+  const d = draft();
+  d.summary = [{ text: '정리', codePaths: ['src/nothing-changed.mjs'] }];
+  d.records = [
+    {
+      op: 'add',
+      kind: 'axiom',
+      title: '서명은 사용자별 키로 한다',
+      body: { property: 'p', scope: 's', exceptions: '', checks: 'c' },
+      codePaths: [],
+      topics: [],
+      sources: [{ ref: 'docs/spec.md', quote: '키는 사용자별로 둔다.' }],
+      evidence: ['d-aaaaaaaa'],
+    },
+  ];
+  const result = await checkDraft({ root, input: curationInput, draft: d, records: [existing('d-aaaaaaaa', true), existing('d-bbbbbbbb', true)], repoFiles: REPO_FILES });
+  assert.deepEqual(result.errors, ['$.records[0].evidence: 근거 decision이 2개 이상이어야 함']);
+});

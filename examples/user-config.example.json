@@ -5,5 +5,12 @@
     "idleMinutes": 30,
     "openBrowser": true,
     "staleDays": 7
+  },
+  "curation": {
+    "agent": {
+      "host": "claude-code",
+      "command": "claude",
+      "model": null
+    }
   }
 }

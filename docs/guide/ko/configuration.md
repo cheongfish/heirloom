@@ -24,6 +24,9 @@ JSON이라 주석을 넣을 수 없습니다. 알 수 없는 키나 범위를 �
 | `dashboard.idleMinutes` | `30` | 열린 화면도 요청도 없을 때 서버가 종료되기까지의 분 |
 | `dashboard.openBrowser` | `true` | 인계 뒤 브라우저를 자동으로 열지 여부. 직접 여는 요청에는 영향이 없습니다. |
 | `dashboard.staleDays` | `7` | 전체 목록에서 '오래된 미처리 건'으로 보이는 기준(일) |
+| `curation.agent.host` | `"claude-code"` | [맥락 정리](curation.md)에 쓰는 헤드리스 에이전트 프로필. 지금은 `claude-code`만 있습니다. |
+| `curation.agent.command` | `"claude"` | 정리 때 대시보드가 실행하는 명령. `PATH`에 있는 이름이나 절대 경로. 대시보드 요청으로는 바꿀 수 없습니다. |
+| `curation.agent.model` | `null` | 헤드리스 에이전트에 넘길 모델(`--model`). `null`이면 명령의 기본값을 씁니다. |
 
 ## 프로젝트 설정
 
@@ -34,6 +37,10 @@ JSON이라 주석을 넣을 수 없습니다. 알 수 없는 키나 범위를 �
 | `recall.maxRecords` | `8` | 맥락 조회 때 가져올 기록 수 상한 |
 | `recall.maxTokens` | `6000` | 맥락 조회 때 토큰 상한. UTF-8 바이트 수 ÷ 3으로 어림합니다(한글 한 글자가 약 1토큰). |
 | `sessionIndex.maxDecisions` | `30` | 세션 시작 때 보여 줄 decision 색인 수 |
+| `curation.minUnreviewed` | `10` | 미검토 decision이 이 수 이상이면 [맥락 정리](curation.md)를 제안 |
+| `curation.maxAgeDays` | `30` | … 또는 마지막 정리 뒤 이 일수가 지났고 |
+| `curation.minForAge` | `3` | … 미검토 decision이 이 수 이상이면 제안 |
+| `curation.batchSize` | `20` | 정리 한 번에 검토하는 미검토 decision의 최대 수 |
 
 ## 환경 변수
 

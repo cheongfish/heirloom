@@ -66,6 +66,11 @@ export function nextState(state, event) {
     case 'stale':
       require(state, event, ['approved', 'applied', 'pr_created']);
       return 'stale';
+    case 'agent_started':
+    case 'agent_finished':
+      // Notices about a headless run the dashboard started: they never move the task, and a
+      // run may finish after the task was discarded.
+      return /** @type {TaskState} */ (state);
     case 'discarded':
     case 'expired':
       if (!live(state)) require(state, event, []);

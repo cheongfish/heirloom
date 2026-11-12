@@ -8,7 +8,7 @@ import { checkSkillFrontmatter, checkImports, checkNoDevFiles, checkSignUsage, c
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-const MVP_SKILLS = ['apply-approval', 'prepare-handoff', 'recall-context', 'using-heirloom'];
+const MVP_SKILLS = ['apply-approval', 'curate-decisions', 'prepare-handoff', 'recall-context', 'using-heirloom'];
 
 test('repository: SKILL.md frontmatter is valid', async () => {
   assert.deepEqual(await checkSkillFrontmatter(ROOT), []);
@@ -30,7 +30,7 @@ test('repository: vendored SEED Design CSS is pinned, licensed, unmodified and c
   assert.deepEqual(await checkVendoredSeed(ROOT), []);
 });
 
-test('repository: the four MVP skills exist', async () => {
+test('repository: the MVP skills and curate-decisions exist', async () => {
   for (const skill of MVP_SKILLS) {
     await readFile(path.join(ROOT, 'skills', skill, 'SKILL.md'), 'utf8');
   }

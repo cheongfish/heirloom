@@ -70,6 +70,10 @@ When the code or the materials (spec, review documents) change after you approve
 
 If the code changes again while you review, saving is refused and the next round starts from the same signed approval. A re-check is not a second review of the implementation: it only checks that the approved description and decisions still fit the code.
 
+## Curating decisions over time
+
+Decisions from many handoffs can be reviewed together in a [context curation](curation.md): duplicates cleaned up, relations added, and rules worth keeping proposed as axiom candidates. Heirloom suggests it in the dashboard when enough decisions are unreviewed; it runs only when you choose it.
+
 ## 4. Recall in later work
 
 The agent does this.

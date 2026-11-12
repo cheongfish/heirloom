@@ -16,6 +16,7 @@ The dashboard is a local web page where a human reviews and approves handoffs. O
 | Section | Content |
 | --- | --- |
 | 승인 대기 (awaiting approval) | Handoffs waiting for a human |
+| 맥락 정리 (context curation) | Per repository: unreviewed decisions, the last curation, and a **정리 실행** (run curation) button. "정리 권장" marks a repository that meets the [suggestion condition](curation.md#when-heirloom-suggests-it). A running curation shows "정리 진행 중" instead. |
 | 인계되지 않은 변경 (unhanded changes) | Worktrees with code changes but no handoff for their current state |
 | 오래된 미처리 건 (stale) | Unfinished tasks whose last activity is older than `dashboard.staleDays` (default 7). They never expire just because time passed. |
 | 진행 중, 최근 끝난 작업 (in progress, recently finished) | All other tasks |
@@ -38,6 +39,7 @@ The task screen has tabs. The approval bar stays at the bottom of every tab.
 - **Approve button.** It is enabled only after every item has a decision.
 - **Re-check after approval.** When the code changed after an approval ([Workflow](workflow.md#changes-after-approval)), items that keep their approval are marked "승인 유지" (approval kept) and folded; summary bullets that keep it are read only. Items up for re-check show why, and the approved version under "지난 승인 내용". "다시 검토" (review again) opens a kept item for a decision. Only open items need a decision; if none is open, one confirmation of the summary is enough.
 - **Discard.** "작업 폐기" (discard) ends the handoff. A discarded task cannot be approved or applied.
+- **Curation tasks.** A [context curation](curation.md) has the same tabs. Its overview shows the dedicated worktree, the state of the headless run (with "다시 실행" after a failure) and the batch with earlier review history. Axiom candidates list their evidence decisions and have a reason field, required to hold or reject them. Saving the approval starts the headless apply step.
 
 ## Server lifetime
 

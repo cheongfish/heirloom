@@ -15,6 +15,7 @@ import { findProjectRules } from './project-rules.mjs';
 import { taskPaths } from './paths.mjs';
 import { appliedTaskMerged, recordView } from './record-status.mjs';
 import { readIndex, tasksForWorktree } from './store.mjs';
+import { curationStatus } from './curation.mjs';
 
 const PENDING_SHOWN = 10;
 
@@ -32,7 +33,7 @@ async function prImpossible(home, taskId) {
 }
 
 /** @type {Record<import('./record-status.mjs').ChangeKind, string>} */
-const CHANGE_LABEL = { add: '추가 제안', update: '수정 제안', supersede: '대체 제안', deprecate: '폐기 제안' };
+const CHANGE_LABEL = { add: '추가 제안', update: '수정 제안', supersede: '대체 제안', deprecate: '폐기 제안', relate: '관계 추가 제안' };
 
 /** @param {string} text */
 function stripFrontmatter(text) {
@@ -116,7 +117,8 @@ async function projectSection(cwd, home) {
   if (errors.length) lines.push('', `읽지 못한 기록 ${errors.length}개: ${errors.map((e) => e.split(': ')[0]).join(', ')}`);
 
   const ids = await readIds(info);
-  if (ids) {
+  const managed = ids ? (await readIndex(home)).worktrees[ids.worktreeId]?.managed === true : false;
+  if (ids && !managed) {
     const index = await readIndex(home);
     /** @type {string[]} */
     const pending = [];
@@ -132,6 +134,12 @@ async function projectSection(cwd, home) {
       else if (state === 'awaiting_approval') pending.push(`- ${taskId}: 대시보드에서 사람의 승인을 기다리는 중.`);
     }
     if (pending.length) lines.push('', '## 이 작업 트리의 미처리 인계', ...pending);
+
+    const curation = await curationStatus({ home, repoId: ids.repoId }).catch(() => null);
+    if (curation?.inProgress.length) lines.push('', `맥락 정리: 진행 중(작업 ${curation.inProgress.map((t) => t.taskId).join(', ')}). 대시보드에서 확인한다.`);
+    else if (curation?.notify) {
+      lines.push('', `맥락 정리 안내: 검토하지 않은 decision이 ${curation.unreviewed}개다. 사용자가 원하면 대시보드에서 '정리 실행'을 고를 수 있다. 직접 실행하지 않는다.`);
+    }
   }
 
   const { commitGuides } = await findProjectRules(info.root);

@@ -28,6 +28,7 @@ export function homePaths(home) {
     tasks: path.join(home, 'tasks'),
     keys: path.join(home, 'keys'),
     server: path.join(home, 'server'),
+    worktrees: path.join(home, 'worktrees'),
   };
 }
 
@@ -47,6 +48,10 @@ export function taskPaths(home, taskId) {
     handoff: path.join(dir, 'handoff.md'),
     approvals: path.join(dir, 'approvals'),
     events: path.join(dir, 'events.jsonl'),
+    curation: path.join(dir, 'curation.json'),
+    prBody: path.join(dir, 'pr-body.md'),
+    /** @param {'curate' | 'apply'} phase */
+    agentLog: (phase) => path.join(dir, `agent-${phase}.log`),
   };
 }
 
@@ -72,6 +77,7 @@ export function repoPaths(root) {
     decisions: path.join(dir, 'decisions'),
     axioms: path.join(dir, 'axioms'),
     config: path.join(dir, 'config.json'),
+    curation: path.join(dir, 'curation'),
   };
 }
 

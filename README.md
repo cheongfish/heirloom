@@ -33,6 +33,12 @@ To try a checkout for one session without installing: `claude --plugin-dir /path
 
 → [Workflow guide](docs/guide/en/workflow.md)
 
+## Context curation
+
+When decisions pile up, the dashboard suggests a curation. If you run it, a headless agent reviews a batch of decisions in a dedicated worktree and proposes duplicate clean-up, relations and axiom candidates. You approve each proposal, giving a reason for any candidate you hold or reject, and the result arrives as a PR.
+
+→ [Context curation](docs/guide/en/curation.md)
+
 ## Dashboard
 
 A local page at `http://127.0.0.1:17380/` with an overview and a tabbed screen per task. It opens once per handoff. Ask the agent to reopen it any time. The server stops by itself when idle.
@@ -41,7 +47,7 @@ A local page at `http://127.0.0.1:17380/` with an overview and a tabbed screen p
 
 ## Data locations
 
-- `<repository>/.heirloom/`: decision and axiom records. Committed.
+- `<repository>/.heirloom/`: decision and axiom records, and curation review history. Committed.
 - `~/.heirloom/` (or `HEIRLOOM_HOME`): tasks, approvals, keys and server state. Local only.
 
 → [Data locations](docs/guide/en/data.md)
@@ -64,7 +70,6 @@ Planned:
 
 - Codex and Antigravity hosts,
 - GitLab,
-- axiom candidates,
 - Windows keychain.
 
 → [Roadmap](docs/guide/en/roadmap.md)

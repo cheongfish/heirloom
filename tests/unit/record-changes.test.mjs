@@ -188,3 +188,48 @@ test('missing or already inactive targets are a conflict; reapplying the same ap
   const upd = approval([{ op: 'update', target: 'd-0dd0dd0d', reason: 'r', sources: [], title: 'x' }], [{ index: 0, decision: 'approved' }]);
   assert.deepEqual(planRecordChanges({ draft: upd.draft, approval: upd.approval, existing: new Map([[updated.meta.id, updated]]) }).writes, [], 'update already applied');
 });
+
+test('relate: the relation is added to the target once, as a revision signed by this approval', () => {
+  const op = { op: 'relate', target: 'd-0dd0dd0d', relation: { type: 'exception', id: 'd-0ther000', condition: '환불일 때' } };
+  const { draft, approval: a } = approval([op, { ...op, relation: { type: 'coexist', id: 'd-0ther111', condition: '조회만 할 때' } }], [
+    { index: 0, decision: 'approved' },
+    { index: 1, decision: 'approved' },
+  ]);
+  const old = existing();
+  const plan = planRecordChanges({ draft, approval: a, existing: new Map([[old.meta.id, old]]) });
+  const doc = /** @type {any} */ (byId(plan, 'd-0dd0dd0d'));
+  assert.deepEqual(doc.meta.relations, [
+    { type: 'exception', id: 'd-0ther000', condition: '환불일 때' },
+    { type: 'coexist', id: 'd-0ther111', condition: '조회만 할 때' },
+  ]);
+  assert.equal(doc.meta.approval.id, 'ap-newnewnewnew');
+  assert.equal(doc.meta.revisions.length, 1, 'one revision per approval');
+  assert.equal(doc.meta.revisions[0].approval.id, 'ap-0dd0dd0dd0dd');
+  assert.equal(doc.body, old.body);
+  assert.deepEqual(validate(recordMetaSchema, doc.meta), []);
+
+  // Applying the same approval to its own output changes nothing.
+  const again = planRecordChanges({ draft, approval: a, existing: new Map([[doc.meta.id, doc]]) });
+  assert.deepEqual(byId(again, 'd-0dd0dd0d') ?? doc, doc);
+
+  // A rejected relate writes nothing.
+  const rejected = approval([op], [{ index: 0, decision: 'rejected' }]);
+  assert.deepEqual(planRecordChanges({ draft: rejected.draft, approval: rejected.approval, existing: new Map([[old.meta.id, old]]) }).writes, []);
+});
+
+test('update and relate on the same record in one approval: both applied, one revision', () => {
+  const ops = [
+    { op: 'relate', target: 'd-0dd0dd0d', relation: { type: 'coexist', id: 'd-0ther000', condition: 'c' } },
+    { op: 'update', target: 'd-0dd0dd0d', reason: '범위 보완', sources: [], topics: ['new'] },
+  ];
+  const { draft, approval: a } = approval(ops, [
+    { index: 0, decision: 'approved' },
+    { index: 1, decision: 'approved' },
+  ]);
+  const old = existing();
+  const doc = /** @type {any} */ (byId(planRecordChanges({ draft, approval: a, existing: new Map([[old.meta.id, old]]) }), 'd-0dd0dd0d'));
+  assert.deepEqual(doc.meta.topics, ['new']);
+  assert.equal(doc.meta.relations.length, 1);
+  assert.equal(doc.meta.revisions.length, 1);
+  assert.equal(doc.meta.revisions[0].reason, '관계 추가: coexist d-0ther000; 범위 보완');
+});

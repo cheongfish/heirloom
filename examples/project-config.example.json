@@ -8,5 +8,11 @@
   },
   "sessionIndex": {
     "maxDecisions": 30
+  },
+  "curation": {
+    "minUnreviewed": 10,
+    "maxAgeDays": 30,
+    "minForAge": 3,
+    "batchSize": 20
   }
 }

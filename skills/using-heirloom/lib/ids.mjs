@@ -1,7 +1,7 @@
 // Identifiers: random repository, worktree, task, approval and record ids.
 // Note: ids.mjs and store.mjs import each other; both only use the other's exports at call time.
 
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { access, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -29,6 +29,15 @@ export function randomBase32(length) {
 export const newRepoId = () => `r-${randomBase32(10)}`;
 export const newWorktreeId = () => `w-${randomBase32(10)}`;
 export const newApprovalId = () => `ap-${randomBase32(12)}`;
+
+/**
+ * Base32 text derived from a seed: the same seed always gives the same id.
+ * @param {string} seed
+ * @param {number} length at most 32
+ */
+export function derivedBase32(seed, length) {
+  return Array.from(createHash('sha256').update(seed).digest().subarray(0, length), (b) => ALPHABET[b & 31]).join('');
+}
 
 /** @param {'decision' | 'axiom'} kind */
 export const newRecordId = (kind) => `${kind === 'axiom' ? 'a' : 'd'}-${randomBase32(8)}`;
@@ -106,7 +115,8 @@ export async function resolveIds(home, info) {
         await writeFileAtomic(repoFile, `${repoId}\n`, { mode: 0o644 });
       }
     }
-    index.worktrees[worktreeId] = { repoId, path: info.root, lastSeen: new Date().toISOString() };
+    const managed = index.worktrees[worktreeId]?.managed;
+    index.worktrees[worktreeId] = { repoId, path: info.root, lastSeen: new Date().toISOString(), ...(managed ? { managed } : {}) };
     return { repoId, worktreeId };
   });
 }

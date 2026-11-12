@@ -33,6 +33,12 @@ Node 20 이상, git, Claude Code가 필요합니다. PR을 만들 때만 `gh`와
 
 → [작업 흐름 가이드](docs/guide/ko/workflow.md)
 
+## 맥락 정리
+
+decision이 쌓이면 대시보드가 정리를 제안합니다. 실행을 고르면 헤드리스 에이전트가 전용 worktree에서 decision 묶음을 검토하고 중복 정리, 관계, axiom 후보를 제안합니다. 제안을 항목마다 승인하고(보류·거절한 후보에는 이유를 적습니다), 결과는 PR로 올라옵니다.
+
+→ [맥락 정리](docs/guide/ko/curation.md)
+
 ## 대시보드
 
 `http://127.0.0.1:17380/`에 뜨는 로컬 화면입니다. 전체 목록과 작업별 탭 화면이 있습니다. 인계마다 한 번 자동으로 열리고, 언제든 에이전트에게 다시 열어 달라고 할 수 있습니다. 쓰지 않으면 서버가 스스로 종료됩니다.
@@ -41,7 +47,7 @@ Node 20 이상, git, Claude Code가 필요합니다. PR을 만들 때만 `gh`와
 
 ## 데이터 위치
 
-- `<저장소>/.heirloom/`: decision·axiom 기록. 커밋 대상입니다.
+- `<저장소>/.heirloom/`: decision·axiom 기록과 정리 검토 이력. 커밋 대상입니다.
 - `~/.heirloom/`(또는 `HEIRLOOM_HOME`): 작업, 승인, 키, 서버 상태. 로컬에만 둡니다.
 
 → [데이터 위치](docs/guide/ko/data.md)
@@ -64,7 +70,6 @@ Node 20 이상, git, Claude Code가 필요합니다. PR을 만들 때만 `gh`와
 
 - Codex·Antigravity 호스트
 - GitLab
-- axiom 후보
 - Windows 키체인
 
 → [지원 예정](docs/guide/ko/roadmap.md)

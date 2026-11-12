@@ -12,6 +12,7 @@ Heirloom은 데이터를 두 곳에 둡니다. 저장소에는 팀이 공유할 
 | --- | --- |
 | `decisions/d-<id>.md` | decision 기록. JSON 앞머리와 본문(문제, 선택과 이유, 버린 대안, 적용 범위) |
 | `axioms/a-<id>.md` | axiom 기록. 유지할 성질, 적용 범위와 조건, 예외, 점검 지침 |
+| `curation/c-<id>.json` | [맥락 정리](curation.md) 한 번의 검토 이력. 묶음, 후보마다 결정과 이유, 그 밖의 변경 |
 | `config.json` | 선택. [프로젝트 설정](configuration.md#프로젝트-설정) |
 
 - **비활성 기록.** 대체·폐기된 기록은 지우지 않습니다. `active: false`로 남겨 이력을 보존합니다.
@@ -31,6 +32,8 @@ Heirloom은 데이터를 두 곳에 둡니다. 저장소에는 팀이 공유할 
 | `tasks/<taskId>/handoff.md` | 사람이 읽는 인계 파일 |
 | `tasks/<taskId>/approvals/ap-<id>.json` | 서명된 승인 기록 |
 | `tasks/<taskId>/events.jsonl` | 작업 이벤트 로그 |
+| `tasks/<taskId>/curation.json`, `agent-<단계>.log` | 정리 작업에만 있음. 전용 worktree와 브랜치, 헤드리스 실행 로그 |
+| `worktrees/<repoId>/<taskId>/` | 진행 중인 정리의 전용 worktree. 정리가 끝나면 지워집니다. |
 | `keys/current.json` | 현재 서명 키의 공개키 지문과 개인키 보관 위치 |
 | `keys/private.key` | 키체인을 쓸 수 없을 때만 있는 개인키(0600) |
 | `keys/public/<지문>.pub` | 지금까지 쓴 모든 공개키 |
@@ -43,5 +46,6 @@ Heirloom은 데이터를 두 곳에 둡니다. 저장소에는 팀이 공유할 
 | `server/` | 서버가 꺼져 있으면 지워도 됩니다. 다음에 다시 만들어집니다. |
 | 끝난 작업(PR 작성, 폐기, 만료)의 `tasks/<taskId>/` | 지워도 됩니다. 저장소의 기록 파일에는 영향이 없습니다. |
 | 진행 중인 작업의 `tasks/<taskId>/` | 지우면 그 인계와 승인을 잃습니다. |
+| `worktrees/` | 직접 지우지 않습니다. 저장소에서 `git worktree remove`를 쓰거나 대시보드에서 정리 작업을 폐기합니다. |
 | `keys/public/` | 지우지 마세요. 과거 승인의 서명을 검증할 수 없게 됩니다. |
 | `keys/private.key` 또는 키체인 항목 | 지우면 다음 승인 때 새 키가 만들어집니다. 이전 승인 검증에는 공개키만 필요합니다. |

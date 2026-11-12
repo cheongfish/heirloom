@@ -25,7 +25,7 @@ import { readIndex } from './store.mjs';
 /** @typedef {import('./records.mjs').RecordDoc} RecordDoc */
 /** @typedef {import('./records.mjs').RecordMeta} RecordMeta */
 /** @typedef {'active' | 'inactive' | 'pending' | 'unknown'} RecordStatus */
-/** @typedef {'add' | 'update' | 'supersede' | 'deprecate'} ChangeKind */
+/** @typedef {'add' | 'update' | 'supersede' | 'deprecate' | 'relate'} ChangeKind */
 
 /**
  * @typedef {object} ViewRecord
@@ -176,7 +176,7 @@ async function taskScope(home, info) {
  */
 function changeMerged(op, ops, approvalId, merged) {
   if (!merged) return false;
-  if (op.op === 'add' || op.op === 'update') return approvalIds(merged).has(approvalId);
+  if (op.op === 'add' || op.op === 'update' || op.op === 'relate') return approvalIds(merged).has(approvalId);
   if (op.op === 'deprecate') return merged.deprecation?.approval.id === approvalId;
   if (op.op === 'supersede') return merged.supersededBy === ops[op.with]?.id;
   return false;

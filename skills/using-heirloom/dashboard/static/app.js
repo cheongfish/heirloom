@@ -319,7 +319,18 @@ const STATE_HELP = {
 };
 
 /** @type {Record<string, string>} */
-const OP = { add: '추가', update: '수정', supersede: '대체', deprecate: '폐기' };
+const CURATION_HELP = {
+  prepared: '정리 초안을 기다립니다. 헤드리스 실행 상태는 아래 전용 worktree 카드에 있습니다. 초안이 제출되면 이 화면이 갱신됩니다.',
+  awaiting_approval: '제안을 항목마다 승인하세요. axiom 후보를 보류하거나 거절할 때는 이유를 적습니다. 이유는 저장소의 검토 이력에 남아, 새 근거 없이 같은 후보가 다시 제안되지 않게 합니다.',
+  approved: '승인을 저장했습니다. 헤드리스 에이전트가 기록과 검토 이력을 커밋하고 PR을 만듭니다.',
+  applied: '기록과 검토 이력을 썼습니다. PR 작성을 기다립니다.',
+  pr_created: 'PR을 만들었습니다. 머지되면 묶음이 검토된 것으로 바뀌고 전용 worktree가 지워집니다.',
+};
+
+/** @type {Record<string, string>} */
+const OP = { add: '추가', update: '수정', supersede: '대체', deprecate: '폐기', relate: '관계 추가' };
+/** @type {Record<string, string>} */
+const RELATION = { exception: '예외', coexist: '병존' };
 const FINISHED = new Set(['pr_created', 'discarded', 'expired']);
 
 /** @type {Record<string, [string, string][]>} */
@@ -399,11 +410,69 @@ const taskRow = (t) =>
       h('span', { class: 'seed-list-item__title' }, t.branch ?? '(브랜치 없음)'),
       h('span', { class: 'seed-list-item__detail' }, `${t.repoRoot ?? '저장소 알 수 없음'} · ${t.taskId} · 갱신 ${when(t.updatedAt)}`),
     ),
-    h('div', { class: 'seed-list-item__suffix' }, t.merged === true ? badge('positive', '머지됨') : stateBadge(t.state)),
+    h('div', { class: 'seed-list-item__suffix' }, h('div', { class: 'hl-row' }, t.curation ? badge('neutral', '맥락 정리') : null, agentBadge(t.agent), t.merged === true ? badge('positive', '머지됨') : stateBadge(t.state))),
   );
 
 /** @param {any} t a listed task: finished, or applied without a PR and already merged */
 const isDone = (t) => FINISHED.has(t.state) || t.merged === true;
+
+/**
+ * Badge of a curation task's headless run, or null when nothing ran or the last run ended
+ * normally.
+ * @param {any} agent agentStatusOf() from the server
+ */
+function agentBadge(agent) {
+  if (agent?.running) return badge('informative', agent.running.phase === 'curate' ? '정리 초안 작성 중' : '반영 중');
+  const last = agent?.last;
+  if (last && (last.error || last.timedOut || last.exitCode !== 0)) return badge('critical', '헤드리스 실행 실패');
+  return null;
+}
+
+/**
+ * Start a curation for a repository after the human confirms, then open its task screen.
+ * @param {any} c curation status of the repository
+ * @param {HTMLButtonElement} trigger
+ */
+async function runCuration(c, trigger) {
+  const ok = window.confirm(
+    [
+      '맥락 정리를 실행할까요?',
+      '',
+      '- 저장소의 전용 worktree(~/.heirloom/worktrees/)에 새 브랜치를 만들고, 그 안에서 헤드리스 에이전트를 실행합니다. 지금 작업 트리는 건드리지 않습니다.',
+      '- 에이전트는 사용자 권한으로 실행되며, 승인 뒤 PR을 만들 때 사용자의 gh 인증을 씁니다.',
+      '- 제안은 이 대시보드에서 항목마다 승인하기 전까지 아무 기록도 바꾸지 않습니다.',
+    ].join('\n'),
+  );
+  if (!ok) return;
+  trigger.disabled = true;
+  try {
+    const started = await post(`/api/repos/${encodeURIComponent(c.repoId)}/curate`, {});
+    window.location.href = taskHref(started.taskId, c.repoId, null);
+  } catch (err) {
+    trigger.disabled = false;
+    showBanner('critical', '정리를 시작하지 못함', /** @type {Error} */ (err).message);
+  }
+}
+
+/** @param {any} c curation status of one repository */
+function curationRow(c) {
+  /** @type {Child} */
+  let suffix = null;
+  if (c.inProgress.length) suffix = badge('informative', '정리 진행 중');
+  else if (c.unreviewed > 0 && !c.error) {
+    const run = /** @type {HTMLButtonElement} */ (button(c.notify ? BUTTON.primary : BUTTON.smallWeak, '정리 실행', () => void runCuration(c, run)));
+    suffix = h('div', { class: 'hl-row' }, c.notify ? badge('warning', '정리 권장') : null, run);
+  }
+  const detail = c.error
+    ? `확인하지 못함: ${c.error}`
+    : `검토하지 않은 decision ${c.unreviewed}개 · 마지막 정리 ${c.lastReviewedAt ? when(c.lastReviewedAt) : '없음'} · 대상 ${c.base}${c.unreadable ? ` · 읽지 못한 파일 ${c.unreadable}개` : ''}`;
+  return h(
+    'div',
+    { class: 'seed-list-item__root' },
+    h('div', { class: 'seed-list-item__content' }, h('span', { class: 'seed-list-item__title' }, c.root ?? c.repoId), h('span', { class: 'seed-list-item__detail' }, detail)),
+    h('div', { class: 'seed-list-item__suffix' }, suffix),
+  );
+}
 
 async function renderOverview() {
   const data = await api('/api/tasks');
@@ -436,10 +505,20 @@ async function renderOverview() {
       )
     : null;
 
+  /** @type {any[]} */
+  const curations = (data.curation ?? []).filter((/** @type {any} */ c) => c.unreviewed > 0 || c.inProgress.length || c.error);
   replace(
     main,
     h('h1', { class: 'hl-title' }, '전체 목록'),
     listSection('승인 대기', '', waiting.map(taskRow), '승인을 기다리는 인계가 없습니다.'),
+    curations.length
+      ? listSection(
+          '맥락 정리',
+          '여러 작업의 decision을 묶어 중복을 정리하고 axiom 후보를 찾습니다. 실행은 선택이며, 실행해도 승인하기 전에는 아무 기록도 바뀌지 않습니다.',
+          curations.map(curationRow),
+          '',
+        )
+      : null,
     h(
       'div',
       {},
@@ -477,6 +556,7 @@ async function renderOverview() {
  * @property {Set<number>} carriedRecords record indexes that keep their approval (incremental handoff)
  * @property {Set<number>} carriedSummary draft summary indexes that keep their approval
  * @property {Set<number>} reopened carried records the human opened for review again
+ * @property {Map<number, string>} reasons why a curation candidate is held or rejected
  * @property {boolean} dirty
  * @property {boolean} busy
  */
@@ -499,9 +579,9 @@ function titleBlock(task) {
   return h(
     'section',
     { class: 'hl-stack-tight' },
-    h('div', { class: 'hl-spread' }, h('h1', { class: 'hl-title' }, '인계 검토'), h('div', { class: 'hl-row' }, stateBadge(task.state), h('code', { class: 'hl-muted' }, task.taskId))),
+    h('div', { class: 'hl-spread' }, h('h1', { class: 'hl-title' }, task.curation ? '맥락 정리 검토' : '인계 검토'), h('div', { class: 'hl-row' }, stateBadge(task.state), h('code', { class: 'hl-muted' }, task.taskId))),
     input ? h('p', {}, h('code', {}, input.branch ?? '(분리된 HEAD)'), ' → ', h('code', {}, input.base.ref), h('span', { class: 'hl-muted' }, ` · ${input.repo.root}`)) : null,
-    STATE_HELP[task.state] ? h('p', { class: 'hl-muted' }, STATE_HELP[task.state]) : null,
+    ((task.curation && CURATION_HELP[task.state]) || STATE_HELP[task.state]) ? h('p', { class: 'hl-muted' }, (task.curation && CURATION_HELP[task.state]) || STATE_HELP[task.state]) : null,
   );
 }
 
@@ -526,7 +606,7 @@ function boundaryCard(task) {
       h('dt', {}, '리뷰한 상태'),
       h('dd', {}, match === null ? h('span', { class: 'hl-muted' }, '알 수 없음') : match ? badge('positive', '현재 소스와 같음') : badge('critical', '현재 소스와 다름')),
       h('dt', {}, '인계 방식'),
-      h('dd', {}, input.trigger === 'manual' ? '수동 요청' : '자동(spec 기반)', input.sdlcTaskRef ? ` · ${input.sdlcTaskRef}` : ''),
+      h('dd', {}, input.trigger === 'manual' ? '수동 요청' : input.trigger === 'curation' ? '맥락 정리(대시보드에서 실행)' : '자동(spec 기반)', input.sdlcTaskRef ? ` · ${input.sdlcTaskRef}` : ''),
       h('dt', {}, '준비 시각'),
       h('dd', {}, when(input.createdAt)),
     ),
@@ -617,6 +697,106 @@ function recheckCard(task) {
   );
 }
 
+/** @param {any} task @param {string} id */
+const recordLine = (task, id) => {
+  const t = task.targets?.[id];
+  return h('li', {}, h('code', {}, id), ' ', t ? t.title : h('span', { class: 'hl-muted' }, '(기록을 찾지 못함)'), h('span', { class: 'hl-muted hl-small' }, ` .heirloom/${id.startsWith('a-') ? 'axioms' : 'decisions'}/${id}.md`));
+};
+
+/** @param {any} task */
+function curationCard(task) {
+  const c = task.input?.curation;
+  if (!c) return null;
+  const closed = c.history.flatMap((/** @type {any} */ r) => r.candidates.filter((/** @type {any} */ x) => x.decision !== 'accepted').map((/** @type {any} */ x) => ({ ...x, review: r.id })));
+  /** @param {string} title @param {string[]} ids @param {boolean} [open] */
+  const group = (title, ids, open = false) =>
+    h('details', open ? { open: '' } : {}, h('summary', {}, `${title} ${ids.length}개`), ids.length ? h('ul', { class: 'hl-files' }, ids.map((id) => recordLine(task, id))) : h('p', { class: 'hl-muted' }, '없음'));
+  return h(
+    'section',
+    { class: 'hl-card' },
+    h('h2', { class: 'hl-section-title' }, '정리 묶음'),
+    h('p', { class: 'hl-muted hl-small' }, '대상 브랜치에서 아직 함께 검토하지 않은 decision을 묶었습니다. 이 정리가 머지되면 묶음은 검토된 것으로 기록됩니다.'),
+    group('검토할 decision', c.batch, true),
+    group('관련된 활성 decision', c.related),
+    group('활성 axiom', c.axioms),
+    h(
+      'details',
+      {},
+      h('summary', {}, `이전 정리 ${c.history.length}회 · 보류·거절된 후보 ${closed.length}개`),
+      closed.length
+        ? h(
+            'ul',
+            { class: 'hl-files' },
+            closed.map((/** @type {any} */ x) => h('li', {}, badge(x.decision === 'held' ? 'warning' : 'critical', x.decision === 'held' ? '보류' : '거절'), ` ${x.title} `, h('span', { class: 'hl-muted hl-small' }, `근거 ${x.evidence.join(', ')}${x.reason ? ` · 이유: ${x.reason}` : ''}`))),
+          )
+        : h('p', { class: 'hl-muted' }, '없음'),
+    ),
+  );
+}
+
+/** @type {Record<string, string>} */
+const AGENT_ERROR = { command_missing: '실행 파일을 찾지 못함', interrupted: '실행이 중간에 끊김(대시보드 서버 종료 등)' };
+
+/** @param {any} task */
+function agentCard(task) {
+  const meta = task.curation;
+  if (!meta) return null;
+  const agent = task.agent ?? {};
+  /** @type {Child[]} */
+  const body = [];
+  const phase = task.state === 'prepared' || task.state === 'drafted' ? 'curate' : task.state === 'approved' || task.state === 'applied' ? 'apply' : null;
+  if (agent.running) {
+    body.push(callout('informative', agent.running.phase === 'curate' ? '정리 초안 작성 중' : '기록 반영과 PR 작성 중', h('span', {}, `${when(agent.running.at)}부터 실행 중 · 로그 `, h('code', {}, agent.running.log))));
+  } else if (agent.last && (agent.last.error || agent.last.timedOut || agent.last.exitCode !== 0) && phase) {
+    const why = agent.last.error ? (AGENT_ERROR[agent.last.error] ?? agent.last.error) : agent.last.timedOut ? '시간 상한(30분)을 넘어 중지함' : `종료 코드 ${agent.last.exitCode}`;
+    const retry = /** @type {HTMLButtonElement} */ (
+      button(BUTTON.smallWeak, '다시 실행', async () => {
+        retry.disabled = true;
+        try {
+          await post(`/api/tasks/${encodeURIComponent(task.taskId)}/retry-agent`, {});
+          await loadTask(task.taskId, { force: true });
+        } catch (err) {
+          retry.disabled = false;
+          showBanner('critical', '다시 실행하지 못함', /** @type {Error} */ (err).message);
+        }
+      })
+    );
+    body.push(
+      callout(
+        'critical',
+        `헤드리스 실행 실패: ${why}`,
+        h(
+          'span',
+          {},
+          '작업은 지금 상태 그대로 있습니다. 다시 실행하거나, 직접 실행하세요: ',
+          h('code', {}, `cd ${meta.worktree}`),
+          ' 뒤 Claude Code에서 ',
+          h('code', {}, phase === 'curate' ? '/curate-decisions' : '/apply-approval'),
+          agent.last.log ? [' · 로그 ', h('code', {}, agent.last.log)] : null,
+        ),
+      ),
+      h('div', {}, retry),
+    );
+  }
+  if (meta.removeNote) body.push(callout('warning', '전용 worktree를 지우지 않음', meta.removeNote));
+  return h(
+    'section',
+    { class: 'hl-card' },
+    h('h2', { class: 'hl-section-title' }, '전용 worktree'),
+    h(
+      'dl',
+      { class: 'hl-meta' },
+      h('dt', {}, '위치'),
+      h('dd', {}, meta.removedAt ? h('span', { class: 'hl-muted' }, `지움 (${when(meta.removedAt)})`) : h('code', {}, meta.worktree)),
+      h('dt', {}, '브랜치'),
+      h('dd', {}, h('code', {}, meta.branch), ' → ', h('code', {}, meta.base)),
+      h('dt', {}, '대상 브랜치 갱신'),
+      h('dd', {}, meta.fetch.fetched === false ? badge('warning', `미확인: ${meta.fetch.note}`) : meta.fetch.fetched ? '실행 전에 가져옴' : h('span', { class: 'hl-muted' }, '원격 없음')),
+    ),
+    body,
+  );
+}
+
 /**
  * Number of notices that need attention (critical or warning), shown on the overview tab.
  * @param {any} task
@@ -684,6 +864,13 @@ function sourcesBlock(sources) {
   );
 }
 
+/**
+ * An axiom candidate of a curation: holding or rejecting it needs a reason.
+ * @param {any} task
+ * @param {any} r draft op
+ */
+const isCandidate = (task, r) => task.input?.trigger === 'curation' && r.op === 'add' && r.kind === 'axiom';
+
 /** @param {any} task @param {string} id */
 function targetLabel(task, id) {
   const t = task.targets?.[id];
@@ -741,15 +928,24 @@ function recordCard(f, index) {
       ),
       h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, '연관 코드 경로'), pathList(r.codePaths)),
       r.topics?.length ? h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, '주제'), pathList(r.topics)) : null,
+      Array.isArray(r.evidence)
+        ? h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, `근거 decision ${r.evidence.length}개 (원문은 저장소의 기록 파일)`), h('ul', { class: 'hl-files' }, r.evidence.map((/** @type {string} */ id) => recordLine(task, id))))
+        : null,
       sourcesBlock(r.sources),
     );
   } else {
     content.push(h('p', {}, h('span', { class: 'hl-muted' }, '대상 '), h('code', {}, targetLabel(task, r.target))));
+    if (r.op === 'relate') {
+      content.push(
+        h('p', {}, h('span', { class: 'hl-muted' }, `${RELATION[r.relation.type] ?? r.relation.type} 관계 `), h('code', {}, targetLabel(task, r.relation.id))),
+        h('p', { class: 'hl-field-text' }, h('span', { class: 'hl-muted' }, '조건 '), r.relation.condition),
+      );
+    }
     if (r.op === 'supersede') {
       const by = records[r.with];
       content.push(h('p', {}, h('span', { class: 'hl-muted' }, '대체하는 항목 '), `#${r.with + 1} ${by?.id ?? ''} ${by?.title ?? ''}`));
     }
-    content.push(h('p', { class: 'hl-field-text' }, h('span', { class: 'hl-muted' }, '이유 '), r.reason));
+    if (r.reason) content.push(h('p', { class: 'hl-field-text' }, h('span', { class: 'hl-muted' }, '이유 '), r.reason));
     if (r.op === 'update') {
       if (r.title) content.push(h('p', {}, h('span', { class: 'hl-muted' }, '새 제목 '), r.title));
       if (r.body) {
@@ -804,8 +1000,23 @@ function recordCard(f, index) {
       ),
       reasons.length ? callout('warning', '다시 확인할 이유', reasons.join(' · ')) : null,
       before ? previousRecord(before, kind) : null,
-      editable ? null : h('h3', { class: 'hl-section-title' }, r.op === 'update' ? '기존 기록 수정' : r.op === 'supersede' ? '기존 기록 대체' : '기존 기록 폐기'),
+      editable ? null : h('h3', { class: 'hl-section-title' }, r.op === 'update' ? '기존 기록 수정' : r.op === 'supersede' ? '기존 기록 대체' : r.op === 'relate' ? '기존 기록에 관계 추가' : '기존 기록 폐기'),
       content,
+      isCandidate(task, r)
+        ? fieldBlock(
+            '보류·거절 이유',
+            textInput({
+              value: f.reasons.get(index) ?? '',
+              multiline: true,
+              label: `항목 ${index + 1} 보류·거절 이유`,
+              oninput: (v) => {
+                f.reasons.set(index, v);
+                markDirty();
+              },
+            }),
+            '후보를 보류하거나 거절하면 필수입니다. 저장소의 검토 이력에 남습니다.',
+          )
+        : null,
     ],
   );
   return card;
@@ -1025,10 +1236,15 @@ function refreshActions() {
   const quick = total === 0;
   const decided = open.filter((i) => f.decisions.has(i)).length;
   const hasSummary = form.summary.some((b) => b.text.trim());
+  const missingReason = open.filter((i) => {
+    const d = f.decisions.get(i);
+    return d && d !== 'approved' && isCandidate(f.task, f.task.draft.records[i]) && !f.reasons.get(i)?.trim();
+  });
   approveButton.textContent = quick ? '요약 확인하고 간이 승인' : '승인 저장';
   const carriedNote = f.carriedRecords.size ? ` · 승인 유지 ${f.carriedRecords.size - f.reopened.size}건` : '';
-  progress.textContent = (quick ? (f.carriedRecords.size ? '다시 결정할 decision·axiom 항목이 없습니다.' : 'decision·axiom 변경이 없는 작업입니다.') : `결정한 항목 ${decided}/${total}`) + carriedNote;
-  const ready = hasSummary && decided === total && !form.busy;
+  const reasonNote = missingReason.length ? ` · 이유가 필요한 후보 ${missingReason.map((i) => `#${i + 1}`).join(', ')}` : '';
+  progress.textContent = (quick ? (f.carriedRecords.size ? '다시 결정할 decision·axiom 항목이 없습니다.' : 'decision·axiom 변경이 없는 작업입니다.') : `결정한 항목 ${decided}/${total}`) + carriedNote + reasonNote;
+  const ready = hasSummary && decided === total && !missingReason.length && !form.busy;
   approveButton.disabled = !ready;
   approveButton.toggleAttribute('data-disabled', !ready);
   discardButton.disabled = form.busy;
@@ -1059,6 +1275,7 @@ function newForm(task) {
     carriedRecords: new Set(task.carried?.records ?? []),
     carriedSummary,
     reopened: new Set(),
+    reasons: new Map(),
     summary: draftBullets(task, carriedSummary),
     decisions: new Map(),
     edits,
@@ -1074,9 +1291,11 @@ function approvalRequest(f) {
   const open = openIndexes(f);
   const items = open.map((index) => {
     const r = records[index];
-    /** @type {{ index: number, decision: Decision | undefined, edited?: Record<string, unknown>, reopen?: true }} */
+    /** @type {{ index: number, decision: Decision | undefined, edited?: Record<string, unknown>, reopen?: true, reason?: string }} */
     const item = { index, decision: f.decisions.get(index) };
     if (f.reopened.has(index)) item.reopen = true;
+    const reason = f.reasons.get(index)?.trim();
+    if (reason && item.decision !== 'approved') item.reason = reason;
     const edit = f.edits.get(index);
     if (r.op === 'add' && edit) {
       /** @type {Record<string, unknown>} */
@@ -1178,6 +1397,7 @@ function approvalSummaryCard(task) {
               item.carried ? [' ', badge('neutral', '유지')] : null,
               ` #${item.index + 1} ${OP[r.op] ?? ''} ${r.id ?? r.target ?? ''} ${item.edited?.title ?? r.title ?? ''}`,
               item.edited ? h('span', { class: 'hl-muted' }, ' (사람이 고침)') : null,
+              item.reason ? h('span', { class: 'hl-muted' }, ` · 이유: ${item.reason}`) : null,
             );
           }),
         )
@@ -1286,7 +1506,7 @@ function refreshTabLabels() {
 /** @param {any} task */
 function drawStatic(task) {
   replace(titleSlot, titleBlock(task));
-  replace(panels.overview, recheckCard(task), boundaryCard(task), noticesBlock(task));
+  replace(panels.overview, agentCard(task), recheckCard(task), curationCard(task), boundaryCard(task), noticesBlock(task));
   refreshTabLabels();
 }
 

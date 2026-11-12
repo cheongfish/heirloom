@@ -12,6 +12,7 @@ Everything here is committed. Task state and approvals are never stored here, so
 | --- | --- |
 | `decisions/d-<id>.md` | A decision record: JSON front matter, then the body (problem, choice and reasons, rejected alternatives, scope) |
 | `axioms/a-<id>.md` | An axiom record: property to keep, scope and conditions, exceptions, checks |
+| `curation/c-<id>.json` | Review history of one [context curation](curation.md): the batch, each candidate with the decision and reason, the other changes |
 | `config.json` | Optional. [Project settings](configuration.md#project-settings) |
 
 - **Inactive records.** Superseded and deprecated records are never deleted. They stay with `active: false`, so the history is kept.
@@ -31,6 +32,8 @@ The environment variable `HEIRLOOM_HOME` changes this location. Directories are 
 | `tasks/<taskId>/handoff.md` | Readable handoff file |
 | `tasks/<taskId>/approvals/ap-<id>.json` | Signed approval records |
 | `tasks/<taskId>/events.jsonl` | Task event log |
+| `tasks/<taskId>/curation.json`, `agent-<step>.log` | Curation tasks only: the dedicated worktree and branch, and the headless run logs |
+| `worktrees/<repoId>/<taskId>/` | Dedicated worktree of a running curation. Removed when the curation ends. |
 | `keys/current.json` | Fingerprint of the current signing key and where its private key is kept |
 | `keys/private.key` | The private key, only when no keychain can be used (mode 0600) |
 | `keys/public/<fingerprint>.pub` | Every public key used so far |
@@ -43,5 +46,6 @@ The environment variable `HEIRLOOM_HOME` changes this location. Directories are 
 | `server/` | Yes, while the server is stopped. It is recreated. |
 | `tasks/<taskId>/` of finished tasks (PR created, discarded, expired) | Yes. The record files in the repository are not affected. |
 | `tasks/<taskId>/` of open tasks | No: the handoff and its approval are lost. |
+| `worktrees/` | Not by hand: use `git worktree remove` from the repository, or discard the curation in the dashboard. |
 | `keys/public/` | No: past approvals can no longer be verified. |
 | `keys/private.key` or the keychain entry | A new key is created at the next approval. Verifying past approvals needs only the public keys. |

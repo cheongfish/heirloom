@@ -7,6 +7,7 @@ import path from 'node:path';
 
 import { globToRegExp } from './glob.mjs';
 import { ID_PATTERNS, newRecordId } from './ids.mjs';
+import { checkCurationDraft } from './curation.mjs';
 import { checkRecheckDraft } from './recheck.mjs';
 import { draftSchema, isMarkdownCodePath, validate } from './schema.mjs';
 import { createHash } from 'node:crypto';
@@ -55,15 +56,19 @@ export async function checkDraft({ root, input, draft, records, repoFiles }) {
   if (!input.recheck && enriched.recheck !== undefined) errors.push('$.recheck: 증분 재확인이 아닌 인계에는 쓸 수 없음');
   if (input.recheck && errors.length === 0) errors.push(...checkRecheckDraft({ recheck: input.recheck, draft: enriched }));
 
+  if (errors.length === 0) errors.push(...checkCurationDraft({ input, draft: enriched }));
+
   const changed = input.source.files.map((/** @type {{ path: string }} */ f) => f.path);
+  // A curation changes no code: its summary describes the record changes for the PR body.
+  const curation = input.trigger === 'curation';
   if (Array.isArray(enriched.summary)) {
-    if (enriched.summary.length < 2 || enriched.summary.length > 5) {
+    if (!curation && (enriched.summary.length < 2 || enriched.summary.length > 5)) {
       warnings.push(`$.summary: 요약 불릿은 2~5개를 권장함 (현재 ${enriched.summary.length}개)`);
     }
     enriched.summary.forEach((/** @type {any} */ bullet, /** @type {number} */ i) => {
       if (!isObject(bullet) || !Array.isArray(bullet.codePaths)) return;
       bullet.codePaths.forEach((/** @type {unknown} */ cp, /** @type {number} */ j) => {
-        if (typeof cp !== 'string' || isMarkdownCodePath(cp)) return; // reported by the schema
+        if (curation || typeof cp !== 'string' || isMarkdownCodePath(cp)) return; // reported by the schema
         if (!matchesSome(cp, changed)) errors.push(`$.summary[${i}].codePaths[${j}]: 변경 파일 목록에 없음 (${cp})`);
       });
     });
@@ -151,6 +156,15 @@ export async function checkDraft({ root, input, draft, records, repoFiles }) {
     } else if (op.op === 'update' || op.op === 'deprecate') {
       checkTarget(op, at);
       for (let k = 0; k < sources.length; k += 1) await checkSource(sources[k], `${at}.sources[${k}]`, false);
+    } else if (op.op === 'relate') {
+      checkTarget(op, at);
+      const id = op.relation?.id;
+      if (typeof id === 'string') {
+        const other = byId.get(id);
+        if (id === op.target) errors.push(`${at}.relation.id: 대상 기록 자신과는 관계를 맺을 수 없음`);
+        else if (!other) errors.push(`${at}.relation.id: 관계 대상 기록이 없음 (${id})`);
+        else if (!other.active) errors.push(`${at}.relation.id: 이미 비활성인 기록임 (${id})`);
+      }
     } else if (op.op === 'supersede') {
       checkTarget(op, at);
       const replacement = Number.isInteger(op.with) ? enriched.records[op.with] : undefined;
