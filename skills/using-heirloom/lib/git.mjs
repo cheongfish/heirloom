@@ -184,6 +184,22 @@ export async function changedFiles({ root, mergeBase }) {
 }
 
 /**
+ * Paths that differ between two commits (renames as delete + add), or null when either
+ * commit cannot be read (for example an old merge-base that was garbage-collected).
+ * @param {{ cwd: string, from: string, to: string }} options
+ * @returns {Promise<Set<string> | null>}
+ */
+export async function filesChangedBetween({ cwd, from, to }) {
+  if (from === to) return new Set();
+  try {
+    const out = await git(['diff', '--name-only', '-z', '--no-renames', from, to, '--'], { cwd });
+    return new Set(out.split('\0').filter(Boolean));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Text of the files under `dirs` in the tree of `ref`, read with one `ls-tree` and one
  * `cat-file --batch` (merge detection reads every record file of the base branch).
  * @param {{ cwd: string, ref: string, dirs: string[], timeoutMs?: number }} options

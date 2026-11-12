@@ -92,7 +92,7 @@ Write JSON to `draftPath`:
 
 When `recheck` is not null, the human already approved this task once. Only the approved items that the change touches go back to the human. Read `recheck` in the output and `recheck.baseline` in `inputPath` (the approved summary and records, with the human's edits).
 
-- `recheck.changes` lists the files changed since the approval. `base_updated` means the target branch was rebased or merged in, and the task file's content differs from the approved one.
+- `recheck.changes` lists the files changed since the approval. `base_updated` means the target branch was rebased or merged in and also changed that file, so the task file's content differs from the approved one partly because of the target branch. `edited` is a change made in this branch.
 - `recheck.affected.summary` and `recheck.affected.records` are the baseline items up for recheck, with reasons. `unlinked` lists changed files linked to no item; then the whole summary is up for recheck.
 - Start from the baseline. Copy every baseline bullet and record into the draft and give each one `"baseIndex": <its position in the baseline>`.
 - **Copy items that are not up for recheck exactly as they are.** The check refuses a draft that changes or drops them. They keep their approval.

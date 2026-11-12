@@ -10,7 +10,7 @@ import { loadProjectConfig } from './config.mjs';
 import { appendEvent, countAttempts, deriveState, readEvents } from './events.mjs';
 import { readJson, writeJsonAtomic } from './fsx.mjs';
 import { matchesAny } from './glob.mjs';
-import { repoInfo, resolveBase, tryGit } from './git.mjs';
+import { filesChangedBetween, repoInfo, resolveBase, tryGit } from './git.mjs';
 import { reviewMatchesSource } from './handoff.mjs';
 import { resolveIds } from './ids.mjs';
 import { taskPaths } from './paths.mjs';
@@ -139,7 +139,7 @@ export async function prepareHandoff(options) {
         projectRules,
         createdAt: new Date().toISOString(),
       };
-      if (approvalId !== undefined) input.recheck = await recheckFor({ home, taskId, approvalId, base, source, materials });
+      if (approvalId !== undefined) input.recheck = await recheckFor({ home, root, taskId, approvalId, base, source, materials });
       // A new state invalidates the previous draft and its derived files (input.json is
       // immutable only within one source/material state).
       await Promise.all([paths.draft, paths.draftInitial, paths.check, paths.handoff].map((f) => rm(f, { force: true })));
@@ -181,14 +181,15 @@ export async function prepareHandoff(options) {
 /**
  * What changed since the last signed approval of this task and which approved items it
  * touches.
- * @param {{ home: string, taskId: string, approvalId: unknown, base: { mergeBase: string }, source: { files: any[] }, materials: any[] }} options
+ * @param {{ home: string, root: string, taskId: string, approvalId: unknown, base: { mergeBase: string }, source: { files: any[] }, materials: any[] }} options
  */
-async function recheckFor({ home, taskId, approvalId, base, source, materials }) {
+async function recheckFor({ home, root, taskId, approvalId, base, source, materials }) {
   const approved = await loadApprovalBaseline({ home, taskId, approvalId });
   const baseline = buildBaseline({ draft: approved.draft, approval: approved.approval });
   const diff = diffStates({
     before: { files: approved.input.source.files, mergeBase: approved.input.base.mergeBase, materials: approved.approval.target.materials },
     after: { files: source.files, mergeBase: base.mergeBase, materials: Object.fromEntries(materials.map((m) => [m.ref, m.sha256])) },
+    baseChanged: await filesChangedBetween({ cwd: root, from: approved.input.base.mergeBase, to: base.mergeBase }),
   });
   return {
     basedOn: approved.approval.id,

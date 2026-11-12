@@ -241,7 +241,7 @@ test('a change during review: the stale screen is refused and the next round is 
   assert.deepEqual(input.recheck.changes.map((/** @type {any} */ c) => c.path), ['src/b.mjs']);
 });
 
-test('after a rebase: unchanged task files are not rechecked; a changed one is a base update', async () => {
+test('after a rebase: unchanged task files are not rechecked; a later edit is an ordinary edit', async () => {
   const t = await approvedTask();
   t.repo.git('add', '-A');
   t.repo.git('commit', '-q', '-m', 'work');
@@ -254,7 +254,29 @@ test('after a rebase: unchanged task files are not rechecked; a changed one is a
   assert.equal(quiet.alreadyPrepared, true, 'the upstream file is not part of the task: nothing to recheck');
   assert.equal(quiet.recheck, null);
 
+  // Edited after the rebase, but the target branch never touched it: an ordinary edit.
   await t.repo.write('src/a.mjs', 'export const a = 5;\n');
+  const changed = await recheckRound(t);
+  assert.equal(changed.input.recheck.mergeBaseChanged, true);
+  assert.deepEqual(changed.input.recheck.changes.map((/** @type {any} */ c) => [c.path, c.reason]), [['src/a.mjs', 'edited']]);
+});
+
+test('after a rebase onto a target branch that changed a task file: that file is a base update', async () => {
+  const t = await approvedTask();
+  t.repo.git('add', '-A');
+  t.repo.git('commit', '-q', '-m', 'work');
+  // Someone else changes src/a.mjs on main, a file the task also changed.
+  await t.upstream.write('src/a.mjs', 'export const a = 1;\n// upstream\n');
+  t.upstream.commitAll('upstream touches src/a.mjs');
+  t.repo.git('fetch', '-q', 'origin');
+  try {
+    t.repo.git('rebase', '-q', 'origin/main');
+  } catch {
+    // The task rewrote the same line: keep the task's version on top of the upstream comment.
+    await t.repo.write('src/a.mjs', 'export const a = 2;\n// upstream\n');
+    t.repo.git('add', 'src/a.mjs');
+    t.repo.git('-c', 'core.editor=true', 'rebase', '--continue');
+  }
   const changed = await recheckRound(t);
   assert.equal(changed.input.recheck.mergeBaseChanged, true);
   assert.deepEqual(changed.input.recheck.changes.map((/** @type {any} */ c) => [c.path, c.reason]), [['src/a.mjs', 'base_updated']]);

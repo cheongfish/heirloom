@@ -67,6 +67,25 @@ test('diffStates: after a rebase a changed task file is a base update; untouched
   assert.deepEqual(d.changes, [{ path: 'src/a.mjs', before: A, after: B, reason: 'base_updated' }]);
 });
 
+test('diffStates: after a rebase only files the target branch also changed are base updates', () => {
+  const before = { files: files([['src/a.mjs', A], ['src/b.mjs', A]]), mergeBase: MB1, materials: {} };
+  const after = { files: files([['src/a.mjs', B], ['src/b.mjs', B]]), mergeBase: MB2, materials: {} };
+  // src/a.mjs changed between the two merge-bases; src/b.mjs was edited by the task alone.
+  const d = diffStates({ before, after, baseChanged: new Set(['src/a.mjs']) });
+  assert.deepEqual(
+    d.changes.map((c) => [c.path, c.reason]),
+    [
+      ['src/a.mjs', 'base_updated'],
+      ['src/b.mjs', 'edited'],
+    ],
+  );
+  // Without the list (the old merge-base is gone) every changed file stays a base update.
+  assert.deepEqual(
+    diffStates({ before, after }).changes.map((c) => c.reason),
+    ['base_updated', 'base_updated'],
+  );
+});
+
 // ------------------------------------------------------------------ buildBaseline
 
 test('buildBaseline: final summary with linked code paths, edits applied, rejected dropped, pending kept', () => {
