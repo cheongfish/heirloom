@@ -44,14 +44,15 @@ The documents are the source of truth for agreed behavior. If code and documents
 
 ## 3. Development commands
 
-`package.json` is added in milestone M0. Until then, these commands are the planned interface.
-
 ```sh
-npm test              # node --test (tests/unit, tests/integration, tests/layout)
-npm run typecheck     # tsc --noEmit with checkJs
-bash tests/hooks/run.sh   # hook script tests
+npm ci                    # install dev dependencies (typescript, @types/node)
+npm test                  # node --test, auto-discovers tests/**/*.test.mjs
+npm run typecheck         # tsc -p jsconfig.json (checkJs, strict)
+claude plugin validate .  # validate the Claude Code manifest
 claude --plugin-dir .     # load the plugin from the working tree in Claude Code
 ```
+
+Hook script tests (`tests/hooks/`) arrive in milestone M2.
 
 Run both `npm test` and `npm run typecheck` before you report a task as done. Report failures as they are.
 
