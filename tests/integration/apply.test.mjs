@@ -212,6 +212,25 @@ test('a PR created before a failure is found on the next run (no duplicate PR)',
   assert.deepEqual(again.pr.existing, { number: 7, url: pr.url, base: 'main' });
 });
 
+test('a transient failure after the records are written says so; the retry continues at the PR step', async () => {
+  const t = await approvedTask({ gh: { fail: 'network' } });
+  await assert.rejects(applyAny({ home: t.home, taskId: t.taskId }), (/** @type {any} */ e) => {
+    assert.ok(e instanceof HeirloomError);
+    assert.equal(e.code, 'E_TRANSIENT');
+    assert.match(e.message, /기록 파일은 이미 씀/);
+    assert.match(e.message, /\.heirloom\/decisions\/d-[a-z0-9]+\.md/);
+    assert.match(e.message, /gh pr list 실패/);
+    assert.match(String(e.hint), /기록을 다시 쓰지 않고 PR 단계부터/);
+    return true;
+  });
+  assert.equal(await stateOf(t.home, t.taskId), 'applied');
+
+  await writeFile(t.ghState, '{}');
+  const again = await applyAny({ home: t.home, taskId: t.taskId });
+  assert.equal(again.alreadyApplied, true);
+  assert.equal(again.pr.available, true);
+});
+
 test('PR step unavailable: records are still written and the reason is reported', async () => {
   const notGithub = await approvedTask({ github: false });
   const a = await applyAny({ home: notGithub.home, taskId: notGithub.taskId });

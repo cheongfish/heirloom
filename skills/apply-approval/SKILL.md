@@ -45,6 +45,7 @@ Failures:
   - Another branch is checked out. Follow the hint, or ask the user.
   - The recorded PR was closed without merge (the task is now `expired`). Its records will not become active. Tell the user. A new handoff is needed if they want to submit the work again.
 - Exit 75: the script already retried once. Do not run it again. Report the failure and the hint.
+  - When the message says the record files are already written (`기록 파일은 이미 씀`), the task is `applied`. Say that the records are written and only the PR step failed. Do not report the records as missing or the approval as unverified.
 
 Never edit the written record files, and never write record files yourself.
 

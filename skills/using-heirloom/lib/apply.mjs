@@ -9,7 +9,7 @@ import { access } from 'node:fs/promises';
 import path from 'node:path';
 
 import { draftDigest } from './canonical.mjs';
-import { HeirloomError } from './errors.mjs';
+import { HeirloomError, classifyError } from './errors.mjs';
 import { appendEvent, deriveState, readEvents } from './events.mjs';
 import { readJson } from './fsx.mjs';
 import { git, listRemotes, repoInfo, tryGit } from './git.mjs';
@@ -249,6 +249,13 @@ export async function applyApproval({ home, taskId }) {
   const after = await readEvents(paths.events);
   const state = deriveState(after);
   const prEvent = lastOf(after, 'pr_created');
+  /** @type {Awaited<ReturnType<typeof prMaterial>> | null} */
+  let pr = null;
+  try {
+    if (state !== 'pr_created') pr = await prMaterial(input);
+  } catch (err) {
+    throw recordsKept(err, files);
+  }
   return {
     taskId,
     approvalId: approval.id,
@@ -260,9 +267,24 @@ export async function applyApproval({ home, taskId }) {
     records: records.filter((/** @type {any} */ r) => r.decision === 'approved'),
     pendingItems: records.filter((/** @type {any} */ r) => r.decision === 'pending').map((/** @type {any} */ r) => r.index),
     prUrl: typeof prEvent?.url === 'string' ? prEvent.url : null,
-    pr: state === 'pr_created' ? null : await prMaterial(input),
+    pr,
     commitGuides: (await findProjectRules(input.repo.root)).commitGuides,
   };
+}
+
+/**
+ * A failure after the records were written: keep its code, and say that the records are
+ * already written, so the agent does not report them as missing (acceptance A8).
+ * @param {unknown} err
+ * @param {string[]} files
+ */
+function recordsKept(err, files) {
+  const e = classifyError(err);
+  const written = files.length ? files.join(', ') : '쓸 기록 없음';
+  return new HeirloomError(e.code, `기록 파일은 이미 씀(상태 applied: ${written}). PR 준비 단계에서 실패: ${e.message}`, {
+    cause: err,
+    hint: [`다시 실행하면 기록을 다시 쓰지 않고 PR 단계부터 이어진다.`, e.hint].filter(Boolean).join(' '),
+  });
 }
 
 const PR_URL = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/;
