@@ -144,6 +144,7 @@ test('sign usage: sign, aliased sign, namespace and dynamic import outside allow
       "import {\n  verify,\n  sign as s,\n} from '../../using-heirloom/lib/sign.mjs';\n",
     'skills/apply-approval/scripts/c.mjs': "import * as k from '../../using-heirloom/lib/sign.mjs';\n",
     'skills/using-heirloom/scripts/d.mjs': "const k = await import('../lib/sign.mjs');\n",
+    'skills/apply-approval/scripts/e.mjs': "import { verify, ensureSigningKey } from '../../using-heirloom/lib/sign.mjs';\n",
   });
   t.after(() => rm(root, { recursive: true, force: true }));
   const errors = (await checkSignUsage(root)).join('\n');
@@ -151,4 +152,5 @@ test('sign usage: sign, aliased sign, namespace and dynamic import outside allow
   assert.match(errors, /apply-approval\/scripts\/b\.mjs/);
   assert.match(errors, /apply-approval\/scripts\/c\.mjs/);
   assert.match(errors, /using-heirloom\/scripts\/d\.mjs/);
+  assert.match(errors, /apply-approval\/scripts\/e\.mjs/, 'only verify may be imported outside lib/ and dashboard/');
 });

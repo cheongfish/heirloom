@@ -221,8 +221,8 @@ const SIGN_ALLOWED = ['skills/using-heirloom/lib/', 'skills/using-heirloom/dashb
 const SIGN_MODULE = 'skills/using-heirloom/lib/sign.mjs';
 
 /**
- * Only lib/ and dashboard/ may obtain `sign()`. Elsewhere, sign.mjs may be
- * imported only through named imports that do not include `sign`.
+ * Only lib/ and dashboard/ may obtain signing functions. Elsewhere, sign.mjs may be
+ * imported only as `import { verify } from '.../sign.mjs'`.
  * @param {string} root
  * @returns {Promise<string[]>}
  */
@@ -245,14 +245,11 @@ export async function checkSignUsage(root) {
     }
     for (const match of source.matchAll(/\b(?:import|export)\s+([^'"`;]*?)\s+from\s+['"]([^'"]+)['"]/g)) {
       if (!targetsSign(match[2])) continue;
-      const clause = match[1];
-      const named = /\{([^}]*)\}/.exec(clause);
-      const hasNamespaceOrDefault = /\*/.test(clause) || /^[\s]*[A-Za-z_$][\w$]*\s*(,|$)/.test(clause.replace(/^export\b/, ''));
-      const importsSign = named
-        ? named[1].split(',').some((part) => part.trim().split(/\s+as\s+/)[0].trim() === 'sign')
-        : false;
-      if (importsSign || hasNamespaceOrDefault || !named) {
-        errors.push(`${where}: sign() may only be imported in lib/ and dashboard/ (import verify only)`);
+      // Outside lib/ and dashboard/ only `import { verify } from '.../sign.mjs'` is allowed.
+      const named = /^\{([^}]*)\}$/.exec(match[1].trim());
+      const names = named ? named[1].split(',').map((part) => part.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean) : [];
+      if (!named || names.some((n) => n !== 'verify')) {
+        errors.push(`${where}: sign.mjs may only be imported as { verify } outside lib/ and dashboard/`);
       }
     }
   }

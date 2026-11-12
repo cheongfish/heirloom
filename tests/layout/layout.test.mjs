@@ -39,4 +39,6 @@ test('repository: Claude Code manifest version matches package.json', async () =
   assert.equal(manifest.version, pkg.version);
   assert.equal(pkg.private, true);
   assert.deepEqual(Object.keys(pkg.dependencies ?? {}), [], 'runtime dependencies are not allowed');
+  const { VERSION } = await import('../../skills/using-heirloom/lib/version.mjs');
+  assert.equal(VERSION, pkg.version, 'lib/version.mjs matches package.json');
 });
