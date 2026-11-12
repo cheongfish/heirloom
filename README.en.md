@@ -15,7 +15,7 @@ Requires Node 20 or later, git and Claude Code. Opening the PR needs `gh` for a 
 Install from the `release` branch, which holds only the plugin files:
 
 ```text
-/plugin marketplace add <owner>/heirloom#release
+/plugin marketplace add cheongfish/heirloom#release
 /plugin install heirloom@heirloom
 ```
 

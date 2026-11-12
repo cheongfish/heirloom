@@ -22,7 +22,7 @@ Node를 찾지 못하거나 버전이 20 미만이면 Heirloom은 세션을 막�
 저장소 자체가 플러그인 마켓플레이스입니다(`.claude-plugin/marketplace.json`). `release` 브랜치에서 설치합니다. 이 브랜치에는 플러그인 파일(`.claude-plugin/`, `hooks/`, `skills/`, `examples/`)만 있고, 테스트와 개발용 파일은 `main`에만 있습니다. 한 번 추가하고 플러그인을 설치하면 모든 세션에서 불러옵니다.
 
 ```text
-/plugin marketplace add <owner>/heirloom#release
+/plugin marketplace add cheongfish/heirloom#release
 /plugin install heirloom@heirloom
 ```
 

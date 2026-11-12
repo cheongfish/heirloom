@@ -15,7 +15,7 @@ Node 20 이상, git, Claude Code가 필요합니다. PR을 만들 때만 github.
 플러그인 파일만 담은 `release` 브랜치에서 설치합니다.
 
 ```text
-/plugin marketplace add <owner>/heirloom#release
+/plugin marketplace add cheongfish/heirloom#release
 /plugin install heirloom@heirloom
 ```
 

@@ -22,7 +22,7 @@ If Node is missing or older than 20, Heirloom does not block the session. The se
 The repository is also a plugin marketplace (`.claude-plugin/marketplace.json`). Install from the `release` branch. It holds only the plugin files (`.claude-plugin/`, `hooks/`, `skills/`, `examples/`); tests and development files stay on `main`. Add it once and install the plugin. It then loads in every session.
 
 ```text
-/plugin marketplace add <owner>/heirloom#release
+/plugin marketplace add cheongfish/heirloom#release
 /plugin install heirloom@heirloom
 ```
 
