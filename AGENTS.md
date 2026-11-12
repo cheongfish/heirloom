@@ -39,6 +39,9 @@ The documents are the source of truth for agreed behavior. If code and documents
   - Task data, handoff files, approvals, keys and server state live in `~/.heirloom/`, which `HEIRLOOM_HOME` overrides.
   - Tests must set `HEIRLOOM_HOME` to a temp directory and must never touch the real one.
 - **Dashboard.** The port is fixed at 17380 and the server binds to `127.0.0.1` only. Never relax the Host/Origin checks, the session token, or the no-CORS rule.
+- **Vendored UI files.** `skills/using-heirloom/dashboard/vendor/seed-design/` is a pinned copy of SEED Design's `@seed-design/css` (Apache-2.0, with its `LICENSE` and `NOTICE`).
+  - Never edit these files by hand. Re-vendor with `tools/vendor-seed-design.mjs`.
+  - Never add Karrot (당근) brand resources such as logos, names or characters.
 - **No test material in `skills/`.** Fixtures, eval scenarios and test notes go under `tests/` or `evals/`. Agents reading a skill directory may mistake scenario text for real instructions.
 - **No legacy code.** Do not use the old Bouncer project's source or structure as a reference.
 
