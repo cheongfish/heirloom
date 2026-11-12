@@ -64,7 +64,7 @@ export function nextState(state, event) {
       require(state, event, ['prepared', 'drafted']);
       return 'failed';
     case 'stale':
-      require(state, event, ['approved', 'applied']);
+      require(state, event, ['approved', 'applied', 'pr_created']);
       return 'stale';
     case 'discarded':
     case 'expired':

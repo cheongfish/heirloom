@@ -295,7 +295,7 @@ const STATE = {
   applied: ['positive', '기록 반영됨'],
   pr_created: ['positive', 'PR 작성됨'],
   failed: ['critical', '실패'],
-  stale: ['critical', '상태 불일치'],
+  stale: ['critical', '재확인 필요'],
   discarded: ['neutral', '폐기됨'],
   expired: ['neutral', '만료됨'],
 };
@@ -313,7 +313,7 @@ const STATE_HELP = {
   applied: '기록 파일을 썼습니다. PR 작성을 기다립니다. PR을 만들 수 없는 저장소(GitHub 원격이 아님)는 대상 브랜치에 머지되면 끝난 작업으로 봅니다.',
   pr_created: 'PR을 만들었습니다.',
   failed: '인계 준비가 실패했습니다. 에이전트에게 원인을 확인하세요.',
-  stale: '승인 당시 상태와 현재 상태가 다릅니다. 다시 인계해야 합니다.',
+  stale: '승인 이후 소스나 자료가 바뀌었습니다. 에이전트가 prepare-handoff를 다시 실행하면 바뀐 부분과 연결된 항목만 다시 확인합니다. 기존 승인은 보존됩니다.',
   discarded: '폐기된 작업입니다.',
   expired: 'PR이 닫혔거나 브랜치가 삭제되어 만료된 작업입니다.',
 };
@@ -463,6 +463,7 @@ async function renderOverview() {
  * @typedef {object} Bullet
  * @property {string} text
  * @property {number | null} origin index in the draft summary, null for a bullet the human added
+ * @property {boolean} carried copied from the last approval and not touched by the changes (read only)
  */
 
 /**
@@ -473,6 +474,9 @@ async function renderOverview() {
  * @property {Map<number, { title: string, body: Record<string, string> }>} edits
  * @property {Map<number, (d: Decision) => void>} setters
  * @property {{ decision: number[], axiom: number[] }} kinds record indexes per tab
+ * @property {Set<number>} carriedRecords record indexes that keep their approval (incremental handoff)
+ * @property {Set<number>} carriedSummary draft summary indexes that keep their approval
+ * @property {Set<number>} reopened carried records the human opened for review again
  * @property {boolean} dirty
  * @property {boolean} busy
  */
@@ -539,6 +543,76 @@ function boundaryCard(task) {
       input.materials.length
         ? h('ul', { class: 'hl-files' }, input.materials.map((/** @type {any} */ m) => h('li', {}, h('span', { class: 'hl-muted' }, `${m.role} `), h('code', {}, m.ref), h('span', { class: 'hl-muted' }, ` ${short(m.sha256)}`))))
         : h('p', { class: 'hl-muted' }, '연결된 자료가 없습니다.'),
+    ),
+  );
+}
+
+/** @type {Record<string, string>} */
+const CHANGE_REASON = { edited: '수정', base_updated: '기준 브랜치 갱신으로 인한 변경', added: '추가', removed: '빠짐' };
+
+/** @param {string} reason */
+const reasonText = (reason) =>
+  reason === 'unlinked'
+    ? '연결 없는 변경(불확실)'
+    : reason === 'pending'
+      ? '지난 승인에서 보류'
+      : reason.startsWith('material:')
+        ? `자료 변경 ${reason.slice(9)}`
+        : reason.startsWith('with:')
+          ? '대체하는 항목이 다시 확인 대상'
+          : `${reason} 변경`;
+
+/**
+ * Why a draft item is up for recheck: the affected reasons of its baseline item, the
+ * agent's extra reason, or "new" for an item that was not in the last approval.
+ * @param {any} task
+ * @param {'summary' | 'record'} kind
+ * @param {any} item draft bullet or record
+ * @returns {string[]}
+ */
+function recheckReasons(task, kind, item) {
+  const recheck = task.input?.recheck;
+  if (!recheck) return [];
+  if (!Number.isInteger(item.baseIndex)) return ['지난 승인 뒤에 새로 생긴 항목'];
+  const affected = kind === 'summary' ? recheck.affected.summary : recheck.affected.records;
+  const hit = affected.find((/** @type {any} */ a) => a.index === item.baseIndex);
+  const extra = (task.draft?.recheck?.extra ?? []).filter((/** @type {any} */ e) => e.kind === kind && e.baseIndex === item.baseIndex);
+  return [...(hit ? hit.reasons.map(reasonText) : []), ...extra.map((/** @type {any} */ e) => `에이전트 추가: ${e.reason}`)];
+}
+
+/** @param {any} task */
+function recheckCard(task) {
+  const recheck = task.input?.recheck;
+  if (!recheck) return null;
+  const carried = task.carried ?? { summary: [], records: [] };
+  return h(
+    'section',
+    { class: 'hl-card' },
+    h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, '증분 재확인'), h('code', { class: 'hl-muted' }, `기준 ${recheck.basedOn}`)),
+    h(
+      'p',
+      { class: 'hl-muted hl-small' },
+      '지난 승인 뒤에 바뀐 부분과 연결된 항목만 다시 확인합니다. 나머지는 지난 승인을 유지합니다. 구현이 적절한지 다시 심사하는 절차가 아닙니다.',
+    ),
+    recheck.mergeBaseChanged ? callout('informative', '대상 브랜치가 갱신됨', 'merge-base가 바뀌었습니다. 이 작업이 바꾼 파일의 내용만 비교했고, 대상 브랜치에서 들어온 다른 변경은 보지 않았습니다.') : null,
+    recheck.affected.unlinked.length
+      ? callout('warning', '연결 없는 변경 (불확실)', h('span', {}, '어느 요약·기록에도 연결되지 않은 변경입니다. 요약 전체를 다시 확인하세요: ', recheck.affected.unlinked.join(', ')))
+      : null,
+    h(
+      'dl',
+      { class: 'hl-meta' },
+      h('dt', {}, '바뀐 파일'),
+      h(
+        'dd',
+        {},
+        recheck.changes.length
+          ? h('ul', { class: 'hl-files' }, recheck.changes.map((/** @type {any} */ c) => h('li', {}, h('code', {}, c.path), h('span', { class: 'hl-muted' }, ` ${CHANGE_REASON[c.reason] ?? c.reason}`))))
+          : h('span', { class: 'hl-muted' }, '없음'),
+      ),
+      h('dt', {}, '바뀐 자료'),
+      h('dd', {}, recheck.materials.length ? recheck.materials.map((/** @type {any} */ m) => m.ref).join(', ') : h('span', { class: 'hl-muted' }, '없음')),
+      h('dt', {}, '승인 유지'),
+      h('dd', {}, `요약 ${carried.summary.length}개, 기록 ${carried.records.length}개`),
     ),
   );
 }
@@ -621,6 +695,7 @@ function targetLabel(task, id) {
  * @param {number} index
  */
 function recordCard(f, index) {
+  if (f.carriedRecords.has(index) && !f.reopened.has(index)) return carriedRecordCard(f, index);
   const task = f.task;
   const records = task.draft.records;
   const r = records[index];
@@ -710,6 +785,8 @@ function recordCard(f, index) {
     card.setAttribute('data-decision', d);
   });
 
+  const reasons = f.reopened.has(index) ? ['사람이 다시 검토하기로 함'] : recheckReasons(task, 'record', r);
+  const before = Number.isInteger(r.baseIndex) ? task.input.recheck?.baseline.records[r.baseIndex] : undefined;
   append(
     card,
     [
@@ -725,9 +802,64 @@ function recordCard(f, index) {
         ),
         control.root,
       ),
+      reasons.length ? callout('warning', '다시 확인할 이유', reasons.join(' · ')) : null,
+      before ? previousRecord(before, kind) : null,
       editable ? null : h('h3', { class: 'hl-section-title' }, r.op === 'update' ? '기존 기록 수정' : r.op === 'supersede' ? '기존 기록 대체' : '기존 기록 폐기'),
       content,
     ],
+  );
+  return card;
+}
+
+/**
+ * The approved version of a record, shown next to the new draft.
+ * @param {any} before baseline record
+ * @param {'decision' | 'axiom'} kind
+ */
+function previousRecord(before, kind) {
+  return h(
+    'details',
+    {},
+    h('summary', {}, '지난 승인 내용'),
+    h(
+      'dl',
+      { class: 'hl-meta' },
+      before.title ? [h('dt', {}, '제목'), h('dd', {}, before.title)] : null,
+      before.op === 'add'
+        ? BODY_FIELDS[kind].map(([key, label]) => [h('dt', {}, label), h('dd', { class: 'hl-field-text' }, before.body?.[key] || '(없음)')])
+        : [h('dt', {}, '이유'), h('dd', { class: 'hl-field-text' }, before.reason ?? '')],
+      before.codePaths ? [h('dt', {}, '연관 코드 경로'), h('dd', {}, pathList(before.codePaths))] : null,
+    ),
+  );
+}
+
+/**
+ * A record that keeps its approval: shown folded, with a way to review it again when the
+ * human thinks the change does touch it.
+ * @param {Form} f
+ * @param {number} index
+ */
+function carriedRecordCard(f, index) {
+  const records = f.task.draft.records;
+  const r = records[index];
+  const kind = kindOf(r, records);
+  const title = r.op === 'add' ? r.title : `${OP[r.op] ?? r.op}: ${targetLabel(f.task, r.target)}`;
+  /** @type {HTMLElement} */
+  const card = h(
+    'article',
+    { class: 'hl-card', 'aria-label': `${kind} 항목 ${index + 1} (승인 유지)`, 'data-decision': 'approved' },
+    h(
+      'div',
+      { class: 'hl-spread' },
+      h('div', { class: 'hl-row' }, badge('positive', '승인 유지'), badge(kind === 'axiom' ? 'warning' : 'neutral', kind), h('code', { class: 'hl-muted' }, `#${index + 1}${r.id ? ` ${r.id}` : ''}`)),
+      button(BUTTON.smallWeak, '다시 검토', () => {
+        f.reopened.add(index);
+        card.replaceWith(recordCard(f, index));
+        markDirty();
+      }),
+    ),
+    h('p', {}, title),
+    h('p', { class: 'hl-muted hl-small' }, '바뀐 파일·자료와 연결되지 않아 지난 승인을 유지합니다. 영향이 있다고 보면 다시 검토하세요.'),
   );
   return card;
 }
@@ -742,7 +874,18 @@ function summaryCard(f) {
     replace(
       list,
       f.summary.map((b, i) =>
-        h(
+        b.carried
+          ? h(
+              'div',
+              { class: 'hl-bullet' },
+              h(
+                'div',
+                { class: 'hl-stack-tight' },
+                h('p', { class: 'hl-field-text' }, b.text),
+                h('div', { class: 'hl-row' }, badge('positive', '승인 유지'), b.origin !== null && initial[b.origin]?.codePaths?.length ? pathList(initial[b.origin].codePaths) : null),
+              ),
+            )
+          : h(
           'div',
           { class: 'hl-bullet' },
           h(
@@ -760,6 +903,7 @@ function summaryCard(f) {
               },
             }),
             b.origin !== null && initial[b.origin]?.codePaths?.length ? pathList(initial[b.origin].codePaths) : null,
+            bulletRecheck(f.task, b),
           ),
           button(BUTTON.smallGhost, '삭제', () => {
             f.summary.splice(i, 1);
@@ -785,19 +929,56 @@ function summaryCard(f) {
       'div',
       { class: 'hl-row' },
       button(BUTTON.smallWeak, '불릿 추가', () => {
-        f.summary.push({ text: '', origin: null });
+        f.summary.push({ text: '', origin: null, carried: false });
         markDirty();
         draw();
         refreshActions();
       }),
       button(BUTTON.smallGhost, '초안으로 되돌리기', () => {
-        f.summary = initial.map((/** @type {any} */ b, /** @type {number} */ i) => ({ text: b.text, origin: i }));
+        f.summary = draftBullets(f.task, f.carriedSummary);
         markDirty();
         draw();
         refreshActions();
       }),
     ),
   );
+}
+
+/**
+ * Reasons and the approved text of a bullet that is up for recheck.
+ * @param {any} task
+ * @param {Bullet} b
+ */
+function bulletRecheck(task, b) {
+  if (!task.input?.recheck || b.origin === null) return null;
+  const bullet = task.draft.summary[b.origin];
+  const reasons = recheckReasons(task, 'summary', bullet);
+  const before = Number.isInteger(bullet.baseIndex) ? task.input.recheck.baseline.summary[bullet.baseIndex]?.text : null;
+  return h(
+    'div',
+    { class: 'hl-stack-tight hl-small' },
+    reasons.length ? h('span', { class: 'hl-muted' }, `다시 확인할 이유: ${reasons.join(' · ')}`) : null,
+    before ? h('span', { class: 'hl-muted' }, `지난 승인: ${before}`) : null,
+  );
+}
+
+/**
+ * Bullets of the draft summary, carried ones marked.
+ * @param {any} task
+ * @param {Set<number>} carried
+ * @returns {Bullet[]}
+ */
+function draftBullets(task, carried) {
+  return (task.draft?.summary ?? []).map((/** @type {any} */ b, /** @type {number} */ i) => ({ text: b.text, origin: i, carried: carried.has(i) }));
+}
+
+/**
+ * Record indexes the human decides: everything except carried records not reopened.
+ * @param {Form} f
+ * @param {number[]} [indexes]
+ */
+function openIndexes(f, indexes = f.task.draft.records.map((/** @type {any} */ _r, /** @type {number} */ i) => i)) {
+  return indexes.filter((i) => !f.carriedRecords.has(i) || f.reopened.has(i));
 }
 
 /**
@@ -820,7 +1001,7 @@ function recordsPanel(f, kind) {
       { class: 'hl-spread' },
       h('h2', { class: 'hl-section-title' }, `decision 변경 ${indexes.length}건`),
       button(BUTTON.smallWeak, 'decision 모두 승인', () => {
-        for (const i of indexes) f.setters.get(i)?.('approved');
+        for (const i of openIndexes(f, indexes)) f.setters.get(i)?.('approved');
         markDirty();
       }),
     ),
@@ -838,12 +1019,15 @@ append(actionsBar, [actionsStatus, h('div', { class: 'hl-spread' }, progress, h(
 
 function refreshActions() {
   if (!form) return;
-  const total = form.task.draft.records.length;
+  const f = form;
+  const open = openIndexes(f);
+  const total = open.length;
   const quick = total === 0;
-  const decided = form.decisions.size;
+  const decided = open.filter((i) => f.decisions.has(i)).length;
   const hasSummary = form.summary.some((b) => b.text.trim());
   approveButton.textContent = quick ? '요약 확인하고 간이 승인' : '승인 저장';
-  progress.textContent = quick ? 'decision·axiom 변경이 없는 작업입니다.' : `결정한 항목 ${decided}/${total}`;
+  const carriedNote = f.carriedRecords.size ? ` · 승인 유지 ${f.carriedRecords.size - f.reopened.size}건` : '';
+  progress.textContent = (quick ? (f.carriedRecords.size ? '다시 결정할 decision·axiom 항목이 없습니다.' : 'decision·axiom 변경이 없는 작업입니다.') : `결정한 항목 ${decided}/${total}`) + carriedNote;
   const ready = hasSummary && decided === total && !form.busy;
   approveButton.disabled = !ready;
   approveButton.toggleAttribute('data-disabled', !ready);
@@ -868,10 +1052,14 @@ function newForm(task) {
   /** @type {Form['kinds']} */
   const kinds = { decision: [], axiom: [] };
   records.forEach((/** @type {any} */ r, /** @type {number} */ i) => kinds[kindOf(r, records)].push(i));
+  const carriedSummary = new Set(/** @type {number[]} */ (task.carried?.summary ?? []));
   return {
     task,
     kinds,
-    summary: (task.draft?.summary ?? []).map((/** @type {any} */ b, /** @type {number} */ i) => ({ text: b.text, origin: i })),
+    carriedRecords: new Set(task.carried?.records ?? []),
+    carriedSummary,
+    reopened: new Set(),
+    summary: draftBullets(task, carriedSummary),
     decisions: new Map(),
     edits,
     setters: new Map(),
@@ -883,9 +1071,12 @@ function newForm(task) {
 /** @param {Form} f */
 function approvalRequest(f) {
   const records = f.task.draft.records;
-  const items = records.map((/** @type {any} */ r, /** @type {number} */ index) => {
-    /** @type {{ index: number, decision: Decision | undefined, edited?: Record<string, unknown> }} */
+  const open = openIndexes(f);
+  const items = open.map((index) => {
+    const r = records[index];
+    /** @type {{ index: number, decision: Decision | undefined, edited?: Record<string, unknown>, reopen?: true }} */
     const item = { index, decision: f.decisions.get(index) };
+    if (f.reopened.has(index)) item.reopen = true;
     const edit = f.edits.get(index);
     if (r.op === 'add' && edit) {
       /** @type {Record<string, unknown>} */
@@ -897,12 +1088,14 @@ function approvalRequest(f) {
     }
     return item;
   });
+  const bullets = f.summary.filter((b) => b.text.trim());
   return {
-    kind: records.length ? 'full' : 'quick',
+    kind: open.length ? 'full' : 'quick',
     draftSha256: f.task.draftSha256,
     sourceHash: f.task.input.source.hash,
-    summary: f.summary.map((b) => b.text.trim()).filter(Boolean),
-    items: records.length ? items : [],
+    summary: bullets.map((b) => b.text.trim()),
+    summaryOrigins: bullets.map((b) => b.origin),
+    items,
   };
 }
 
@@ -967,7 +1160,8 @@ function approvalSummaryCard(task) {
   return h(
     'section',
     { class: 'hl-card' },
-    h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, a.kind === 'quick' ? '간이 승인 내용' : '승인 내용'), h('code', { class: 'hl-muted' }, a.id)),
+    h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, APPROVAL_TITLE[a.kind] ?? '승인 내용'), h('code', { class: 'hl-muted' }, a.id)),
+    a.basedOn ? h('p', { class: 'hl-muted hl-small' }, `지난 승인 ${a.basedOn}에서 바뀐 부분만 다시 확인했습니다. '유지'는 지난 승인을 그대로 이어받은 항목입니다.`) : null,
     h('p', { class: 'hl-muted hl-small' }, `${when(a.approvedAt)} · ${a.approver.gitUser ?? '승인자 알 수 없음'} · 키 ${a.approver.fingerprint}`),
     h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, '최종 요약'), h('ul', { class: 'hl-files' }, a.summary.final.map((/** @type {string} */ s) => h('li', {}, s)))),
     a.items.length
@@ -977,12 +1171,22 @@ function approvalSummaryCard(task) {
           a.items.map((/** @type {any} */ item) => {
             const r = records[item.index] ?? {};
             const [tone, text] = label[item.decision] ?? ['neutral', item.decision];
-            return h('li', {}, badge(tone, text), ` #${item.index + 1} ${OP[r.op] ?? ''} ${r.id ?? r.target ?? ''} ${item.edited?.title ?? r.title ?? ''}`, item.edited ? h('span', { class: 'hl-muted' }, ' (사람이 고침)') : null);
+            return h(
+              'li',
+              {},
+              badge(tone, text),
+              item.carried ? [' ', badge('neutral', '유지')] : null,
+              ` #${item.index + 1} ${OP[r.op] ?? ''} ${r.id ?? r.target ?? ''} ${item.edited?.title ?? r.title ?? ''}`,
+              item.edited ? h('span', { class: 'hl-muted' }, ' (사람이 고침)') : null,
+            );
           }),
         )
       : null,
   );
 }
+
+/** @type {Record<string, string>} */
+const APPROVAL_TITLE = { full: '승인 내용', quick: '간이 승인 내용', incremental: '증분 승인 내용' };
 
 /** @param {any} task */
 function prLink(task) {
@@ -1020,8 +1224,8 @@ function tabLabel(id) {
     return [h('span', {}, '개요'), n ? badge('warning', `확인 ${n}`) : null];
   }
   if (id === 'summary') return 'PR 요약';
-  if (id === 'approval') return latest?.latestApproval?.kind === 'quick' ? '간이 승인 내용' : '승인 내용';
-  const indexes = form?.kinds[id] ?? [];
+  if (id === 'approval') return APPROVAL_TITLE[latest?.latestApproval?.kind] ?? '승인 내용';
+  const indexes = form ? openIndexes(form, form.kinds[id]) : [];
   const decided = indexes.filter((i) => form?.decisions.has(i)).length;
   return [h('span', {}, `${id} ${decided}/${indexes.length}`), decided === indexes.length ? badge('positive', '완료') : null];
 }
@@ -1082,7 +1286,7 @@ function refreshTabLabels() {
 /** @param {any} task */
 function drawStatic(task) {
   replace(titleSlot, titleBlock(task));
-  replace(panels.overview, boundaryCard(task), noticesBlock(task));
+  replace(panels.overview, recheckCard(task), boundaryCard(task), noticesBlock(task));
   refreshTabLabels();
 }
 

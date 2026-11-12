@@ -4,14 +4,15 @@
 // The approval record is the source of truth; events only tell what was already done, so
 // running apply again never writes twice and never needs a second approval.
 
-import { access } from 'node:fs/promises';
+import { access, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { draftDigest } from './canonical.mjs';
 import { HeirloomError, classifyError } from './errors.mjs';
 import { appendEvent, deriveState, readEvents } from './events.mjs';
 import { readJson } from './fsx.mjs';
-import { git, listRemotes, repoInfo, tryGit } from './git.mjs';
+import { verifiedApprovalRecord } from './baseline.mjs';
+import { git, listRemotes, readTreeTexts, repoInfo, tryGit } from './git.mjs';
 import { baseBranchName, findOpenPr, ghReady, parseGithubRemote } from './github.mjs';
 import { readIds } from './ids.mjs';
 import { taskPaths } from './paths.mjs';
@@ -19,10 +20,8 @@ import { checkPrExpiry } from './pr-expiry.mjs';
 import { findProjectRules } from './project-rules.mjs';
 import { planRecordChanges } from './record-changes.mjs';
 import { appliedTaskMerged } from './record-status.mjs';
-import { readRecords, recordPath, writeRecord } from './records.mjs';
-import { approvalSchema, validate } from './schema.mjs';
-import { verify } from './sign.mjs';
-import { computeSourceState, hashMaterial } from './state.mjs';
+import { parseRecord, readRecords, recordPath, writeRecord } from './records.mjs';
+import { currentSourceState, hashMaterial } from './state.mjs';
 import { readIndex, tasksForWorktree } from './store.mjs';
 import { withTaskLock } from './task-lock.mjs';
 
@@ -79,22 +78,13 @@ export async function prTemplateChoice(root) {
  * @param {TaskEvent[]} events
  */
 async function verifiedApproval(home, taskId, events) {
-  const paths = taskPaths(home, taskId);
-  const approvalId = lastOf(events, 'approved')?.approvalId;
-  if (typeof approvalId !== 'string') throw new HeirloomError('E_VERIFY', '승인 이벤트에 승인 ID가 없음');
-  const record = /** @type {any} */ (await readJson(path.join(paths.approvals, `${approvalId}.json`)));
-  const fail = (/** @type {string} */ why) =>
-    new HeirloomError('E_VERIFY', `승인 ${approvalId}을(를) 믿을 수 없음: ${why}`, {
+  const record = await verifiedApprovalRecord({ home, taskId, approvalId: lastOf(events, 'approved')?.approvalId });
+  const draft = /** @type {any} */ (await readJson(taskPaths(home, taskId).draft));
+  if (!draft || draftDigest(draft) !== record.target.draftSha256) {
+    throw new HeirloomError('E_VERIFY', `승인 ${record.id}을(를) 믿을 수 없음: 승인 뒤에 초안이 바뀜`, {
       hint: '이 승인은 미승인으로 취급한다. 기록과 PR을 만들지 말고 사용자에게 알린다. 사용자가 대시보드에서 다시 승인해야 한다.',
     });
-  if (!record) throw fail('승인 기록 파일이 없음');
-  const result = await verify(home, record);
-  if (!result.ok) throw fail(result.reason === 'missing_signature' ? '서명이 없음' : result.reason === 'unknown_key' ? '알 수 없는 서명 키' : '서명이 맞지 않음');
-  const problems = validate(approvalSchema, record);
-  if (problems.length) throw fail(`형식 오류 (${problems.join('; ')})`);
-  if (record.id !== approvalId || record.taskId !== taskId) throw fail('다른 작업이나 다른 승인의 기록임');
-  const draft = /** @type {any} */ (await readJson(paths.draft));
-  if (!draft || draftDigest(draft) !== record.target.draftSha256) throw fail('승인 뒤에 초안이 바뀜');
+  }
   return { approval: record, draft };
 }
 
@@ -104,7 +94,7 @@ async function verifiedApproval(home, taskId, events) {
  * @param {any} approval
  */
 async function stateMatches(input, approval) {
-  const current = await computeSourceState({ root: input.repo.root, mergeBase: input.base.mergeBase });
+  const current = await currentSourceState({ root: input.repo.root, base: input.base });
   if (current.hash !== approval.target.sourceHash) return { ok: false, why: '승인 이후 소스가 바뀜' };
   for (const [ref, sha] of Object.entries(approval.target.materials)) {
     if (!sha) continue;
@@ -197,18 +187,20 @@ export async function applyApproval({ home, taskId }) {
 
     const root = input.repo.root;
     const already = state !== 'approved';
-    if (state !== 'pr_created') {
-      const info = await repoInfo(root);
-      if (info.branch !== input.branch) {
-        throw new HeirloomError('E_CONFLICT', `승인한 브랜치(${input.branch})가 아닌 ${info.branch ?? '분리된 HEAD'}가 체크아웃되어 있음`, {
-          hint: `git switch ${input.branch} 뒤에 다시 실행한다.`,
-        });
-      }
+    const info = await repoInfo(root);
+    // After the PR exists a different checkout only means the user moved on; the PR itself
+    // is checked again once the task branch is back.
+    if (state !== 'pr_created' && info.branch !== input.branch) {
+      throw new HeirloomError('E_CONFLICT', `승인한 브랜치(${input.branch})가 아닌 ${info.branch ?? '분리된 HEAD'}가 체크아웃되어 있음`, {
+        hint: `git switch ${input.branch} 뒤에 다시 실행한다.`,
+      });
+    }
+    if (info.branch === input.branch) {
       const match = await stateMatches(input, approval);
       if (!match.ok) {
         await appendEvent(paths.events, { type: 'stale', approvalId: approval.id, reason: match.why });
-        throw new HeirloomError('E_CONFLICT', `${match.why}. 승인은 보존되지만 이 상태로는 반영할 수 없음`, {
-          hint: '사용자에게 알리고 prepare-handoff로 다시 인계한다. 기록 파일과 PR은 만들지 않는다.',
+        throw new HeirloomError('E_CONFLICT', `${match.why}. 승인은 보존되고, 바뀐 부분만 다시 확인받으면 된다`, {
+          hint: '사용자에게 알리고 prepare-handoff를 다시 실행해 증분 재확인을 시작한다. 지금 상태로는 기록 파일과 PR을 만들거나 고치지 않는다.',
         });
       }
     }
@@ -218,16 +210,9 @@ export async function applyApproval({ home, taskId }) {
     if (already) {
       files = /** @type {string[]} */ (lastOf(events, 'records_written')?.files ?? []);
     } else {
-      const { records } = await readRecords(root);
-      const existing = new Map(records.map((r) => [r.meta.id, { meta: r.meta, body: r.body }]));
-      const { writes } = planRecordChanges({ draft, approval, existing });
-      files = [];
-      for (const doc of writes) {
-        await writeRecord(root, doc);
-        files.push(path.relative(root, recordPath(root, doc.meta)).split(path.sep).join('/'));
-      }
-      files.sort();
-      await appendEvent(paths.events, { type: 'records_written', approvalId: approval.id, files });
+      const { written, removed } = await writeApprovedRecords({ root, input, draft, approval, events });
+      files = written;
+      await appendEvent(paths.events, { type: 'records_written', approvalId: approval.id, files, ...(removed.length ? { removed } : {}) });
     }
     return { input, draft, approval, files, already };
   });
@@ -248,6 +233,8 @@ export async function applyApproval({ home, taskId }) {
   const after = await readEvents(paths.events);
   const state = deriveState(after);
   const prEvent = lastOf(after, 'pr_created');
+  // A PR from before an incremental recheck: its body is updated, not a new PR opened.
+  const previousPr = state === 'pr_created' ? undefined : prEvent;
   /** @type {Awaited<ReturnType<typeof prMaterial>> | null} */
   let pr = null;
   try {
@@ -262,13 +249,62 @@ export async function applyApproval({ home, taskId }) {
     alreadyApplied: already,
     root: input.repo.root,
     files,
+    removed: /** @type {string[]} */ (after.filter((e) => e.type === 'records_written' && e.approvalId === approval.id).at(-1)?.removed ?? []),
     summary: approval.summary.final,
     records: records.filter((/** @type {any} */ r) => r.decision === 'approved'),
     pendingItems: records.filter((/** @type {any} */ r) => r.decision === 'pending').map((/** @type {any} */ r) => r.index),
-    prUrl: typeof prEvent?.url === 'string' ? prEvent.url : null,
+    prUrl: state === 'pr_created' && typeof prEvent?.url === 'string' ? prEvent.url : null,
+    previousPrUrl: typeof previousPr?.url === 'string' ? previousPr.url : null,
     pr,
     commitGuides: (await findProjectRules(input.repo.root)).commitGuides,
   };
+}
+
+/**
+ * Write the records of an approval into the consumer repository. Files written for an earlier approval of this task are not merged yet, so they are
+ * first taken back to their merge-base version and the combined approval is applied again:
+ * the same approval always yields the same files. Earlier files the new approval no longer
+ * produces are restored from the merge-base, or removed when they did not exist there.
+ * @param {{ root: string, input: any, draft: any, approval: any, events: TaskEvent[] }} options
+ */
+async function writeApprovedRecords({ root, input, draft, approval, events }) {
+  const prior = [...new Set(events.filter((e) => e.type === 'records_written' && e.approvalId !== approval.id).flatMap((e) => /** @type {string[]} */ (e.files ?? [])))];
+  const { records } = await readRecords(root);
+  const existing = new Map(records.map((r) => [r.meta.id, { meta: r.meta, body: r.body }]));
+
+  /** @type {Map<string, string>} */
+  let baseTexts = new Map();
+  if (prior.length) {
+    const { mergeBase } = await currentSourceState({ root, base: input.base });
+    baseTexts = await readTreeTexts({ cwd: root, ref: mergeBase, dirs: ['.heirloom'] });
+    for (const file of prior) {
+      const id = path.basename(file, '.md');
+      const text = baseTexts.get(file);
+      if (text === undefined) existing.delete(id);
+      else {
+        const doc = parseRecord(text, file);
+        existing.set(id, { meta: doc.meta, body: doc.body });
+      }
+    }
+  }
+
+  const { writes } = planRecordChanges({ draft, approval, existing });
+  /** @type {string[]} */
+  const written = [];
+  for (const doc of writes) {
+    await writeRecord(root, doc);
+    written.push(path.relative(root, recordPath(root, doc.meta)).split(path.sep).join('/'));
+  }
+  /** @type {string[]} */
+  const removed = [];
+  for (const file of prior) {
+    if (written.includes(file)) continue;
+    const text = baseTexts.get(file);
+    if (text === undefined) await rm(path.join(root, file), { force: true });
+    else await writeFile(path.join(root, file), text);
+    removed.push(file);
+  }
+  return { written: written.sort(), removed: removed.sort() };
 }
 
 /**

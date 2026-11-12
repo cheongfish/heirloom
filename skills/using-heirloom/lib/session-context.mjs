@@ -128,7 +128,7 @@ async function projectSection(cwd, home) {
         if (await prImpossible(home, taskId)) pending.push(`- ${taskId}: 기록 파일을 썼고 PR은 만들 수 없음(GitHub 원격 아님) → 사용자가 직접 머지한다. 대상 브랜치에 머지되면 이 목록에서 빠진다.`);
         else pending.push(`- ${taskId}: 기록 파일을 썼지만 PR이 아직 없음 → apply-approval 스킬로 이어서 처리한다.`);
       }
-      else if (state === 'stale') pending.push(`- ${taskId}: 승인 이후 소스가 바뀌어 반영하지 못함 → prepare-handoff로 다시 인계해야 한다.`);
+      else if (state === 'stale') pending.push(`- ${taskId}: 승인 이후 소스나 자료가 바뀜(재확인 필요) → prepare-handoff를 다시 실행하면 바뀐 부분과 연결된 항목만 다시 승인받는다. 기존 승인은 보존된다.`);
       else if (state === 'awaiting_approval') pending.push(`- ${taskId}: 대시보드에서 사람의 승인을 기다리는 중.`);
     }
     if (pending.length) lines.push('', '## 이 작업 트리의 미처리 인계', ...pending);

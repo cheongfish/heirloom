@@ -28,7 +28,7 @@ The task screen has tabs. The approval bar stays at the bottom of every tab.
 
 | Tab | Content |
 | --- | --- |
-| 개요 (overview) | Task boundary (repository, branch, reviewed source state, changed files, materials), and missing items, conflicts and warnings. A badge shows how many notices need attention. |
+| 개요 (overview) | Task boundary (repository, branch, reviewed source state, changed files, materials), and missing items, conflicts and warnings. A badge shows how many notices need attention. For a re-check (증분 재확인), also the approval it is based on, the files and materials changed since, and unlinked changes. |
 | PR 요약 (PR summary) | Edit, add or remove summary bullets, or reset them to the draft |
 | decision | Approve, reject or hold each item. New items can have their title and body edited. A "decision 모두 승인" (approve all decisions) button is available. |
 | axiom | Approve, reject or hold each item. Axioms are never included in a bulk approval. |
@@ -36,6 +36,7 @@ The task screen has tabs. The approval bar stays at the bottom of every tab.
 
 - **Edits and updates.** If the agent resubmits the draft while you are editing, your input stays and a "새 초안이 있음" (new draft available) banner appears.
 - **Approve button.** It is enabled only after every item has a decision.
+- **Re-check after approval.** When the code changed after an approval ([Workflow](workflow.md#changes-after-approval)), items that keep their approval are marked "승인 유지" (approval kept) and folded; summary bullets that keep it are read only. Items up for re-check show why, and the approved version under "지난 승인 내용". "다시 검토" (review again) opens a kept item for a decision. Only open items need a decision; if none is open, one confirmation of the summary is enough.
 - **Discard.** "작업 폐기" (discard) ends the handoff. A discarded task cannot be approved or applied.
 
 ## Server lifetime

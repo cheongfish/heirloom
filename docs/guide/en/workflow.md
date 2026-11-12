@@ -44,7 +44,7 @@ The agent does this.
 If the session that made the handoff is still waiting, it starts this as soon as you approve. Otherwise ask the agent to "apply the approved handoff". The `apply-approval` skill then runs the steps below. If an approval is still pending when a session starts, the agent tells you first and waits for your request.
 
 1. **Check the approval.** Verify the signature, and check that the current draft is the approved draft. If either check fails, the handoff is treated as not approved.
-2. **Check the state.** Confirm that the approved branch and source state are unchanged. If the code changed after approval, nothing is written and a new handoff is needed.
+2. **Check the state.** Confirm that the approved branch and source state are unchanged. If the code changed after approval, nothing is written and the task needs a re-check (see [Changes after approval](#changes-after-approval)). A rebase that leaves the task's own files unchanged does not count as a change.
 3. **Write the records.** Write record files to `.heirloom/decisions/` and `.heirloom/axioms/`. Superseded or deprecated records are marked inactive, never deleted.
 4. **Commit and open the PR.** Commit the record files and open the PR with `gh`, using the approved summary verbatim. The summary goes into the summary section of the project's PR template, or to the top of the body if there is none.
 5. **If a PR already exists.** When the branch already has a PR, no second one is created.
@@ -54,6 +54,21 @@ Applying the same approval more than once writes the records only once.
 If no PR can be opened (the remote is not on github.com, `gh` is missing or not logged in), the records are written and committed, and you open the PR or merge the branch yourself. Once the approved records are on the target branch, the task counts as finished: it leaves the session start list, and the dashboard shows it as merged.
 
 If the PR is closed without merge, the task expires and its records never become active. Heirloom notices this through `gh` when the agent applies the task again or when the dashboard overview is shown. Without `gh`, or offline, the task keeps waiting.
+
+## Changes after approval
+
+When the code or the materials (spec, review documents) change after you approved, for example to address review comments, you do not approve everything again. Only the approved items the change touches come back to you. This works before the records are written, after, and after the PR is open.
+
+1. **Detection.** Applying the approval stops, and the task shows as "재확인 필요" (re-check needed). When the agent is about to stop with such changes, the stop hook reminds it once per state.
+2. **Re-check handoff.** The agent runs `prepare-handoff` again. Heirloom compares the current state with the signed approval:
+   - A summary bullet or record is up for re-check when a changed file matches its code paths, or when a material it quotes changed. A supersede follows its replacement record. Items you put on hold come back too.
+   - A changed file that matches no item is an **unlinked change**. Heirloom cannot tell what it affects, so the whole summary comes back.
+   - After a rebase or merge of the target branch, only the files the task itself changed are compared. Changes from the target branch are not checked. A task file whose content differs is marked "기준 브랜치 갱신으로 인한 변경" (changed by a target branch update).
+   - The agent rewrites only the items up for re-check. It may add items it thinks are touched, with a reason, but it cannot remove any. Heirloom refuses a draft that changes an item that keeps its approval.
+3. **Approval.** The dashboard shows the reasons and the approved version next to each item up for re-check. Items that keep their approval are folded; open one with "다시 검토" (review again) if you think the change does touch it. You decide only the open items.
+4. **Records and PR.** The new approval contains the combined result. Record files this task wrote earlier are rewritten in place; a record you now reject is taken out again. If the PR already exists, the agent updates its body with the approved summary instead of opening a new one.
+
+If the code changes again while you review, saving is refused and the next round starts from the same signed approval. A re-check is not a second review of the implementation: it only checks that the approved description and decisions still fit the code.
 
 ## 4. Recall in later work
 

@@ -4,6 +4,7 @@
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 
+import { loadApprovalBaseline } from './baseline.mjs';
 import { HeirloomError } from './errors.mjs';
 import { loadProjectConfig } from './config.mjs';
 import { appendEvent, countAttempts, deriveState, readEvents } from './events.mjs';
@@ -14,6 +15,7 @@ import { reviewMatchesSource } from './handoff.mjs';
 import { resolveIds } from './ids.mjs';
 import { taskPaths } from './paths.mjs';
 import { findProjectRules } from './project-rules.mjs';
+import { affectedItems, buildBaseline, diffStates } from './recheck.mjs';
 import { readRecords } from './records.mjs';
 import { computeCommitState, computeSourceState, hashMaterial } from './state.mjs';
 import { replaceTaskId, taskIdFor } from './store.mjs';
@@ -114,7 +116,10 @@ export async function prepareHandoff(options) {
     const events = await readEvents(paths.events);
     const state = deriveState(events);
     const existing = /** @type {any} */ (await readJson(paths.input));
-    const sameState = existing && existing.source.hash === source.hash && materialKey(existing.materials) === materialKey(materials);
+    // A stale task is prepared again even when the content went back to the approved state:
+    // the new round is what takes it out of `stale`.
+    const sameState = state !== 'stale' && existing && existing.source.hash === source.hash && materialKey(existing.materials) === materialKey(materials);
+    const approvalId = events.filter((e) => e.type === 'approved').at(-1)?.approvalId;
 
     let input = existing;
     let current = state;
@@ -134,6 +139,7 @@ export async function prepareHandoff(options) {
         projectRules,
         createdAt: new Date().toISOString(),
       };
+      if (approvalId !== undefined) input.recheck = await recheckFor({ home, taskId, approvalId, base, source, materials });
       // A new state invalidates the previous draft and its derived files (input.json is
       // immutable only within one source/material state).
       await Promise.all([paths.draft, paths.draftInitial, paths.check, paths.handoff].map((f) => rm(f, { force: true })));
@@ -142,6 +148,7 @@ export async function prepareHandoff(options) {
         type: 'prepared',
         sourceHash: source.hash,
         attempt: countAttempts(events, source.hash) + 1,
+        ...(input.recheck ? { recheckOf: input.recheck.basedOn } : {}),
       });
     }
 
@@ -166,6 +173,45 @@ export async function prepareHandoff(options) {
       reviewMatchesSource: reviewMatchesSource(input),
       relatedRecords,
       projectRules: input.projectRules,
+      recheck: input.recheck ? recheckReport(input.recheck) : null,
     };
   });
+}
+
+/**
+ * What changed since the last signed approval of this task and which approved items it
+ * touches.
+ * @param {{ home: string, taskId: string, approvalId: unknown, base: { mergeBase: string }, source: { files: any[] }, materials: any[] }} options
+ */
+async function recheckFor({ home, taskId, approvalId, base, source, materials }) {
+  const approved = await loadApprovalBaseline({ home, taskId, approvalId });
+  const baseline = buildBaseline({ draft: approved.draft, approval: approved.approval });
+  const diff = diffStates({
+    before: { files: approved.input.source.files, mergeBase: approved.input.base.mergeBase, materials: approved.approval.target.materials },
+    after: { files: source.files, mergeBase: base.mergeBase, materials: Object.fromEntries(materials.map((m) => [m.ref, m.sha256])) },
+  });
+  return {
+    basedOn: approved.approval.id,
+    mergeBaseChanged: diff.mergeBaseChanged,
+    changes: diff.changes,
+    materials: diff.materials,
+    affected: affectedItems({ baseline, changes: diff.changes, materials: diff.materials }),
+    baseline: { summary: baseline.summary, records: baseline.records },
+  };
+}
+
+/**
+ * The recheck as the agent needs it from prepare's output. The baseline itself is long and
+ * is read from input.json.
+ * @param {any} recheck
+ */
+function recheckReport(recheck) {
+  return {
+    basedOn: recheck.basedOn,
+    mergeBaseChanged: recheck.mergeBaseChanged,
+    changes: recheck.changes.map((/** @type {any} */ c) => ({ path: c.path, reason: c.reason })),
+    materials: recheck.materials.map((/** @type {any} */ m) => m.ref),
+    affected: recheck.affected,
+    baseline: { summary: recheck.baseline.summary.length, records: recheck.baseline.records.length, in: 'input.json의 recheck.baseline' },
+  };
 }

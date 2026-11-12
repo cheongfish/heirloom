@@ -153,9 +153,9 @@ test('approve: signed record saved before the approved event; summary initial vs
   assert.equal(r.status, 200, r.text);
   const approvalId = r.body.approval.id;
 
-  const files = await readdir(taskPaths(home, taskId).approvals);
-  assert.deepEqual(files, [`${approvalId}.json`]);
-  const record = JSON.parse(await readFile(path.join(taskPaths(home, taskId).approvals, files[0]), 'utf8'));
+  const files = (await readdir(taskPaths(home, taskId).approvals)).sort();
+  assert.deepEqual(files, [`${approvalId}.draft.json`, `${approvalId}.input.json`, `${approvalId}.json`], 'the record and the baseline it approved');
+  const record = JSON.parse(await readFile(path.join(taskPaths(home, taskId).approvals, `${approvalId}.json`), 'utf8'));
   assert.deepEqual(validate(approvalSchema, record), []);
   assert.deepEqual(await verify(home, record), { ok: true });
   assert.deepEqual(record.summary.initial, ['a를 2로 바꿨다', 'spec을 추가했다']);

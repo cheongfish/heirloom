@@ -12,7 +12,7 @@ import { renderHandoff } from './handoff.mjs';
 import { taskPaths } from './paths.mjs';
 import { readRecords } from './records.mjs';
 import { assertValid, inputSchema } from './schema.mjs';
-import { computeSourceState, hashMaterial } from './state.mjs';
+import { currentSourceState, hashMaterial } from './state.mjs';
 import { withTaskLock } from './task-lock.mjs';
 
 /** @param {string} p */
@@ -45,7 +45,7 @@ export async function submitDraft({ home, taskId }) {
     }
 
     const root = input.repo.root;
-    const current = await computeSourceState({ root, mergeBase: input.base.mergeBase });
+    const current = await currentSourceState({ root, base: input.base });
     if (current.hash !== input.source.hash) {
       throw new HeirloomError('E_CONFLICT', '인계 준비 이후 소스가 바뀜', {
         hint: 'prepare를 다시 실행하고, 새 결과로 초안을 다시 쓴 뒤 제출한다.',

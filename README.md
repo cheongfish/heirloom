@@ -28,6 +28,7 @@ To try a checkout for one session without installing: `claude --plugin-dir /path
 1. **Handoff.** The agent hands off finished spec-based work. Source quotes in its drafts are checked mechanically.
 2. **Approval.** You review the summary and each decision and axiom in the dashboard. Approvals are signed.
 3. **Records and PR.** The agent verifies the approval, writes `.heirloom/` records and opens the PR with the approved summary verbatim. A session still waiting for the approval does this as soon as you approve.
+   - If the code changes after approval, even after the PR is open, only the items the change touches come back to you. The rest keep their approval.
 4. **Recall.** Later sessions start with the active axioms and a decision index, and the agent fetches the full text of related records. A record becomes active once it is merged into the target branch.
 
 → [Workflow guide](docs/guide/en/workflow.md)
@@ -63,7 +64,6 @@ Planned:
 
 - Codex and Antigravity hosts,
 - GitLab,
-- incremental re-check after approval,
 - axiom candidates,
 - Windows keychain.
 

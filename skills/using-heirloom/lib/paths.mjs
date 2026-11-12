@@ -50,6 +50,20 @@ export function taskPaths(home, taskId) {
   };
 }
 
+/**
+ * Files of one approval: the signed record and the input and draft it was given
+ * (the baseline survives a new prepare).
+ * @param {string} approvalsDir taskPaths().approvals
+ * @param {string} approvalId
+ */
+export function approvalFiles(approvalsDir, approvalId) {
+  return {
+    record: path.join(approvalsDir, `${approvalId}.json`),
+    input: path.join(approvalsDir, `${approvalId}.input.json`),
+    draft: path.join(approvalsDir, `${approvalId}.draft.json`),
+  };
+}
+
 /** @param {string} root consumer repository root */
 export function repoPaths(root) {
   const dir = path.join(root, REPO_DIR);

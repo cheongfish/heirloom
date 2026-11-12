@@ -35,13 +35,15 @@ On success, `data` contains:
 - `summary`: the PR summary bullets the human approved.
 - `records`: the approved record changes. `pendingItems` are items the human put on hold. They stay drafts.
 - `pr`: what you need for the pull request (step 4). `null` when the PR is already recorded (`prUrl`).
+- `previousPrUrl`: set after an incremental recheck of a task whose PR already existed. Update that PR; do not open a new one (step 4).
+- `removed`: record files this task wrote in an earlier round that the new incremental approval no longer produces. They were restored to the target branch version or deleted. Commit them together with `files`.
 - `commitGuides`: the project's commit message guide files.
 
 Failures:
 
 - `E_VERIFY` (exit 4): the approval is unsigned, forged, or the draft changed after approval. Treat the handoff as **not approved**. Do not write records or open a PR. Tell the user that they need to approve it again in the dashboard.
 - `E_CONFLICT` (exit 3):
-  - The code changed after approval (the task is now `stale`). Tell the user. A new handoff is needed (`prepare-handoff`). The old approval is kept.
+  - The code or materials changed after approval (the task is now `stale`), also after the PR was opened. Tell the user. The approval is kept. When the change is finished, run `prepare-handoff` again: it starts an incremental recheck, and only the items the change touches go back to the human.
   - Another branch is checked out. Follow the hint, or ask the user.
   - The recorded PR was closed without merge (the task is now `expired`). Its records will not become active. Tell the user. A new handoff is needed if they want to submit the work again.
 - Exit 75: the script already retried once. Do not run it again. Report the failure and the hint.
@@ -52,7 +54,7 @@ Never edit the written record files, and never write record files yourself.
 ## 3. Commit
 
 1. Read the commit guide files and follow them.
-2. Commit the files in `files`.
+2. Commit the files in `files` and `removed`.
 3. If work changes from the handoff are still uncommitted, commit them too. Do not change their content: the human approved exactly this state.
 4. Run `apply.mjs --task <taskId>` again. It must still succeed. If it now reports `E_CONFLICT`, something changed after the approval. Stop and tell the user.
 
@@ -76,7 +78,8 @@ The records are written and committed, so the user can open the PR by hand or me
 A PR for this branch already exists. Do not create another one.
 
 - Push the new commits.
-- Update the PR body only if the user asks (`gh pr edit <number> --body-file <file>`).
+- If `previousPrUrl` is set, the human approved a new summary in an incremental recheck. Write the body as in "Otherwise", step 2, and update it: `gh pr edit <number> --body-file <file>`. Do not ask first; the approval is the request.
+- Otherwise update the PR body only if the user asks (`gh pr edit <number> --body-file <file>`).
 - Go to step 5 with `pr.existing.url`.
 
 ### Otherwise

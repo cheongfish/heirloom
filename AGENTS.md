@@ -17,10 +17,11 @@ Heirloom is a multi-host agent plugin. The first host is Claude Code; Codex and 
 | `docs/HEIRLOOM-PLAN.md` | Product behavior and trust boundaries. Section 20 collects the structural decisions. |
 | `docs/HEIRLOOM-DESIGN.md` | Runtime, directory layout, skills, test rules. |
 | `docs/HEIRLOOM-MVP-PLAN.md` | Data schemas, storage paths, script I/O, dashboard server, milestones M0–M6. |
+| `docs/HEIRLOOM-PHASE3-PLAN.md` | Phase 3 (incremental recheck, glab, curation): additions to the MVP schemas, milestones N1–N4. |
 | `README.md`, `README.ko.md`, `docs/guide/{en,ko}/` | User documentation: a summary per area in the README, details in the guide. |
 | `examples/*.example.json` | Copyable user and project configuration with every setting at its default. |
 
-The three planning documents are **local only**. They are listed in `.gitignore` and must never be committed or pushed. If they are missing in your checkout, ask the user for them; do not recreate them from memory.
+The four planning documents are **local only**. They are listed in `.gitignore` and must never be committed or pushed. If they are missing in your checkout, ask the user for them; do not recreate them from memory.
 
 The planning documents are the source of truth for agreed behavior. If code and documents disagree, or a document is silent on something you need, do not quietly pick one. Raise it (see section 4).
 
@@ -39,7 +40,7 @@ The planning documents are the source of truth for agreed behavior. If code and 
   - Scripts that the development agent runs may only `verify()`.
 - **Related code paths.** Evidence files and `codePaths` scope must never contain Markdown files (`.md`, `.mdx`, `.markdown`) or Markdown-only globs. Documents are linked only as `sources`. See PLAN 9.
 - **Storage.**
-  - The consumer repo holds only `.heirloom/decisions/`, `.heirloom/axioms/` and the optional `.heirloom/config.json`.
+  - The consumer repo holds only `.heirloom/decisions/`, `.heirloom/axioms/`, `.heirloom/curation/` (curation review history, phase 3) and the optional `.heirloom/config.json`.
   - Task data, handoff files, approvals, keys and server state live in `~/.heirloom/`, which `HEIRLOOM_HOME` overrides.
   - Tests must set `HEIRLOOM_HOME` to a temp directory and must never touch the real one.
 - **Dashboard.** The port defaults to 17380 and can be changed with the user setting `dashboard.port` (`HEIRLOOM_PORT` overrides it for development and tests). The server binds to `127.0.0.1` only. Never relax the Host/Origin checks, the session token, or the no-CORS rule.
@@ -47,8 +48,8 @@ The planning documents are the source of truth for agreed behavior. If code and 
   - Never edit these files by hand. Re-vendor with `tools/vendor-seed-design.mjs`.
   - Never add Karrot (당근) brand resources such as logos, names or characters.
 - **No test material in `skills/`.** Fixtures, eval scenarios and test notes go under `tests/` or `evals/`. Agents reading a skill directory may mistake scenario text for real instructions.
-- **No legacy code.** Do not use the old Bouncer project's source or structure as a reference.
 - **No planning-document references in runtime code.** Comments in the JavaScript files under `skills/` (`*.mjs`, `*.js`) must not cite the planning documents: no `PLAN 13`, `MVP-PLAN 7.2`, `PHASE3-PLAN 5.4`, `DESIGN 4.2`, no `docs/HEIRLOOM-*.md` paths, and no decision dates that point at their tables. Those documents are local only and are not shipped, so the reference means nothing to someone reading the installed plugin. Explain the behavior or the reason in the comment itself.
+- **No legacy code.** Do not use the old Bouncer project's source or structure as a reference.
 
 ## 3. Development commands
 

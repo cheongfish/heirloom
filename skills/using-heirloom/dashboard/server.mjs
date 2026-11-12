@@ -17,6 +17,7 @@ import { findUnhandedChanges, isStaleTask } from '../lib/overview.mjs';
 import { ensureDir, homePaths, taskPaths } from '../lib/paths.mjs';
 import { refreshPrExpiry } from '../lib/pr-expiry.mjs';
 import { appliedTaskMerged } from '../lib/record-status.mjs';
+import { carriedItems } from '../lib/recheck.mjs';
 import { readRecords } from '../lib/records.mjs';
 import { PATTERNS } from '../lib/schema.mjs';
 import { VERSION } from '../lib/version.mjs';
@@ -241,6 +242,21 @@ export async function createDashboardServer(options) {
     return out;
   }
 
+  /**
+   * Draft indexes that keep their approval in an incremental handoff, for the screen. Null
+   * when the task is not a recheck or the draft is not in shape yet (not submitted).
+   * @param {any} input
+   * @param {any} draft
+   */
+  function carriedOf(input, draft) {
+    if (!input?.recheck || !draft) return null;
+    try {
+      return carriedItems({ recheck: input.recheck, draft });
+    } catch {
+      return null;
+    }
+  }
+
   /** @param {string} taskId */
   async function taskDetail(taskId) {
     const paths = taskPaths(home, taskId);
@@ -249,7 +265,7 @@ export async function createDashboardServer(options) {
     /** @type {string[]} */
     let approvals = [];
     try {
-      approvals = (await readdir(paths.approvals)).filter((n) => n.endsWith('.json')).map((n) => n.slice(0, -5)).sort();
+      approvals = (await readdir(paths.approvals)).filter((n) => /^ap-[0-9a-z]+\.json$/.test(n)).map((n) => n.slice(0, -5)).sort();
     } catch {
       // none yet
     }
@@ -269,6 +285,7 @@ export async function createDashboardServer(options) {
       approvals,
       latestApproval: latest ?? null,
       targets: input && draft ? await targetsOf(input.repo.root, /** @type {any} */ (draft).records) : {},
+      carried: carriedOf(input, draft),
     };
   }
 

@@ -113,3 +113,15 @@ export async function computeCommitState({ root, mergeBase, commit }) {
   files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return { hash: hashEntries(files), files };
 }
+
+/**
+ * Source state against the merge-base as it is now. After a rebase or merge of the target
+ * branch the frozen merge-base is no longer the task's base; the task's own changes are
+ * what counts. Falls back to the frozen merge-base when the ref is gone.
+ * @param {{ root: string, base: { ref: string, mergeBase: string } }} options
+ * @returns {Promise<{ mergeBase: string, hash: string, files: FileState[] }>}
+ */
+export async function currentSourceState({ root, base }) {
+  const mergeBase = (await tryGit(['merge-base', base.ref, 'HEAD'], { cwd: root })) ?? base.mergeBase;
+  return { mergeBase, ...(await computeSourceState({ root, mergeBase })) };
+}

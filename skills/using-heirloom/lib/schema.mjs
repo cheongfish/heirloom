@@ -220,6 +220,23 @@ export const recordMetaSchema = object(
 
 // ---------------------------------------------------------------- input (5.2)
 
+/** `input.recheck` of an incremental handoff. */
+function recheckSchema() {
+  const digest = nullable(str({ pattern: /^([0-9a-f]{64}|deleted)$/ }));
+  const affected = arrayOf(object({ index: int({ min: 0 }), reasons: arrayOf(nonEmpty, { min: 1 }) }));
+  return object({
+    basedOn: approvalId,
+    mergeBaseChanged: bool,
+    changes: arrayOf(object({ path: nonEmpty, before: digest, after: digest, reason: oneOf('edited', 'base_updated', 'added', 'removed') })),
+    materials: arrayOf(object({ ref: nonEmpty, before: nullable(sha256), after: nullable(sha256) })),
+    affected: object({ summary: affected, records: affected, unlinked: arrayOf(nonEmpty) }),
+    baseline: object({
+      summary: arrayOf(object({ text: nonEmpty, codePaths: arrayOf(nonEmpty) })),
+      records: arrayOf(object({}, { extra: true })),
+    }),
+  });
+}
+
 const fileStatus = oneOf('A', 'M', 'D');
 
 export const inputSchema = object({
@@ -244,7 +261,7 @@ export const inputSchema = object({
   unknowns: arrayOf(nonEmpty),
   projectRules: object({ prTemplates: arrayOf(nonEmpty), commitGuides: arrayOf(nonEmpty) }),
   createdAt: timestamp,
-});
+}, { optional: { recheck: recheckSchema() } });
 
 // ---------------------------------------------------------------- draft (5.3)
 
@@ -265,6 +282,7 @@ const addOp = object(
     optional: {
       id: recordId,
       relations: arrayOf(object({ type: oneOf('exception', 'coexist'), id: recordId }, { optional: { condition: text } })),
+      baseIndex: int({ min: 0 }),
     },
     check: (o) => {
       /** @type {string[]} */
@@ -275,28 +293,37 @@ const addOp = object(
   },
 );
 
+const baseIndex = int({ min: 0 });
+
 const updateOp = object(
   { op: oneOf('update'), target: recordId, reason: nonEmpty, sources: arrayOf(draftSource) },
-  { optional: { title: nonEmpty, body: object({}, { extra: true }), codePaths: arrayOf(codePath), topics: arrayOf(nonEmpty) } },
+  { optional: { title: nonEmpty, body: object({}, { extra: true }), codePaths: arrayOf(codePath), topics: arrayOf(nonEmpty), baseIndex } },
 );
 
-export const draftSchema = object({
-  schemaVersion: v1,
-  taskId,
-  inputSourceHash: stateHash,
-  summary: arrayOf(object({ text: nonEmpty, codePaths: arrayOf(codePath) })),
-  records: arrayOf(
-    tagged('op', {
-      add: addOp,
-      update: updateOp,
-      supersede: object({ op: oneOf('supersede'), target: recordId, reason: nonEmpty, with: int({ min: 0 }) }),
-      deprecate: object({ op: oneOf('deprecate'), target: recordId, reason: nonEmpty, sources: arrayOf(draftSource) }),
-    }),
-  ),
-  missing: arrayOf(nonEmpty),
-  conflicts: arrayOf(object({ refs: arrayOf(nonEmpty, { min: 2 }), note: nonEmpty })),
-  notes: text,
-});
+export const draftSchema = object(
+  {
+    schemaVersion: v1,
+    taskId,
+    inputSourceHash: stateHash,
+    summary: arrayOf(object({ text: nonEmpty, codePaths: arrayOf(codePath) }, { optional: { baseIndex } })),
+    records: arrayOf(
+      tagged('op', {
+        add: addOp,
+        update: updateOp,
+        supersede: object({ op: oneOf('supersede'), target: recordId, reason: nonEmpty, with: int({ min: 0 }) }, { optional: { baseIndex } }),
+        deprecate: object({ op: oneOf('deprecate'), target: recordId, reason: nonEmpty, sources: arrayOf(draftSource) }, { optional: { baseIndex } }),
+      }),
+    ),
+    missing: arrayOf(nonEmpty),
+    conflicts: arrayOf(object({ refs: arrayOf(nonEmpty, { min: 2 }), note: nonEmpty })),
+    notes: text,
+  },
+  {
+    optional: {
+      recheck: object({ extra: arrayOf(object({ kind: oneOf('summary', 'record'), baseIndex, reason: nonEmpty })) }),
+    },
+  },
+);
 
 // ---------------------------------------------------------------- approval (5.5)
 
@@ -304,19 +331,19 @@ export const approvalSchema = object({
   schemaVersion: v1,
   id: approvalId,
   taskId,
-  kind: oneOf('full', 'quick'),
+  kind: oneOf('full', 'quick', 'incremental'),
   target: object({ sourceHash: stateHash, materials: recordOf(nullable(sha256)), draftSha256: sha256 }),
-  summary: object({ initial: arrayOf(nonEmpty), final: arrayOf(nonEmpty, { min: 1 }) }),
+  summary: object({ initial: arrayOf(nonEmpty), final: arrayOf(nonEmpty, { min: 1 }) }, { optional: { origins: arrayOf(nullable(int({ min: 0 }))) } }),
   items: arrayOf(
     object(
       { index: int({ min: 0 }), decision: oneOf('approved', 'rejected', 'pending') },
-      { optional: { edited: object({}, { extra: true }) } },
+      { optional: { edited: object({}, { extra: true }), carried: bool } },
     ),
   ),
   approver: object({ fingerprint: nonEmpty, gitUser: nullable(nonEmpty) }),
   approvedAt: timestamp,
   signature: str({ pattern: /^[A-Za-z0-9+/]+={0,2}$/ }),
-});
+}, { optional: { basedOn: approvalId } });
 
 // ---------------------------------------------------------------- events (5.6)
 

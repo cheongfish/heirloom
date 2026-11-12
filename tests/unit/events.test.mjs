@@ -78,6 +78,7 @@ test('failure, staleness, discard and expiry', () => {
   assert.equal(nextState('prepared', ev('failed', { retryable: true })), 'failed');
   assert.equal(nextState('approved', ev('stale')), 'stale');
   assert.equal(nextState('applied', ev('stale')), 'stale');
+  assert.equal(nextState('pr_created', ev('stale')), 'stale', 'a change after the PR is rechecked too (PHASE3-PLAN 5.5)');
   assert.throws(() => nextState('awaiting_approval', ev('stale')));
   assert.equal(nextState('awaiting_approval', ev('discarded', { reason: 'user' })), 'discarded');
   assert.equal(nextState('pr_created', ev('expired', { reason: 'pr_closed' })), 'expired');

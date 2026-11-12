@@ -36,7 +36,7 @@ test('relative links in README*.md and docs/guide resolve to existing files', as
 });
 
 test('planning documents are ignored by git', () => {
-  for (const name of ['HEIRLOOM-PLAN.md', 'HEIRLOOM-DESIGN.md', 'HEIRLOOM-MVP-PLAN.md']) {
+  for (const name of ['HEIRLOOM-PLAN.md', 'HEIRLOOM-DESIGN.md', 'HEIRLOOM-MVP-PLAN.md', 'HEIRLOOM-PHASE3-PLAN.md']) {
     const out = execFileSync('git', ['check-ignore', '--no-index', `docs/${name}`], { cwd: ROOT, encoding: 'utf8' }).trim();
     assert.equal(out, `docs/${name}`);
   }
