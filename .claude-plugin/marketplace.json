@@ -1,0 +1,19 @@
+{
+  "name": "heirloom",
+  "owner": {
+    "name": "cheongfish"
+  },
+  "metadata": {
+    "description": "Heirloom: human-approved handoffs, decisions and axioms for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "heirloom",
+      "source": "./",
+      "description": "Wraps up work done by external SDLC tools: prepares handoffs, collects human approval of PR summaries and decisions in a local dashboard, and preserves active decisions and axioms for the next task.",
+      "version": "0.1.0",
+      "license": "Apache-2.0",
+      "keywords": ["handoff", "decisions", "axioms", "approval", "pull-request"]
+    }
+  ]
+}

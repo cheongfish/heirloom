@@ -12,9 +12,12 @@ Heirloom은 개발 작업을 대신하지 않으며, 인계는 승인이 아닙�
 
 Node 20 이상, git, Claude Code가 필요합니다. PR을 만들 때만 `gh`와 github.com 원격이 필요합니다. 따로 설치할 런타임 의존성은 없습니다.
 
-```sh
-claude --plugin-dir /path/to/heirloom
+```text
+/plugin marketplace add /path/to/heirloom
+/plugin install heirloom@heirloom
 ```
+
+설치하지 않고 한 세션에서만 쓰려면 `claude --plugin-dir /path/to/heirloom`으로 실행합니다.
 
 → [설치 가이드](docs/guide/ko/installation.md)
 

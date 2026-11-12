@@ -46,3 +46,14 @@ test('repository: Claude Code manifest version matches package.json', async () =
   const { VERSION } = await import('../../skills/using-heirloom/lib/version.mjs');
   assert.equal(VERSION, pkg.version, 'lib/version.mjs matches package.json');
 });
+
+test('repository: the marketplace lists this plugin with the manifest name and version', async () => {
+  const manifest = JSON.parse(await readFile(path.join(ROOT, '.claude-plugin', 'plugin.json'), 'utf8'));
+  const market = JSON.parse(await readFile(path.join(ROOT, '.claude-plugin', 'marketplace.json'), 'utf8'));
+  assert.equal(typeof market.owner?.name, 'string');
+  assert.equal(market.plugins.length, 1);
+  const [entry] = market.plugins;
+  assert.equal(entry.name, manifest.name);
+  assert.equal(entry.version, manifest.version);
+  assert.equal(entry.source, './', 'the marketplace serves this repository itself');
+});
