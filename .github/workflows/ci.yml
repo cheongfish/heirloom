@@ -1,9 +1,12 @@
 name: CI
 
+# CI runs on main only. Branches: main (plugin source), develop, release (what users
+# install: .claude-plugin, hooks, skills, examples; no tests).
 on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
 
 jobs:
   test:
