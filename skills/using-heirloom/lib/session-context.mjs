@@ -92,7 +92,9 @@ async function projectSection(cwd, home) {
     const pending = [];
     for (const { taskId } of tasksForWorktree(index, ids.worktreeId)) {
       const state = deriveState(await readEvents(taskPaths(home, taskId).events));
-      if (state === 'approved') pending.push(`- ${taskId}: 승인됨, 아직 반영되지 않음 → apply-approval 스킬로 처리한다.`);
+      if (state === 'approved') pending.push(`- ${taskId}: 승인됨, 아직 반영되지 않음 → 사용자에게 알리고, 요청하면 apply-approval 스킬로 처리한다.`);
+      else if (state === 'applied') pending.push(`- ${taskId}: 기록 파일을 썼지만 PR이 아직 없음 → apply-approval 스킬로 이어서 처리한다.`);
+      else if (state === 'stale') pending.push(`- ${taskId}: 승인 이후 소스가 바뀌어 반영하지 못함 → prepare-handoff로 다시 인계해야 한다.`);
       else if (state === 'awaiting_approval') pending.push(`- ${taskId}: 대시보드에서 사람의 승인을 기다리는 중.`);
     }
     if (pending.length) lines.push('', '## 이 작업 트리의 미처리 인계', ...pending);

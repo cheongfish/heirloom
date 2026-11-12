@@ -25,8 +25,13 @@ export { isMarkdownCodePath } from './schema.mjs';
  * @property {{ type: 'exception' | 'coexist', id: string, condition?: string }[]} relations
  * @property {{ ref: string, lines?: [number, number], sha256: string, quote?: string }[]} sources
  * @property {string} taskId
- * @property {{ id: string, signer: string, approvedAt: string }} approval
+ * @property {RecordApproval} approval
+ * @property {{ reason: string, taskId: string, approval: RecordApproval }} [deprecation] set when a deprecation was approved
+ * @property {{ approval: RecordApproval, replacedBy: string, taskId: string, reason: string }[]} [revisions]
+ *   approvals replaced by approved updates, oldest first
  */
+
+/** @typedef {{ id: string, signer: string, approvedAt: string }} RecordApproval */
 
 /** @typedef {{ meta: RecordMeta, body: string }} RecordDoc */
 
@@ -58,7 +63,7 @@ export function serializeRecord({ meta, body }) {
 }
 
 /** @type {Record<'decision' | 'axiom', [string, string][]>} */
-const SECTIONS = {
+export const SECTIONS = {
   decision: [
     ['problem', '문제'],
     ['choice', '선택과 이유'],

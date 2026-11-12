@@ -183,6 +183,8 @@ const recordSource = object({ ref: nonEmpty, sha256 }, { optional: { lines: line
 
 // ---------------------------------------------------------------- records (5.1)
 
+const recordApproval = object({ id: approvalId, signer: nonEmpty, approvedAt: timestamp });
+
 export const recordMetaSchema = object(
   {
     schemaVersion: v1,
@@ -197,9 +199,13 @@ export const recordMetaSchema = object(
     relations: arrayOf(object({ type: oneOf('exception', 'coexist'), id: recordId }, { optional: { condition: text } })),
     sources: arrayOf(recordSource),
     taskId,
-    approval: object({ id: approvalId, signer: nonEmpty, approvedAt: timestamp }),
+    approval: recordApproval,
   },
   {
+    optional: {
+      deprecation: object({ reason: nonEmpty, taskId, approval: recordApproval }),
+      revisions: arrayOf(object({ approval: recordApproval, replacedBy: approvalId, taskId, reason: nonEmpty })),
+    },
     check: (o) => {
       const prefix = o.kind === 'axiom' ? 'a-' : 'd-';
       return typeof o.id === 'string' && typeof o.kind === 'string' && !o.id.startsWith(prefix)
