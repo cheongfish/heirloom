@@ -7,7 +7,13 @@ description: "Use when a handoff has been approved in the Heirloom dashboard, or
 
 A human approved a handoff in the Heirloom dashboard. This skill checks that approval, writes the approved decision and axiom records into the repository, and opens the pull request with the approved summary.
 
-Run it when the user asks you to, or when the session start lists an approved handoff and the user agrees. Never run it on your own because a handoff "should be approved by now".
+Run it in these cases only:
+
+- the user asks you to,
+- the approval wait you started for this handoff (`prepare-handoff` step 4) reports `approved`,
+- the session start lists an approved handoff and the user agrees.
+
+Never run it on your own because a handoff "should be approved by now".
 
 ## 1. Find the approval
 
@@ -62,7 +68,7 @@ Do not open a PR. Tell the user the reason, then stop:
 | `gh_unauthenticated` | `gh` is not logged in. The user can run `gh auth login`. |
 | `detached_head` | There is no branch to open a PR from. |
 
-The records are written and committed, so the user can open the PR by hand.
+The records are written and committed, so the user can open the PR by hand or merge the branch directly. When the target branch contains the approved records, the task counts as finished without a PR: it leaves the session start list and the dashboard shows it as merged. Do not run `complete.mjs` without a PR URL.
 
 ### When `pr.existing` is set
 

@@ -99,7 +99,26 @@ node <this skill>/scripts/submit-draft.mjs --task <taskId>
   - `dashboardUrl`: the task screen. `browserOpened` is false when the browser was already opened for this task, automatic opening is turned off, or no browser command worked (`browserNote` says which).
   - `dashboardError` is set when the dashboard could not start, for example because another program uses its port. The handoff is still saved and waiting. Pass the message and the hint to the user.
 
-## 4. Report
+## 4. Wait for the approval in the background
+
+If your host can run a command in the background and wake you when it ends (in Claude Code: the Bash tool with `run_in_background`), start this right after a successful submit, once per handoff:
+
+```sh
+node <this skill>/scripts/wait-approval.mjs --task <taskId>
+```
+
+Do not wait in the foreground. If your host has no background commands, skip this step. The next session start lists the approval instead.
+
+It ends when the human answers or after 60 minutes (`--timeout-minutes` changes this). When it ends, read `data.state`:
+
+- `approved`: the human's approval is the request to apply it. Run the `apply-approval` skill now. Do not ask first.
+- `applied` or `pr_created`: it was already applied elsewhere. Tell the user.
+- `discarded`, `expired` or `stale`: tell the user. Do not apply.
+- `timedOut: true` (still `awaiting_approval`): tell the user that no approval came yet. It can be applied later, because the next session start lists it.
+
+## 5. Report
+
+Report right after step 4 starts the wait. Do not wait for it to end first.
 
 Tell the user three things:
 
@@ -107,4 +126,4 @@ Tell the user three things:
 - Where to approve it: `dashboardUrl`, or the `dashboardError` hint when the dashboard did not start. Mention `handoffPath` as the readable copy.
 - Any warnings and unknown values.
 
-Do not say the work is approved. The approval may come hours later. You can end the session, because `apply-approval` continues from the saved approval.
+Do not say the work is approved. The approval may come hours later. You can end the session, because `apply-approval` continues from the saved approval. If you started the wait, say that you will apply the approval when it comes.

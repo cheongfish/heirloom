@@ -44,6 +44,7 @@ Only a human approves, and only in the Heirloom dashboard.
 - Never edit `.heirloom/decisions/` or `.heirloom/axioms/` by hand. The `apply-approval` skill writes them from a verified approval.
 - Never tell the user that something is approved unless `apply-approval` verified a signed approval.
 - When the session start lists an approved but unapplied handoff, tell the user. Run `apply-approval` when the user asks you to.
+- The one exception: when the approval wait you started in this session (`prepare-handoff` step 4) reports `approved`, run `apply-approval` right away.
 
 ## Dashboard
 
