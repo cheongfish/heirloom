@@ -67,16 +67,16 @@ HEIRLOOM_HOME=$F/home node $H/evals/acceptance/inspect.mjs --events <taskId>
 
 1. `feat/kelvin`에서 세션을 시작하고 입력한다.
    > docs/superpowers/specs/2026-11-12-kelvin.md를 구현하고 테스트와 최종 리뷰까지 마쳐 줘.
-2. 에이전트가 완료를 보고하기 전에 `prepare-handoff`를 호출하는지 본다. 대시보드가 한 번 열린다.
+2. 에이전트가 완료를 보고하기 전에 `prepare-handoff`를 호출하는지 본다. 대시보드가 한 번 열린다. 인계 직후 `wait-approval.mjs`를 백그라운드로 실행하는지 본다.
 3. 대시보드에서 작업 경계(브랜치, 변경 파일, spec), PR 요약, decision 초안을 확인한다. 초안에는 spec의 '반올림하지 않는다' 결정이 출처 인용과 함께 있어야 한다. 요약 불릿 하나를 고치고 승인한다.
-4. 세션에서 입력한다.
+4. 세션을 연 채로 승인했다면, 입력하지 않아도 에이전트가 승인 알림을 받아 바로 반영하는지 본다. 세션이 이미 끝났거나 대기 시간(60분)이 지났다면 새 세션에서 입력한다.
    > 승인된 인계 반영해줘.
 5. 에이전트가 기록 파일을 커밋하고 PR을 만드는지 본다(GitHub 모드). 로컬 모드에서는 PR을 만들지 않고 `not_github`를 알리는지 본다.
 6. 세션을 끝낸다. **머지 전에** 새 세션을 시작해 `<heirloom-project>`의 색인을 본다(에이전트에게 "Heirloom 색인 보여줘"). 새 decision이 `[머지 대기]`로 보여야 한다.
 7. 머지한다.
    - GitHub 모드: PR을 머지하고 `git -C $F/work fetch`.
    - 로컬 모드: `$H/evals/acceptance/merge-local.sh $F feat/kelvin`.
-8. 새 세션을 시작한다. 색인에 그 decision이 `[머지 대기]` 없이 보이고, 마지막 fetch 시각이 머지 뒤인지 본다. 입력한다.
+8. 새 세션을 시작한다. 색인에 그 decision이 `[머지 대기]` 없이 보이고, 마지막 fetch 시각이 머지 뒤인지 본다. 로컬 모드에서는 '미처리 인계'에 이 작업이 더는 없는지 본다. 입력한다.
    > src/temperature.mjs와 관련된 결정을 조회해 줘.
 
    `recall-context`가 그 decision을 `status: active`로 돌려주는지 본다.

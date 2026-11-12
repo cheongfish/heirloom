@@ -35,13 +35,13 @@ A human does this. See [Dashboard](dashboard.md) for the screens.
 
 A task without decision or axiom changes ends with a **quick approval**: one confirmation of the summary. Opening or closing the screen is never taken as approval.
 
-The approval can come hours later. The agent does not wait for it and may end its session.
+The approval can come hours later. The agent does not hold its session open for it. In Claude Code, it waits in the background for up to 60 minutes after the handoff: if you approve while the session is still open, it applies the approval right away (section 3) without being asked. Otherwise it may end its session, and the next session picks the approval up.
 
 ## 3. Records and PR
 
 The agent does this.
 
-Ask the agent to "apply the approved handoff". The `apply-approval` skill then runs the steps below. If an approval is still pending when a session starts, the agent tells you first.
+If the session that made the handoff is still waiting, it starts this as soon as you approve. Otherwise ask the agent to "apply the approved handoff". The `apply-approval` skill then runs the steps below. If an approval is still pending when a session starts, the agent tells you first and waits for your request.
 
 1. **Check the approval.** Verify the signature, and check that the current draft is the approved draft. If either check fails, the handoff is treated as not approved.
 2. **Check the state.** Confirm that the approved branch and source state are unchanged. If the code changed after approval, nothing is written and a new handoff is needed.
@@ -50,6 +50,8 @@ Ask the agent to "apply the approved handoff". The `apply-approval` skill then r
 5. **If a PR already exists.** When the branch already has a PR, no second one is created.
 
 Applying the same approval more than once writes the records only once.
+
+If no PR can be opened (the remote is not on github.com, `gh` is missing or not logged in), the records are written and committed, and you open the PR or merge the branch yourself. Once the approved records are on the target branch, the task counts as finished: it leaves the session start list, and the dashboard shows it as merged.
 
 If the PR is closed without merge, the task expires and its records never become active. Heirloom notices this through `gh` when the agent applies the task again or when the dashboard overview is shown. Without `gh`, or offline, the task keeps waiting.
 
