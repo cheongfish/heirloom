@@ -69,7 +69,7 @@ spec_branch feat/kelvin docs/superpowers/specs/2026-11-12-kelvin.md "docs: kelvi
 - `node --test`로 실행되는 테스트를 `test/temperature.test.mjs`에 둔다.
 
 ## 결정
-- 소수점 반올림은 하지 않는다. 표시 형식은 호출하는 쪽이 정한다.
+- 소수점 반올림은 하지 않는다. 표시 형식은 화면마다 다르므로 호출하는 쪽이 정해야 하기 때문이다.
 MD
 
 spec_branch feat/format docs/superpowers/specs/2026-11-12-format.md "docs: format spec" <<'MD'
@@ -110,7 +110,7 @@ spec_branch feat/rounding-change docs/superpowers/specs/2026-11-13-rounding.md "
 - 테스트를 그에 맞게 고친다.
 
 ## 결정
-- 켈빈 변환 결과는 소수 둘째 자리에서 반올림한다. "반올림하지 않는다"는 기존 결정을 대체한다.
+- 켈빈 변환 결과는 소수 둘째 자리에서 반올림한다. 화면마다 반올림이 달라 결과가 어긋나기 때문이다. "반올림하지 않는다"는 기존 결정을 대체한다.
 MD
 
 git checkout -q feat/kelvin
