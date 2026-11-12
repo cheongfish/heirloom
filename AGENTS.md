@@ -17,8 +17,12 @@ Heirloom is a multi-host agent plugin. The first host is Claude Code; Codex and 
 | `docs/HEIRLOOM-PLAN.md` | Product behavior and trust boundaries. Section 20 collects the structural decisions. |
 | `docs/HEIRLOOM-DESIGN.md` | Runtime, directory layout, skills, test rules. |
 | `docs/HEIRLOOM-MVP-PLAN.md` | Data schemas, storage paths, script I/O, dashboard server, milestones M0–M6. |
+| `README.md`, `README.ko.md`, `docs/guide/{en,ko}/` | User documentation: a summary per area in the README, details in the guide. |
+| `examples/*.example.json` | Copyable user and project configuration with every setting at its default. |
 
-The documents are the source of truth for agreed behavior. If code and documents disagree, or a document is silent on something you need, do not quietly pick one. Raise it (see section 4).
+The three planning documents are **local only**. They are listed in `.gitignore` and must never be committed or pushed. If they are missing in your checkout, ask the user for them; do not recreate them from memory.
+
+The planning documents are the source of truth for agreed behavior. If code and documents disagree, or a document is silent on something you need, do not quietly pick one. Raise it (see section 4).
 
 ## 2. Constraints not visible from the code
 
@@ -38,7 +42,7 @@ The documents are the source of truth for agreed behavior. If code and documents
   - The consumer repo holds only `.heirloom/decisions/`, `.heirloom/axioms/` and the optional `.heirloom/config.json`.
   - Task data, handoff files, approvals, keys and server state live in `~/.heirloom/`, which `HEIRLOOM_HOME` overrides.
   - Tests must set `HEIRLOOM_HOME` to a temp directory and must never touch the real one.
-- **Dashboard.** The port is fixed at 17380 and the server binds to `127.0.0.1` only. Never relax the Host/Origin checks, the session token, or the no-CORS rule.
+- **Dashboard.** The port defaults to 17380 and can be changed with the user setting `dashboard.port` (`HEIRLOOM_PORT` overrides it for development and tests). The server binds to `127.0.0.1` only. Never relax the Host/Origin checks, the session token, or the no-CORS rule.
 - **Vendored UI files.** `skills/using-heirloom/dashboard/vendor/seed-design/` is a pinned copy of SEED Design's `@seed-design/css` (Apache-2.0, with its `LICENSE` and `NOTICE`).
   - Never edit these files by hand. Re-vendor with `tools/vendor-seed-design.mjs`.
   - Never add Karrot (당근) brand resources such as logos, names or characters.
@@ -70,7 +74,8 @@ Run both `npm test` and `npm run typecheck` before you report a task as done. Re
 ## 5. Language, documents and commits
 
 - **Terminal output for humans must be in Korean.** This covers everything a person reads in the terminal: replies, progress updates, questions, and summaries of results. Keep code identifiers, file paths, commands and quoted error text as they are.
-- **Documents** under `docs/` are written in Korean, in plain declarative style (한다체). Record new decisions in the decision table of the relevant document (PLAN section 20, MVP-PLAN section 2), not only in prose.
+- **Planning documents** (`docs/HEIRLOOM-*.md`) are written in Korean, in plain declarative style (한다체). Record new decisions in the decision table of the relevant document (PLAN section 20, MVP-PLAN section 2), not only in prose.
+- **User documentation** comes in two languages that must say the same thing: `README.md` and `docs/guide/en/` in English, `README.ko.md` and `docs/guide/ko/` in Korean. When behavior a user sees changes, update both. Describe only what is implemented; list planned features as planned (`roadmap.md`).
 - **Commit messages** follow `.gitmessage`.
   - The subject is a type prefix plus a Korean summary, for example `docs: Heirloom 계획서와 구현 설계 문서 추가`.
   - Keep each commit to one logical change.

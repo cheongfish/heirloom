@@ -1,0 +1,15 @@
+# Roadmap
+
+[한국어](../ko/roadmap.md)
+
+The following features are not supported yet and are planned for later versions. Scope and timing may change.
+
+| Feature | Current behavior |
+| --- | --- |
+| Full-text recall of related records (`recall-context`) | Only the decision index is provided at session start. |
+| Active and pending record states based on merges | Records are shown as they are in the worktree. |
+| Codex and Antigravity hosts | Only Claude Code is supported. |
+| GitLab (`glab`) and remotes other than github.com | Record files are written; you open the PR yourself. |
+| Incremental re-check after approval | Any code change after approval requires a full new handoff. The earlier approval is kept. |
+| Separate context cleanup and axiom candidates | Only axiom changes the agent proposes in a draft are approved. |
+| Windows keychain | The private key is kept in a file (mode 0600). |

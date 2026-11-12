@@ -1,1 +1,6 @@
 node_modules/
+
+# Planning documents stay local (not pushed). User docs live in docs/guide/.
+docs/HEIRLOOM-PLAN.md
+docs/HEIRLOOM-DESIGN.md
+docs/HEIRLOOM-MVP-PLAN.md

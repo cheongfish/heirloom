@@ -1,0 +1,54 @@
+# Dashboard
+
+[한국어](../ko/dashboard.md)
+
+The dashboard is a local web page where a human reviews and approves handoffs. One server per user runs on `127.0.0.1`.
+
+## Opening it
+
+- **Automatically.** After a handoff is submitted, the browser opens once per task. Turn this off with the user setting `dashboard.openBrowser`.
+- **On request.** Ask the agent to "open the Heirloom dashboard". Add the task ID to open a specific task.
+- **Address.** The default is `http://127.0.0.1:17380/`. You can change the port in [Configuration](configuration.md).
+- **If no browser opens.** On WSL, Heirloom uses `wslview`, or `cmd.exe /c start` when `wslview` is missing. If nothing works, the agent tells you the address so you can paste it.
+
+## Overview
+
+| Section | Content |
+| --- | --- |
+| 승인 대기 (awaiting approval) | Handoffs waiting for a human |
+| 인계되지 않은 변경 (unhanded changes) | Worktrees with code changes but no handoff for their current state |
+| 오래된 미처리 건 (stale) | Unfinished tasks whose last activity is older than `dashboard.staleDays` (default 7). They never expire just because time passed. |
+| 진행 중, 최근 끝난 작업 (in progress, recently finished) | All other tasks |
+
+## Task screen
+
+The task screen has tabs. The approval bar stays at the bottom of every tab.
+
+| Tab | Content |
+| --- | --- |
+| 개요 (overview) | Task boundary (repository, branch, reviewed source state, changed files, materials), and missing items, conflicts and warnings. A badge shows how many notices need attention. |
+| PR 요약 (PR summary) | Edit, add or remove summary bullets, or reset them to the draft |
+| decision | Approve, reject or hold each item. New items can have their title and body edited. A "decision 모두 승인" (approve all decisions) button is available. |
+| axiom | Approve, reject or hold each item. Axioms are never included in a bulk approval. |
+| 승인 내용 (approval) | Shown after approval: final summary, decision per item, signing key fingerprint |
+
+- **Edits and updates.** If the agent resubmits the draft while you are editing, your input stays and a "새 초안이 있음" (new draft available) banner appears.
+- **Approve button.** It is enabled only after every item has a decision.
+- **Discard.** "작업 폐기" (discard) ends the handoff. A discarded task cannot be approved or applied.
+
+## Server lifetime
+
+- The server stops by itself after 30 minutes with no open screen and no requests. Change the time with `dashboard.idleMinutes`.
+- All state is on disk, so nothing is lost when the server stops. It starts again with the next handoff or dashboard request.
+- After a plugin update, the server restarts with the new code the next time it is needed.
+
+## Port conflicts
+
+If another program uses the port, the dashboard does not start. The handoff and its waiting state are kept.
+
+```sh
+lsof -i :17380
+ss -ltnp 'sport = :17380'
+```
+
+Stop the other program, or set `dashboard.port` to another value.
