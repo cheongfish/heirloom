@@ -1,5 +1,6 @@
-// handoff → approval → apply → MR on a GitLab remote, against temporary repositories and a
-// fake `glab`. The real glab on this machine is never reached: PATH starts with the fake one,
+// GitLab (gitlab.com or a self-hosted host glab is logged in to, glab): apply, MR lookup,
+// open-mr, complete and expiry, against temporary repositories and a fake `glab`. The real
+// glab on this machine is never reached: PATH starts with the fake one,
 // or holds git alone when glab must be missing.
 
 import { test } from 'node:test';
@@ -10,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { submittedTask } from '../helpers/handoff-fixture.mjs';
+import { providerTask } from '../helpers/provider-fixture.mjs';
 import { tempDir } from '../helpers/git-fixture.mjs';
 import { approveTask } from '../../skills/using-heirloom/dashboard/approve.mjs';
 import { applyApproval, completePr, prTemplateChoice } from '../../skills/using-heirloom/lib/apply.mjs';
@@ -280,4 +282,81 @@ test('open-mr.mjs script: prints one JSON object and records nothing by itself',
   assert.equal(deriveState(await readEvents(t.paths.events)), 'applied', 'complete.mjs still records the MR');
   const bad = spawnSync(process.execPath, [script, '--task', t.taskId], { cwd: t.repo.dir, env, encoding: 'utf8' });
   assert.equal(bad.status, 2);
+});
+
+// ---------------------------------------------------------------- scripts, as the agent runs them
+
+test('scripts: gitlab.com subgroups over ssh and https, and a logged-in self-hosted host, are GitLab', async () => {
+  const cases = [
+    ['git@gitlab.com:group/sub/widgets.git', {}, 'gitlab.com', 'group/sub/widgets'],
+    ['https://gitlab.com/group/widgets.git', {}, 'gitlab.com', 'group/widgets'],
+    ['ssh://git@git.example.com:2222/team/sub/widgets.git', { hosts: ['git.example.com'] }, 'git.example.com', 'team/sub/widgets'],
+  ];
+  for (const [remote, glab, host, repo] of cases) {
+    const t = await providerTask({ remote: String(remote), glab: /** @type {object} */ (glab), gh: null });
+    const r = t.run('apply', ['--task', t.taskId]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual([r.out.data.pr.provider, r.out.data.pr.host, r.out.data.pr.repo, r.out.data.pr.available], ['gitlab', host, repo, true], String(remote));
+  }
+});
+
+test('scripts: apply → open-mr creates the MR with the template body unchanged → complete; the body can be updated later', async () => {
+  const t = await providerTask({
+    remote: 'git@gitlab.com:group/widgets.git',
+    gh: null,
+    templates: { '.gitlab/merge_request_templates/Default.md': '## 요약\n', '.gitlab/merge_request_templates/Bug.md': '## 버그\n' },
+  });
+  const applied = t.run('apply', ['--task', t.taskId]);
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.equal(applied.out.data.pr.template, '.gitlab/merge_request_templates/Default.md');
+  assert.equal(applied.out.data.pr.templates.length, 2);
+
+  const text = '## 요약\n\n- a를 2로 바꿨다\n- spec을 추가했다\n\n## 테스트\n\n"따옴표", \'작은따옴표\', `code`, $(echo no)\n';
+  const body = await t.bodyFile(text);
+  const created = t.run('open-mr', ['--task', t.taskId, '--title', 'feat: a 변경', '--body-file', body]);
+  assert.equal(created.status, 0, created.stderr);
+  const url = 'https://gitlab.com/group/widgets/-/merge_requests/1';
+  assert.deepEqual(created.out.data, { action: 'created', iid: 1, url });
+  assert.equal((await t.fakeState('glab')).mrs[0].description, text, 'the body reaches glab unchanged, no shell in between');
+
+  // A second run (for example after a lost session) finds the MR and creates nothing.
+  assert.equal(t.run('open-mr', ['--task', t.taskId, '--title', 'feat: a 변경', '--body-file', body]).out.data.action, 'found');
+  assert.deepEqual(t.run('apply', ['--task', t.taskId]).out.data.pr.existing, { iid: 1, url, base: 'main' });
+
+  const done = t.run('complete', ['--task', t.taskId, '--pr-url', url]);
+  assert.deepEqual(done.out.data, { taskId: t.taskId, state: 'pr_created', prUrl: url, provider: 'gitlab' });
+  assert.equal((await t.lastEvent())?.provider, 'gitlab');
+
+  const update = t.run('open-mr', ['--task', t.taskId, '--iid', '1', '--body-file', await t.bodyFile('- 새 요약\n')]);
+  assert.equal(update.out.data.action, 'updated');
+  assert.equal((await t.fakeState('glab')).mrs[0].description, '- 새 요약\n');
+  assert.equal(t.run('open-mr', ['--task', t.taskId, '--iid', 'x', '--body-file', body]).status, 2);
+  assert.equal((await t.fakeState('glab')).mrs.length, 1);
+  assert.deepEqual(await t.calls('gh'), []);
+});
+
+test('scripts: glab missing or not logged in; open-mr refuses before apply', async () => {
+  const missing = await providerTask({ remote: 'git@gitlab.com:group/widgets.git', glab: null, gh: null });
+  assert.equal(missing.run('open-mr', ['--task', missing.taskId, '--title', 't', '--body-file', await missing.bodyFile('- x\n')]).status, 3, 'not applied yet');
+  const a = missing.run('apply', ['--task', missing.taskId]);
+  assert.deepEqual([a.status, a.out.data.pr.provider, a.out.data.pr.reason], [0, 'gitlab', 'glab_missing']);
+  assert.equal(missing.run('open-mr', ['--task', missing.taskId, '--title', 't', '--body-file', await missing.bodyFile('- x\n')]).status, 2);
+
+  const unauth = await providerTask({ remote: 'git@gitlab.com:group/widgets.git', glab: { hosts: [] }, gh: null });
+  assert.equal(unauth.run('apply', ['--task', unauth.taskId]).out.data.pr.reason, 'glab_unauthenticated');
+});
+
+test('scripts: an MR closed without merge expires the task', async () => {
+  const t = await providerTask({ remote: 'git@gitlab.com:group/widgets.git', gh: null });
+  t.run('apply', ['--task', t.taskId]);
+  t.run('open-mr', ['--task', t.taskId, '--title', 't', '--body-file', await t.bodyFile('- x\n')]);
+  const url = 'https://gitlab.com/group/widgets/-/merge_requests/1';
+  assert.equal(t.run('complete', ['--task', t.taskId, '--pr-url', url]).status, 0);
+  const state = await t.fakeState('glab');
+  state.mrs[0].state = 'closed';
+  await t.setFakeState('glab', state);
+  const r = t.run('apply', ['--task', t.taskId]);
+  assert.equal(r.status, 3);
+  assert.equal(await t.state(), 'expired');
+  assert.equal((await t.lastEvent())?.reason, 'pr_closed');
 });

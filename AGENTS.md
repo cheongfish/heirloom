@@ -55,7 +55,7 @@ The planning documents are the source of truth for agreed behavior. If code and 
 
 ```sh
 npm ci                    # install dev dependencies (typescript, @types/node)
-npm test                  # node --test: tests/{layout,unit,hooks}/**/*.test.mjs
+npm test                  # node --test: tests/{layout,unit,hooks,integration}/**/*.test.mjs
 npm run typecheck         # tsc -p jsconfig.json (checkJs, strict)
 claude plugin validate .  # validate the Claude Code manifest
 claude --plugin-dir .     # load the plugin from the working tree in Claude Code
@@ -66,6 +66,7 @@ Run both `npm test` and `npm run typecheck` before you report a task as done. Re
 ## 4. How to work
 
 - **Work unit.** Work proceeds milestone by milestone (M0–M6 in `docs/HEIRLOOM-MVP-PLAN.md`). Tick a checkbox only when the item is implemented and its tests pass.
+- **What the tests cover.** Tests exercise the skills and their scripts as the agent runs them: `tests/integration` (skill flows; `provider-*.test.mjs` per remote provider: GitHub, GitLab, unsupported; `dashboard-server.test.mjs` for the dashboard's Host/Origin checks, session token and no-CORS rule), `tests/hooks` (hook entry points) and `tests/layout` (plugin and skill layout). `tests/unit` covers the library modules (signing, schemas, draft checks, records, recheck and so on).
 - **Test first.**
   - Write tests before the code for state transitions, state hashing, signing/verification, source checks, and planned-change matching.
   - When fixing a bug, write a reproducing test first.
