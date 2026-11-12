@@ -113,6 +113,25 @@ test('stop blocks once per state with a reminder, and never when stop_hook_activ
   assert.equal(second.stdout, '');
 });
 
+test('stop passes the transcript on: a spec already on main counts once the session read it', { skip }, async () => {
+  const upstream = await makeRepo({ 'README.txt': 'hello\n', 'docs/superpowers/specs/units.md': '# 단위\n' });
+  const repo = await cloneRepo(upstream);
+  repo.git('checkout', '-q', '-b', 'feat');
+  await repo.write('src/a.mjs', 'export const a = 1;\n');
+  const env = { HEIRLOOM_HOME: await tempDir('home') };
+
+  assert.equal(runHook('stop', { input: { stop_hook_active: false, cwd: repo.dir }, env }).stdout, '', 'without a transcript the unchanged spec is not seen');
+
+  const transcriptPath = path.join(await tempDir('transcript'), 'session.jsonl');
+  const read = { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: path.join(repo.dir, 'docs/superpowers/specs/units.md') } }] } };
+  await writeFile(transcriptPath, `${JSON.stringify(read)}\n`);
+  const r = runHook('stop', { input: { stop_hook_active: false, cwd: repo.dir, transcript_path: transcriptPath }, env });
+  assert.equal(r.status, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.decision, 'block');
+  assert.match(out.reason, /docs\/superpowers\/specs\/units\.md \(이번 세션에서 읽음\)/);
+});
+
 test('stop gives up silently when the time budget is exceeded', { skip }, async () => {
   const upstream = await makeRepo();
   const repo = await cloneRepo(upstream);

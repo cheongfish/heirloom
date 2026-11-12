@@ -33,7 +33,7 @@ JSON이라 주석을 넣을 수 없습니다. 알 수 없는 키나 범위를 �
 | 키 | 기본값 | 설명 |
 | --- | --- | --- |
 | `baseBranch` | 없음 | PR 대상 브랜치. 없으면 `origin/HEAD`를 씁니다. 둘 다 없거나 원격이 여러 개라 불명확하면 추측하지 않고 오류로 알려 줍니다. |
-| `specGlobs` | `["docs/superpowers/specs/**", "**/specs/**/*.md"]` | spec 문서로 볼 경로. 종료 훅의 인계 상기 조건에 씁니다. |
+| `specGlobs` | `["docs/superpowers/specs/**", "**/specs/**/*.md"]` | spec 문서로 볼 경로. 종료 훅의 인계 상기 조건에 씁니다. 인계한 spec이 여기에 맞지 않으면 에이전트가 패턴 추가를 제안하고, 동의하면 이 파일을 만들거나 패턴을 더합니다. |
 | `recall.maxRecords` | `8` | 맥락 조회 때 가져올 기록 수 상한 |
 | `recall.maxTokens` | `6000` | 맥락 조회 때 토큰 상한. UTF-8 바이트 수 ÷ 3으로 어림합니다(한글 한 글자가 약 1토큰). |
 | `sessionIndex.maxDecisions` | `30` | 세션 시작 때 보여 줄 decision 색인 수 |

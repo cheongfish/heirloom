@@ -1,0 +1,159 @@
+// Where the project keeps its specs: a handoff whose spec is outside `specGlobs` says so, the
+// add-spec-globs script writes the project setting when the user agrees, and the Stop hook
+// also counts specs the session read (Claude Code transcript), not only specs changed here.
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { makeRepo, cloneRepo, tempDir } from '../helpers/git-fixture.mjs';
+import { prepareHandoff } from '../../skills/using-heirloom/lib/prepare.mjs';
+import { evaluateStop } from '../../skills/using-heirloom/lib/reminder.mjs';
+import { specsReadInTranscript } from '../../skills/using-heirloom/lib/transcript.mjs';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const ADD = path.join(ROOT, 'skills', 'prepare-handoff', 'scripts', 'add-spec-globs.mjs');
+const DEFAULTS = ['docs/superpowers/specs/**', '**/specs/**/*.md'];
+
+/**
+ * A clone on branch feat. `files` go to upstream main; the work changes src/a.mjs.
+ * @param {Record<string, string>} [files]
+ */
+async function workRepo(files = {}) {
+  const upstream = await makeRepo({ 'README.txt': 'hello\n', 'src/a.mjs': 'export const a = 1;\n', ...files });
+  const repo = await cloneRepo(upstream);
+  repo.git('checkout', '-q', '-b', 'feat');
+  const home = await tempDir('home');
+  return { upstream, repo, home };
+}
+
+/** @param {string} cwd @param {string[]} args */
+function addGlobs(cwd, args) {
+  const r = spawnSync(process.execPath, [ADD, ...args], { cwd, encoding: 'utf8' });
+  return { status: r.status, out: r.stdout ? JSON.parse(r.stdout) : null };
+}
+
+/** A Claude Code transcript (JSON lines) with the given tool uses. */
+async function transcript(/** @type {{ name: string, input: object }[]} */ uses) {
+  const file = path.join(await tempDir('transcript'), 'session.jsonl');
+  const lines = [
+    JSON.stringify({ type: 'user', message: { role: 'user', content: '구현해 줘' } }),
+    ...uses.map((u, i) => JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: '읽는다' }, { type: 'tool_use', id: `t${i}`, name: u.name, input: u.input }] } })),
+    'not json',
+  ];
+  await writeFile(file, `${lines.join('\n')}\n`);
+  return file;
+}
+
+// ---------------------------------------------------------------- spec outside specGlobs
+
+test('prepare: a spec outside specGlobs is reported with a suggested pattern; one inside is not', async () => {
+  const { repo, home } = await workRepo();
+  await repo.write('design/rfc/units.md', '# 단위\n');
+  await repo.write('src/a.mjs', 'export const a = 2;\n');
+  const out = /** @type {any} */ (await prepareHandoff({ cwd: repo.dir, home, specs: ['design/rfc/units.md'] }));
+  assert.deepEqual(out.specCoverage, { uncovered: ['design/rfc/units.md'], suggested: ['design/rfc/**/*.md'], specGlobs: DEFAULTS });
+
+  const inside = await workRepo();
+  await inside.repo.write('docs/superpowers/specs/x.md', '# x\n');
+  await inside.repo.write('src/a.mjs', 'export const a = 2;\n');
+  const ok = /** @type {any} */ (await prepareHandoff({ cwd: inside.repo.dir, home: inside.home, specs: ['docs/superpowers/specs/x.md'] }));
+  assert.equal(ok.specCoverage, null);
+});
+
+test('prepare: a spec at the repository root suggests its own path, not every Markdown file', async () => {
+  const { repo, home } = await workRepo();
+  await repo.write('SPEC.md', '# spec\n');
+  await repo.write('src/a.mjs', 'export const a = 2;\n');
+  const out = /** @type {any} */ (await prepareHandoff({ cwd: repo.dir, home, specs: ['SPEC.md'] }));
+  assert.deepEqual(out.specCoverage.suggested, ['SPEC.md']);
+});
+
+test('add-spec-globs: creates the project setting with the defaults kept, then only adds', async () => {
+  const { repo } = await workRepo();
+  const first = addGlobs(repo.dir, ['--glob', 'design/rfc/**/*.md']);
+  assert.equal(first.status, 0);
+  assert.deepEqual(first.out.data, { file: '.heirloom/config.json', created: true, added: ['design/rfc/**/*.md'], specGlobs: [...DEFAULTS, 'design/rfc/**/*.md'] });
+  const config = JSON.parse(await readFile(path.join(repo.dir, '.heirloom', 'config.json'), 'utf8'));
+  assert.deepEqual(config, { schemaVersion: 1, specGlobs: [...DEFAULTS, 'design/rfc/**/*.md'] });
+
+  const again = addGlobs(repo.dir, ['--glob', 'design/rfc/**/*.md', '--glob', 'notes/specs/*.md']);
+  assert.deepEqual(again.out.data, { file: '.heirloom/config.json', created: false, added: ['notes/specs/*.md'], specGlobs: [...DEFAULTS, 'design/rfc/**/*.md', 'notes/specs/*.md'] });
+});
+
+test('add-spec-globs: keeps the other settings and an explicit pattern list', async () => {
+  const { repo } = await workRepo();
+  await repo.write('.heirloom/config.json', JSON.stringify({ schemaVersion: 1, baseBranch: 'main', specGlobs: ['rfcs/*.md'], recall: { maxRecords: 3 } }));
+  const r = addGlobs(path.join(repo.dir, 'src'), ['--glob', 'design/**/*.md']);
+  assert.equal(r.status, 0, 'runs from a subdirectory: the repository root is found');
+  const config = JSON.parse(await readFile(path.join(repo.dir, '.heirloom', 'config.json'), 'utf8'));
+  assert.deepEqual(config, { schemaVersion: 1, baseBranch: 'main', specGlobs: ['rfcs/*.md', 'design/**/*.md'], recall: { maxRecords: 3 } });
+});
+
+test('add-spec-globs: refuses bad patterns and a broken setting file without writing', async () => {
+  const { repo } = await workRepo();
+  for (const glob of ['', '/abs/specs/*.md', '../outside/*.md', 'design\\rfc\\*.md']) {
+    const r = addGlobs(repo.dir, ['--glob', glob]);
+    assert.equal(r.status, 2, glob);
+  }
+  assert.equal(addGlobs(repo.dir, []).status, 2);
+  await assert.rejects(readFile(path.join(repo.dir, '.heirloom', 'config.json')));
+
+  await repo.write('.heirloom/config.json', '{ broken');
+  assert.equal(addGlobs(repo.dir, ['--glob', 'design/*.md']).status, 2);
+  assert.equal(await readFile(path.join(repo.dir, '.heirloom', 'config.json'), 'utf8'), '{ broken');
+});
+
+test('the setting is not part of the work: adding it does not change the handoff state', async () => {
+  const { repo, home } = await workRepo();
+  await repo.write('design/rfc/units.md', '# 단위\n');
+  await repo.write('src/a.mjs', 'export const a = 2;\n');
+  const before = /** @type {any} */ (await prepareHandoff({ cwd: repo.dir, home, specs: ['design/rfc/units.md'] }));
+  assert.equal(addGlobs(repo.dir, ['--glob', before.specCoverage.suggested[0]]).status, 0);
+  const after = /** @type {any} */ (await prepareHandoff({ cwd: repo.dir, home, specs: ['design/rfc/units.md'] }));
+  assert.equal(after.source.hash, before.source.hash);
+  assert.equal(after.alreadyPrepared, true);
+  assert.equal(after.specCoverage, null, 'the new pattern covers the spec');
+});
+
+// ---------------------------------------------------------------- specs read in the session
+
+test('transcript: Read calls on spec files inside the repository, relative to the root', async () => {
+  const { repo } = await workRepo();
+  const file = await transcript([
+    { name: 'Read', input: { file_path: path.join(repo.dir, 'docs/superpowers/specs/units.md') } },
+    { name: 'Read', input: { file_path: path.join(repo.dir, 'src/a.mjs') } },
+    { name: 'Read', input: { file_path: '/elsewhere/docs/superpowers/specs/other.md' } },
+    { name: 'Edit', input: { file_path: path.join(repo.dir, 'specs/x/y.md') } },
+    { name: 'Read', input: { file_path: path.join(repo.dir, 'docs/superpowers/specs/units.md') } },
+  ]);
+  assert.deepEqual(await specsReadInTranscript({ transcriptPath: file, root: repo.dir, globs: DEFAULTS }), ['docs/superpowers/specs/units.md']);
+  assert.deepEqual(await specsReadInTranscript({ transcriptPath: path.join(repo.dir, 'missing.jsonl'), root: repo.dir, globs: DEFAULTS }), []);
+  assert.deepEqual(await specsReadInTranscript({ transcriptPath: undefined, root: repo.dir, globs: DEFAULTS }), []);
+});
+
+test('stop: a spec already on the target branch counts once the session read it', async () => {
+  const { repo, home } = await workRepo({ 'docs/superpowers/specs/units.md': '# 단위\n' });
+  await repo.write('src/a.mjs', 'export const a = 2;\n');
+  assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: false })).reason, 'no_spec', 'unchanged spec, no transcript');
+
+  const other = await transcript([{ name: 'Read', input: { file_path: path.join(repo.dir, 'README.txt') } }]);
+  assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: false, transcriptPath: other })).reason, 'no_spec');
+
+  const read = await transcript([{ name: 'Read', input: { file_path: path.join(repo.dir, 'docs/superpowers/specs/units.md') } }]);
+  const decision = await evaluateStop({ cwd: repo.dir, home, stopHookActive: false, transcriptPath: read });
+  assert.equal(decision.remind, true);
+  assert.match(String(decision.message), /docs\/superpowers\/specs\/units\.md/);
+  assert.match(String(decision.message), /이번 세션에서 읽음/);
+  assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: false, transcriptPath: read })).reason, 'already_reminded');
+});
+
+test('stop: Markdown-only work is still not a handoff even when a spec was read', async () => {
+  const { repo, home } = await workRepo({ 'docs/superpowers/specs/units.md': '# 단위\n' });
+  await repo.write('docs/superpowers/plans/units.md', '# 계획\n');
+  const read = await transcript([{ name: 'Read', input: { file_path: path.join(repo.dir, 'docs/superpowers/specs/units.md') } }]);
+  assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: false, transcriptPath: read })).reason, 'no_code_changes');
+});
