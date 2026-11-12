@@ -18,7 +18,7 @@ Heirloom is a multi-host agent plugin. The first host is Claude Code; Codex and 
 | `docs/HEIRLOOM-DESIGN.md` | Runtime, directory layout, skills, test rules. |
 | `docs/HEIRLOOM-MVP-PLAN.md` | Data schemas, storage paths, script I/O, dashboard server, milestones M0–M6. |
 | `docs/HEIRLOOM-PHASE3-PLAN.md` | Phase 3 (incremental recheck, glab, curation): additions to the MVP schemas, milestones N1–N4. |
-| `README.md`, `README.ko.md`, `docs/guide/{en,ko}/` | User documentation: a summary per area in the README, details in the guide. |
+| `README.md`, `README.en.md`, `docs/guide/{en,ko}/` | User documentation: a summary per area in the README, details in the guide. |
 | `examples/*.example.json` | Copyable user and project configuration with every setting at its default. |
 
 The four planning documents are **local only**. They are listed in `.gitignore` and must never be committed or pushed. If they are missing in your checkout, ask the user for them; do not recreate them from memory.
@@ -77,7 +77,7 @@ Run both `npm test` and `npm run typecheck` before you report a task as done. Re
 
 - **Terminal output for humans must be in Korean.** This covers everything a person reads in the terminal: replies, progress updates, questions, and summaries of results. Keep code identifiers, file paths, commands and quoted error text as they are.
 - **Planning documents** (`docs/HEIRLOOM-*.md`) are written in Korean, in plain declarative style (한다체). Record new decisions in the decision table of the relevant document (PLAN section 20, MVP-PLAN section 2), not only in prose.
-- **User documentation** comes in two languages that must say the same thing: `README.md` and `docs/guide/en/` in English, `README.ko.md` and `docs/guide/ko/` in Korean. When behavior a user sees changes, update both. Describe only what is implemented; list planned features as planned (`roadmap.md`).
+- **User documentation** comes in two languages that must say the same thing: `README.md` and `docs/guide/ko/` in Korean, `README.en.md` and `docs/guide/en/` in English. When behavior a user sees changes, update both. Describe only what is implemented; list planned features as planned (`roadmap.md`).
 - **Commit messages** follow `.gitmessage`.
   - The subject is a type prefix plus a Korean summary, for example `docs: Heirloom 계획서와 구현 설계 문서 추가`.
   - Keep each commit to one logical change.

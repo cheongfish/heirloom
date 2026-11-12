@@ -1,80 +1,80 @@
 # Heirloom
 
-[한국어](README.ko.md)
+[English](README.en.md)
 
-Heirloom is a Claude Code plugin that wraps up work finished with an SDLC tool such as Superpowers. It prepares a handoff and lets a human approve the PR summary and the decisions in a local dashboard. It then writes the approved records into the repository and opens the pull request. Later work receives the active decisions and axioms.
+Heirloom은 Superpowers 같은 SDLC 도구로 끝낸 작업을 마무리하는 Claude Code 플러그인입니다. 인계를 준비하고, 사람이 로컬 대시보드에서 PR 요약과 결정(decision)을 승인하게 합니다. 승인된 기록은 저장소에 쓰고 PR을 엽니다. 이후 작업에는 활성 decision과 axiom을 제공합니다.
 
-Heirloom does not do the development work, and a handoff is not an approval. Only a human approves, in the dashboard.
+Heirloom은 개발 작업을 대신하지 않으며, 인계는 승인이 아닙니다. 승인은 사람만, 대시보드에서만 합니다.
 
-> Status: 0.1 (MVP). Some features are still in progress; see the [Roadmap](docs/guide/en/roadmap.md).
+> 상태: 0.1(MVP). 일부 기능은 준비 중입니다. [지원 예정](docs/guide/ko/roadmap.md)을 참고하세요.
 
-## Installation
+## 설치
 
-Requires Node 20 or later, git and Claude Code. Opening the PR needs `gh` for a github.com remote, or `glab` for a GitLab remote (gitlab.com or self-hosted). There are no runtime dependencies to install.
+Node 20 이상, git, Claude Code가 필요합니다. PR을 만들 때만 github.com 원격이면 `gh`, GitLab 원격(gitlab.com 또는 자체 호스팅)이면 `glab`이 필요합니다. 따로 설치할 런타임 의존성은 없습니다.
 
-Install from the `release` branch, which holds only the plugin files:
+플러그인 파일만 담은 `release` 브랜치에서 설치합니다.
 
 ```text
 /plugin marketplace add <owner>/heirloom#release
 /plugin install heirloom@heirloom
 ```
 
-To try a checkout for one session without installing: `claude --plugin-dir /path/to/heirloom`.
+설치하지 않고 내려받은 저장소를 한 세션에서만 쓰려면 `claude --plugin-dir /path/to/heirloom`으로 실행합니다.
 
-→ [Installation guide](docs/guide/en/installation.md)
+→ [설치 가이드](docs/guide/ko/installation.md)
 
-## Workflow
+## 작업 흐름
 
-1. **Handoff.** The agent hands off finished spec-based work. Source quotes in its drafts are checked mechanically.
-2. **Approval.** You review the summary and each decision and axiom in the dashboard. Approvals are signed.
-3. **Records and PR.** The agent verifies the approval, writes `.heirloom/` records and opens the PR (a merge request on GitLab) with the approved summary verbatim. A session still waiting for the approval does this as soon as you approve.
-   - If the code changes after approval, even after the PR is open, only the items the change touches come back to you. The rest keep their approval.
-4. **Recall.** Later sessions start with the active axioms and a decision index, and the agent fetches the full text of related records. A record becomes active once it is merged into the target branch.
+1. **인계.** 에이전트가 끝낸 spec 기반 작업을 인계합니다. 초안의 출처 인용은 기계적으로 검사합니다.
+2. **승인.** 대시보드에서 요약과 decision·axiom을 항목별로 검토합니다. 승인에는 서명이 붙습니다.
+3. **반영과 PR.** 에이전트가 승인을 검증하고 `.heirloom/` 기록을 쓴 뒤, 승인된 요약을 그대로 넣어 PR(GitLab은 MR)을 엽니다. 승인을 기다리던 세션은 승인하는 즉시 이 단계를 진행합니다.
+   - 승인 뒤에 코드가 바뀌면(PR을 연 뒤라도) 바뀐 부분과 연결된 항목만 다시 확인받습니다. 나머지는 승인을 유지합니다.
+4. **맥락 조회.** 이후 세션은 활성 axiom과 decision 색인을 받고 시작하고, 에이전트가 관련 기록의 원문을 가져옵니다. 기록은 대상 브랜치에 머지되면 활성이 됩니다.
 
-→ [Workflow guide](docs/guide/en/workflow.md)
+→ [작업 흐름 가이드](docs/guide/ko/workflow.md)
 
-## Context curation
+## 맥락 정리
 
-When decisions pile up, the dashboard suggests a curation. If you run it, a headless agent reviews a batch of decisions in a dedicated worktree and proposes duplicate clean-up, relations and axiom candidates. You approve each proposal, giving a reason for any candidate you hold or reject, and the result arrives as a PR (a merge request on GitLab).
+decision이 쌓이면 대시보드가 정리를 제안합니다. 실행을 고르면 헤드리스 에이전트가 전용 worktree에서 decision 묶음을 검토하고 중복 정리, 관계, axiom 후보를 제안합니다. 제안을 항목마다 승인하고(보류·거절한 후보에는 이유를 적습니다), 결과는 PR(GitLab은 MR)로 올라옵니다.
 
-→ [Context curation](docs/guide/en/curation.md)
+→ [맥락 정리](docs/guide/ko/curation.md)
 
-## Dashboard
+## 대시보드
 
-A local page at `http://127.0.0.1:17380/` with an overview and a tabbed screen per task. It opens once per handoff. Ask the agent to reopen it any time. The server stops by itself when idle.
+`http://127.0.0.1:17380/`에 뜨는 로컬 화면입니다. 전체 목록과 작업별 탭 화면이 있습니다. 인계마다 한 번 자동으로 열리고, 언제든 에이전트에게 다시 열어 달라고 할 수 있습니다. 쓰지 않으면 서버가 스스로 종료됩니다.
 
-→ [Dashboard guide](docs/guide/en/dashboard.md)
+→ [대시보드 가이드](docs/guide/ko/dashboard.md)
 
-## Data locations
+## 데이터 위치
 
-- `<repository>/.heirloom/`: decision and axiom records, and curation review history. Committed.
-- `~/.heirloom/` (or `HEIRLOOM_HOME`): tasks, approvals, keys and server state. Local only.
+- `<저장소>/.heirloom/`: decision·axiom 기록과 정리 검토 이력. 커밋 대상입니다.
+- `~/.heirloom/`(또는 `HEIRLOOM_HOME`): 작업, 승인, 키, 서버 상태. 로컬에만 둡니다.
 
-→ [Data locations](docs/guide/en/data.md)
+→ [데이터 위치](docs/guide/ko/data.md)
 
-## Configuration
+## 설정
 
-Settings are optional. Copy an example from [`examples/`](examples/) and change what you need: port, idle time, automatic browser opening, target branch, spec paths and more.
+설정은 선택입니다. [`examples/`](examples/)의 예시를 복사해 필요한 값만 바꾸세요. 포트, 유휴 시간, 브라우저 자동 열기, 대상 브랜치, spec 경로 등을 바꿀 수 있습니다.
 
-→ [Configuration guide](docs/guide/en/configuration.md)
+→ [설정 가이드](docs/guide/ko/configuration.md)
 
-## Security
+## 보안
 
-Approvals are signed with a per-user ed25519 key. The dashboard listens on `127.0.0.1` only and checks the Host, the Origin and a session token. An agent running as the same OS user can still bypass this on purpose. Heirloom aims at detection and audit, not prevention.
+승인에는 사용자별 ed25519 키로 서명합니다. 대시보드는 `127.0.0.1`에서만 열리고 Host, Origin, 세션 토큰을 검사합니다. 그래도 같은 OS 사용자 권한의 에이전트가 의도적으로 우회하는 것은 막지 못합니다. Heirloom의 목표는 차단이 아니라 탐지와 감사입니다.
 
-→ [Security model and limits](docs/guide/en/security.md)
+→ [보안 모델과 한계](docs/guide/ko/security.md)
 
-## Roadmap
+## 지원 예정
 
-Planned:
+다음 기능을 지원할 예정입니다.
 
-- Codex and Antigravity hosts,
-- Windows keychain.
+- Codex·Antigravity 호스트
+- Windows 키체인
 
-→ [Roadmap](docs/guide/en/roadmap.md)
+→ [지원 예정](docs/guide/ko/roadmap.md)
 
-## License
+## 라이선스
 
-Heirloom is licensed under the [Apache License 2.0](LICENSE).
+Heirloom은 [Apache License 2.0](LICENSE)으로 배포합니다.
 
-It bundles a pinned copy of [SEED Design](https://github.com/daangn/seed-design) CSS under Apache-2.0. Its `LICENSE` and `NOTICE` are in `skills/using-heirloom/dashboard/vendor/seed-design/`.
+대시보드에는 고정 버전의 [SEED Design](https://github.com/daangn/seed-design) CSS(Apache-2.0)가 들어 있습니다. `LICENSE`와 `NOTICE`는 `skills/using-heirloom/dashboard/vendor/seed-design/`에 있습니다.

@@ -16,7 +16,7 @@ test('docs/guide/en and docs/guide/ko contain the same files', async () => {
 });
 
 test('relative links in README*.md and docs/guide resolve to existing files', async () => {
-  const files = ['README.md', 'README.ko.md'];
+  const files = ['README.md', 'README.en.md'];
   for (const lang of ['en', 'ko']) for (const name of await readdir(path.join(GUIDE, lang))) files.push(`docs/guide/${lang}/${name}`);
   /** @type {string[]} */
   const broken = [];
