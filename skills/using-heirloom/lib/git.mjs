@@ -41,6 +41,22 @@ export async function git(args, { cwd, timeoutMs = 60_000 }) {
 }
 
 /**
+ * Run git and return raw stdout bytes (blob contents).
+ * @param {string[]} args
+ * @param {{ cwd: string }} options
+ * @returns {Promise<Buffer>}
+ */
+export async function gitBytes(args, { cwd }) {
+  try {
+    const { stdout } = await execFileP('git', args, { cwd, encoding: 'buffer', maxBuffer: 256 * 1024 * 1024 });
+    return stdout;
+  } catch (err) {
+    const classified = classifyError(err);
+    throw new HeirloomError(classified.code, `git ${args.join(' ')} 실패`, { cause: err });
+  }
+}
+
+/**
  * Like `git` but returns null instead of throwing (for probing refs).
  * @param {string[]} args
  * @param {{ cwd: string }} options

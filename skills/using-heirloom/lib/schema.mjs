@@ -178,7 +178,7 @@ const lineRange = (v, at, errors) => {
   }
 };
 
-const draftSource = object({ ref: nonEmpty }, { optional: { lines: lineRange, quote: text } });
+const draftSource = object({ ref: nonEmpty }, { optional: { lines: lineRange, quote: text, sha256 } });
 const recordSource = object({ ref: nonEmpty, sha256 }, { optional: { lines: lineRange, quote: text } });
 
 // ---------------------------------------------------------------- records (5.1)
@@ -253,7 +253,10 @@ const addOp = object(
     sources: arrayOf(draftSource, { min: 1 }),
   },
   {
-    optional: { relations: arrayOf(object({ type: oneOf('exception', 'coexist'), id: recordId }, { optional: { condition: text } })) },
+    optional: {
+      id: recordId,
+      relations: arrayOf(object({ type: oneOf('exception', 'coexist'), id: recordId }, { optional: { condition: text } })),
+    },
     check: (o) => {
       /** @type {string[]} */
       const errors = [];

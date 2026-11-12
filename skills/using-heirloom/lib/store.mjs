@@ -84,3 +84,17 @@ export function tasksForWorktree(index, worktreeId) {
     .filter(([key]) => key.startsWith(`${worktreeId}|`))
     .map(([key, taskId]) => ({ key, taskId }));
 }
+
+/**
+ * Issue a fresh task id for a key whose previous task ended (discarded or expired).
+ * @param {string} home
+ * @param {TaskKey} key
+ * @returns {Promise<string>}
+ */
+export async function replaceTaskId(home, key) {
+  return updateIndex(home, (index) => {
+    const id = newTaskId();
+    index.tasks[taskKey(key)] = id;
+    return id;
+  });
+}

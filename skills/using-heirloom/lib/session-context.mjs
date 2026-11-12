@@ -1,14 +1,15 @@
 // Session-start context: the handoff convention plus a short project index
 // (PLAN 14.4, MVP-PLAN 7.4). Read-only: never creates ids or files.
 
-import { access, readFile, stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 import { loadProjectConfig } from './config.mjs';
 import { deriveState, readEvents } from './events.mjs';
-import { changedFiles, repoInfo, resolveBase, tryGit } from './git.mjs';
+import { changedFiles, repoInfo, resolveBase } from './git.mjs';
 import { matchesAny } from './glob.mjs';
 import { readIds } from './ids.mjs';
+import { findProjectRules } from './project-rules.mjs';
 import { taskPaths } from './paths.mjs';
 import { readRecords } from './records.mjs';
 import { readIndex, tasksForWorktree } from './store.mjs';
@@ -19,16 +20,6 @@ function stripFrontmatter(text) {
   if (!normalized.startsWith('---\n')) return normalized.trim();
   const end = normalized.indexOf('\n---\n', 4);
   return end === -1 ? normalized.trim() : normalized.slice(end + 5).trim();
-}
-
-/** @param {string} p */
-async function exists(p) {
-  try {
-    await access(p);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -107,14 +98,8 @@ async function projectSection(cwd, home) {
     if (pending.length) lines.push('', '## 이 작업 트리의 미처리 인계', ...pending);
   }
 
-  /** @type {string[]} */
-  const guides = [];
-  const template = await tryGit(['config', '--get', 'commit.template'], { cwd: info.root });
-  if (template) guides.push(`${template} (git commit.template)`);
-  for (const name of ['.gitmessage', 'CONTRIBUTING.md']) {
-    if (name !== template && (await exists(path.join(info.root, name)))) guides.push(name);
-  }
-  if (guides.length) lines.push('', '## 커밋 메시지 지침 파일 (내용을 읽고 따른다)', ...guides.map((g) => `- ${g}`));
+  const { commitGuides } = await findProjectRules(info.root);
+  if (commitGuides.length) lines.push('', '## 커밋 메시지 지침 파일 (내용을 읽고 따른다)', ...commitGuides.map((g) => `- ${g}`));
 
   let fetched = '기록 없음';
   try {
