@@ -16,6 +16,7 @@ import { readJson } from '../lib/fsx.mjs';
 import { findUnhandedChanges, isStaleTask } from '../lib/overview.mjs';
 import { ensureDir, homePaths, taskPaths } from '../lib/paths.mjs';
 import { refreshPrExpiry } from '../lib/pr-expiry.mjs';
+import { appliedTaskMerged } from '../lib/record-status.mjs';
 import { readRecords } from '../lib/records.mjs';
 import { PATTERNS } from '../lib/schema.mjs';
 import { VERSION } from '../lib/version.mjs';
@@ -192,9 +193,12 @@ export async function createDashboardServer(options) {
       const events = await readEvents(paths.events);
       if (!events.length) continue;
       const input = /** @type {any} */ (await readJson(paths.input));
+      const state = deriveState(events);
       tasks.push({
         taskId,
-        state: deriveState(events),
+        state,
+        // An applied task without a PR is finished once it reaches its target branch.
+        merged: state === 'applied' ? await appliedTaskMerged({ home, taskId }) : null,
         branch: input?.branch ?? null,
         repoRoot: input?.repo.root ?? null,
         repoId: input?.repo.id ?? null,

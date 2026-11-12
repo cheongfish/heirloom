@@ -19,6 +19,7 @@ import { taskPaths } from './paths.mjs';
 import { checkPrExpiry } from './pr-expiry.mjs';
 import { findProjectRules } from './project-rules.mjs';
 import { planRecordChanges } from './record-changes.mjs';
+import { appliedTaskMerged } from './record-status.mjs';
 import { readRecords, recordPath, writeRecord } from './records.mjs';
 import { approvalSchema, validate } from './schema.mjs';
 import { verify } from './sign.mjs';
@@ -42,7 +43,8 @@ async function exists(p) {
 const lastOf = (events, type) => events.filter((e) => e.type === type).at(-1);
 
 /**
- * Handoffs in the current worktree that were approved but not finished (PLAN 12.1).
+ * Handoffs in the current worktree that were approved but not finished (PLAN 12.1). An applied
+ * task whose approval is already on the target branch is finished even without a PR.
  * @param {{ home: string, cwd: string }} options
  */
 export async function listPendingApprovals({ home, cwd }) {
@@ -54,6 +56,7 @@ export async function listPendingApprovals({ home, cwd }) {
     const events = await readEvents(taskPaths(home, taskId).events);
     const state = deriveState(events);
     if (state !== 'approved' && state !== 'applied') continue;
+    if (state === 'applied' && (await appliedTaskMerged({ home, taskId }))) continue;
     const input = /** @type {any} */ (await readJson(taskPaths(home, taskId).input));
     pending.push({ taskId, state, approvalId: String(lastOf(events, 'approved')?.approvalId ?? ''), branch: input?.branch ?? null, approvedAt: lastOf(events, 'approved')?.at ?? null });
   }

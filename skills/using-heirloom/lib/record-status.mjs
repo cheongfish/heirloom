@@ -15,7 +15,7 @@ import path from 'node:path';
 import { loadProjectConfig } from './config.mjs';
 import { deriveState, readEvents } from './events.mjs';
 import { readJson } from './fsx.mjs';
-import { readTreeTexts, repoInfo, resolveBase } from './git.mjs';
+import { readTreeTexts, repoInfo, resolveBase, tryGit } from './git.mjs';
 import { readIds } from './ids.mjs';
 import { REPO_DIR, taskPaths } from './paths.mjs';
 import { parseRecord, readRecords, serializeRecord } from './records.mjs';
@@ -168,6 +168,56 @@ async function taskScope(home, info) {
 }
 
 /**
+ * Whether an approved record change is already on the base branch.
+ * @param {any} op the draft record operation
+ * @param {any[]} ops all draft record operations (for supersede's `with`)
+ * @param {string} approvalId
+ * @param {RecordMeta | undefined} merged the base branch copy of the record it touches
+ */
+function changeMerged(op, ops, approvalId, merged) {
+  if (!merged) return false;
+  if (op.op === 'add' || op.op === 'update') return approvalIds(merged).has(approvalId);
+  if (op.op === 'deprecate') return merged.deprecation?.approval.id === approvalId;
+  if (op.op === 'supersede') return merged.supersededBy === ops[op.with]?.id;
+  return false;
+}
+
+/**
+ * Whether an applied task has reached its target branch, so it needs nothing more even
+ * without a PR (decision 2026-11-12: a task whose PR cannot be opened ends at merge).
+ * Merged means every approved record change is on the base branch (squash merges too), or,
+ * with no approved records, that the task branch has commits and the base contains them.
+ * Reads the local remote-tracking ref without fetching. Returns null when it cannot tell.
+ * @param {{ home: string, taskId: string }} options
+ * @returns {Promise<boolean | null>}
+ */
+export async function appliedTaskMerged({ home, taskId }) {
+  const paths = taskPaths(home, taskId);
+  try {
+    const input = /** @type {any} */ (await readJson(paths.input));
+    const events = await readEvents(paths.events);
+    const approvalId = events.filter((e) => e.type === 'approved').at(-1)?.approvalId;
+    if (!input || typeof approvalId !== 'string') return null;
+    const approval = /** @type {any} */ (await readJson(path.join(paths.approvals, `${approvalId}.json`)));
+    const draft = /** @type {any} */ (await readJson(paths.draft));
+    if (!approval || !Array.isArray(approval.items) || !Array.isArray(draft?.records)) return null;
+    const root = input.repo.root;
+    const ref = input.base.ref;
+    const approved = approval.items.filter((/** @type {any} */ i) => i.decision === 'approved').map((/** @type {any} */ i) => draft.records[i.index]).filter(Boolean);
+    if (approved.length) {
+      const { records } = await baseRecords(root, ref);
+      return approved.every((/** @type {any} */ op) => changeMerged(op, draft.records, approvalId, records.get(op.op === 'add' ? op.id : op.target)?.meta));
+    }
+    if (!input.branch) return null;
+    const tip = await tryGit(['rev-parse', '--verify', '--quiet', `refs/heads/${input.branch}^{commit}`], { cwd: root });
+    if (!tip || tip === input.base.mergeBase) return false;
+    return (await tryGit(['merge-base', '--is-ancestor', tip, ref], { cwd: root })) !== null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Approved, not yet merged changes of another task, read from its draft and approval.
  * @param {string} home
  * @param {string} taskId
@@ -191,16 +241,7 @@ async function taskChanges(home, taskId, base, checked) {
     if (!op) continue;
     const id = op.op === 'add' ? op.id : op.target;
     if (typeof id !== 'string') continue;
-    const merged = base.get(id)?.meta;
-    if (checked && merged) {
-      if (op.op === 'add' || op.op === 'update') {
-        if (approvalIds(merged).has(approval.id)) continue;
-      } else if (op.op === 'deprecate') {
-        if (merged.deprecation?.approval.id === approval.id) continue;
-      } else if (op.op === 'supersede') {
-        if (merged.supersededBy === draft.records[op.with]?.id) continue;
-      }
-    }
+    if (checked && changeMerged(op, draft.records, approval.id, base.get(id)?.meta)) continue;
     const title = item.edited?.title ?? op.title ?? base.get(id)?.meta.title ?? id;
     out.push({
       id,

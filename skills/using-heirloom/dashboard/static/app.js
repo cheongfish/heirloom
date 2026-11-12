@@ -310,7 +310,7 @@ const STATE_HELP = {
   prepared: '에이전트가 초안을 쓰고 있습니다. 초안이 제출되면 이 화면이 갱신됩니다.',
   drafted: '초안 검사를 통과했습니다. 곧 승인 대기 상태가 됩니다.',
   approved: '승인을 저장했습니다. 에이전트가 apply-approval로 기록을 반영하고 PR을 만들 차례입니다.',
-  applied: '기록 파일을 썼습니다. PR 작성을 기다립니다.',
+  applied: '기록 파일을 썼습니다. PR 작성을 기다립니다. PR을 만들 수 없는 저장소(GitHub 원격이 아님)는 대상 브랜치에 머지되면 끝난 작업으로 봅니다.',
   pr_created: 'PR을 만들었습니다.',
   failed: '인계 준비가 실패했습니다. 에이전트에게 원인을 확인하세요.',
   stale: '승인 당시 상태와 현재 상태가 다릅니다. 다시 인계해야 합니다.',
@@ -399,8 +399,11 @@ const taskRow = (t) =>
       h('span', { class: 'seed-list-item__title' }, t.branch ?? '(브랜치 없음)'),
       h('span', { class: 'seed-list-item__detail' }, `${t.repoRoot ?? '저장소 알 수 없음'} · ${t.taskId} · 갱신 ${when(t.updatedAt)}`),
     ),
-    h('div', { class: 'seed-list-item__suffix' }, stateBadge(t.state)),
+    h('div', { class: 'seed-list-item__suffix' }, t.merged === true ? badge('positive', '머지됨') : stateBadge(t.state)),
   );
+
+/** @param {any} t a listed task: finished, or applied without a PR and already merged */
+const isDone = (t) => FINISHED.has(t.state) || t.merged === true;
 
 async function renderOverview() {
   const data = await api('/api/tasks');
@@ -408,8 +411,8 @@ async function renderOverview() {
   const tasks = data.tasks;
   const waiting = tasks.filter((t) => t.state === 'awaiting_approval');
   const stale = tasks.filter((t) => t.stale && t.state !== 'awaiting_approval');
-  const open = tasks.filter((t) => !t.stale && t.state !== 'awaiting_approval' && !FINISHED.has(t.state));
-  const done = tasks.filter((t) => FINISHED.has(t.state) && !t.stale).slice(0, 10);
+  const open = tasks.filter((t) => !t.stale && t.state !== 'awaiting_approval' && !isDone(t));
+  const done = tasks.filter((t) => isDone(t) && !t.stale).slice(0, 10);
 
   const unhandedRows = data.unhanded.map((/** @type {any} */ c) =>
     h(

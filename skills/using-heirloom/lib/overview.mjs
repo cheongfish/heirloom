@@ -16,12 +16,13 @@ const FINISHED = new Set(['pr_created', 'discarded', 'expired']);
 
 /**
  * An open task whose last event is `days` or more old (PLAN 12.2: listed, never expired by time).
- * @param {{ state: string | null, updatedAt: string }} task
+ * An applied task that already reached its target branch (`merged`) is finished.
+ * @param {{ state: string | null, updatedAt: string, merged?: boolean | null }} task
  * @param {number} now epoch ms
  * @param {number} days
  */
 export function isStaleTask(task, now, days) {
-  if (task.state === null || FINISHED.has(task.state)) return false;
+  if (task.state === null || FINISHED.has(task.state) || task.merged === true) return false;
   return now - Date.parse(task.updatedAt) >= days * 24 * 3600_000;
 }
 
