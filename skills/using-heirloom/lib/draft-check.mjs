@@ -1,12 +1,14 @@
-// Mechanical checks of an agent-written draft against the frozen input (PLAN 9 step 3,
-// MVP-PLAN 5.4). Content quality is the human's job; these checks only verify that what
-// the draft cites exists and that related code paths point at real changed code.
+// Mechanical checks of an agent-written draft against the frozen input. Content quality is
+// the human's job; these checks only verify that what the draft cites exists and that
+// related code paths point at real changed code.
 
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { globToRegExp } from './glob.mjs';
 import { ID_PATTERNS, newRecordId } from './ids.mjs';
+import { checkCurationDraft } from './curation.mjs';
+import { checkRecheckDraft } from './recheck.mjs';
 import { draftSchema, isMarkdownCodePath, validate } from './schema.mjs';
 import { createHash } from 'node:crypto';
 
@@ -37,7 +39,7 @@ const isObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v)
  * @param {string} options.root repository root
  * @param {any} options.input frozen input.json
  * @param {any} options.draft agent draft
- * @param {{ meta: { id: string, kind: string, active: boolean } }[]} options.records existing records
+ * @param {{ meta: { id: string, kind: string, active: boolean, supersededBy?: string | null, deprecation?: { taskId: string } } }[]} options.records existing records
  * @param {string[]} options.repoFiles tracked and untracked (non-ignored) repository files
  * @returns {Promise<CheckResult>}
  */
@@ -51,16 +53,22 @@ export async function checkDraft({ root, input, draft, records, repoFiles }) {
   if (enriched.inputSourceHash !== input.source.hash) {
     errors.push('$.inputSourceHash: 고정된 입력의 소스 상태와 다름. prepare를 다시 실행하고 그 결과로 초안을 쓴다');
   }
+  if (!input.recheck && enriched.recheck !== undefined) errors.push('$.recheck: 증분 재확인이 아닌 인계에는 쓸 수 없음');
+  if (input.recheck && errors.length === 0) errors.push(...checkRecheckDraft({ recheck: input.recheck, draft: enriched }));
+
+  if (errors.length === 0) errors.push(...checkCurationDraft({ input, draft: enriched }));
 
   const changed = input.source.files.map((/** @type {{ path: string }} */ f) => f.path);
+  // A curation changes no code: its summary describes the record changes for the PR body.
+  const curation = input.trigger === 'curation';
   if (Array.isArray(enriched.summary)) {
-    if (enriched.summary.length < 2 || enriched.summary.length > 5) {
+    if (!curation && (enriched.summary.length < 2 || enriched.summary.length > 5)) {
       warnings.push(`$.summary: 요약 불릿은 2~5개를 권장함 (현재 ${enriched.summary.length}개)`);
     }
     enriched.summary.forEach((/** @type {any} */ bullet, /** @type {number} */ i) => {
       if (!isObject(bullet) || !Array.isArray(bullet.codePaths)) return;
       bullet.codePaths.forEach((/** @type {unknown} */ cp, /** @type {number} */ j) => {
-        if (typeof cp !== 'string' || isMarkdownCodePath(cp)) return; // reported by the schema
+        if (curation || typeof cp !== 'string' || isMarkdownCodePath(cp)) return; // reported by the schema
         if (!matchesSome(cp, changed)) errors.push(`$.summary[${i}].codePaths[${j}]: 변경 파일 목록에 없음 (${cp})`);
       });
     });
@@ -69,7 +77,12 @@ export async function checkDraft({ root, input, draft, records, repoFiles }) {
   if (!Array.isArray(enriched.records)) return { errors, warnings, draft: enriched };
 
   const byId = new Map(records.map((r) => [r.meta.id, r.meta]));
-  const usedIds = new Set(byId.keys());
+  // Records this task already wrote in an earlier round keep their ids, and the records it
+  // already superseded or deprecated may still be targeted.
+  const own = new Set(
+    (input.recheck?.baseline.records ?? []).filter((/** @type {any} */ r) => r.op === 'add').map((/** @type {any} */ r) => r.id),
+  );
+  const usedIds = new Set([...byId.keys()].filter((id) => !own.has(id)));
   /** @type {Map<string, string>} */
   const fileCache = new Map();
 
@@ -111,7 +124,9 @@ export async function checkDraft({ root, input, draft, records, repoFiles }) {
     if (typeof op.target !== 'string') return;
     const target = byId.get(op.target);
     if (!target) errors.push(`${at}.target: 대상 기록이 없음 (${op.target})`);
-    else if (!target.active) errors.push(`${at}.target: 이미 비활성인 기록임 (${op.target})`);
+    else if (!target.active && !(target.deprecation?.taskId === input.taskId || (target.supersededBy && own.has(target.supersededBy)))) {
+      errors.push(`${at}.target: 이미 비활성인 기록임 (${op.target})`);
+    }
   };
 
   for (let i = 0; i < enriched.records.length; i += 1) {
@@ -141,6 +156,15 @@ export async function checkDraft({ root, input, draft, records, repoFiles }) {
     } else if (op.op === 'update' || op.op === 'deprecate') {
       checkTarget(op, at);
       for (let k = 0; k < sources.length; k += 1) await checkSource(sources[k], `${at}.sources[${k}]`, false);
+    } else if (op.op === 'relate') {
+      checkTarget(op, at);
+      const id = op.relation?.id;
+      if (typeof id === 'string') {
+        const other = byId.get(id);
+        if (id === op.target) errors.push(`${at}.relation.id: 대상 기록 자신과는 관계를 맺을 수 없음`);
+        else if (!other) errors.push(`${at}.relation.id: 관계 대상 기록이 없음 (${id})`);
+        else if (!other.active) errors.push(`${at}.relation.id: 이미 비활성인 기록임 (${id})`);
+      }
     } else if (op.op === 'supersede') {
       checkTarget(op, at);
       const replacement = Number.isInteger(op.with) ? enriched.records[op.with] : undefined;

@@ -1,5 +1,4 @@
 // ~/.heirloom/index.json: worktree registry, task-key mapping, reminders, fetch times.
-// See docs/HEIRLOOM-MVP-PLAN.md section 5.7.
 
 import { readJson, withLock, writeJsonAtomic } from './fsx.mjs';
 import { newTaskId } from './ids.mjs';
@@ -9,7 +8,7 @@ import { assertValid, indexSchema } from './schema.mjs';
 /**
  * @typedef {object} Index
  * @property {1} schemaVersion
- * @property {Record<string, { repoId: string, path: string, lastSeen: string }>} worktrees
+ * @property {Record<string, { repoId: string, path: string, lastSeen: string, managed?: boolean }>} worktrees
  * @property {Record<string, string>} tasks
  * @property {Record<string, { sourceHash: string, at: string }>} reminders
  * @property {Record<string, string>} lastFetch

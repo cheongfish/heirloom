@@ -1,5 +1,4 @@
 // Thin git wrapper: repository info, target branch resolution, changed files.
-// See docs/HEIRLOOM-MVP-PLAN.md section 7.3 and docs/HEIRLOOM-PLAN.md section 5.
 
 import { execFile, spawn } from 'node:child_process';
 import path from 'node:path';
@@ -109,7 +108,7 @@ async function refExists(cwd, ref) {
 }
 
 /**
- * Decide the target branch without guessing (PLAN 5.1):
+ * Decide the target branch without guessing:
  * explicit base, then config baseBranch (origin/<b>, else local <b>), then origin/HEAD.
  * @param {{ cwd: string, base?: string | null, configBase?: string | null }} options
  * @returns {Promise<{ ref: string, mergeBase: string }>}
@@ -159,7 +158,7 @@ export async function resolveBase({ cwd, base, configBase }) {
 /**
  * Files changed between the merge-base and the working tree, including staged,
  * unstaged and untracked (non-ignored) files. Renames count as delete + add.
- * Untracked files are reported as 'A' so that committing them keeps the state (PLAN 5.2).
+ * Untracked files are reported as 'A' so that committing them keeps the state.
  * The Heirloom directory is excluded.
  * @param {{ root: string, mergeBase: string }} options
  * @returns {Promise<ChangedFile[]>}
@@ -182,6 +181,22 @@ export async function changedFiles({ root, mergeBase }) {
     .filter(([file]) => !file.startsWith(prefix))
     .map(([file, status]) => ({ path: file, status }))
     .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
+
+/**
+ * Paths that differ between two commits (renames as delete + add), or null when either
+ * commit cannot be read (for example an old merge-base that was garbage-collected).
+ * @param {{ cwd: string, from: string, to: string }} options
+ * @returns {Promise<Set<string> | null>}
+ */
+export async function filesChangedBetween({ cwd, from, to }) {
+  if (from === to) return new Set();
+  try {
+    const out = await git(['diff', '--name-only', '-z', '--no-renames', from, to, '--'], { cwd });
+    return new Set(out.split('\0').filter(Boolean));
+  } catch {
+    return null;
+  }
 }
 
 /**

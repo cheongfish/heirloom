@@ -22,7 +22,7 @@ export const sha256Hex = (data) => createHash('sha256').update(data).digest('hex
 
 /**
  * Digest of a draft as the dashboard shows it. An approval names the digest it was given,
- * so an approval made on a stale screen is rejected (PLAN 13.3).
+ * so an approval made on a stale screen is rejected.
  * @param {unknown} draft
  */
 export const draftDigest = (draft) => sha256Hex(canonicalJson(draft));

@@ -1,7 +1,7 @@
-// Wait for the human's answer to a submitted handoff (PLAN 12.1). A live session runs this in
+// Wait for the human's answer to a submitted handoff. A live session runs this in
 // the background after submitting, so it learns of the approval without being asked.
 // The approval record stays the source of truth: this only reads the event log, and a
-// missed wait is recovered at the next session start (PLAN 12).
+// missed wait is recovered at the next session start.
 
 import { access } from 'node:fs/promises';
 

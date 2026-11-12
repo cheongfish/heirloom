@@ -1,4 +1,5 @@
-// Hand-written validators for the data formats in docs/HEIRLOOM-MVP-PLAN.md section 5.
+// Hand-written validators for Heirloom's data formats (records, input, draft, approval,
+// events, index, config).
 // A validator pushes "<json path>: <message>" strings into `errors`.
 
 import { HeirloomError } from './errors.mjs';
@@ -9,7 +10,8 @@ const MARKDOWN_EXT = /\.(md|mdx|markdown)$/i;
 const MARKDOWN_BRACES = /\.\{([^}]*)\}$/;
 
 /**
- * True when a code path or glob points only at Markdown documents (PLAN 9).
+ * True when a code path or glob points only at Markdown documents. Documents are linked as
+ * sources, never as related code paths.
  * @param {string} p
  */
 export function isMarkdownCodePath(p) {
@@ -144,6 +146,7 @@ export const PATTERNS = Object.freeze({
   taskId: /^t-\d{8}-[0-9a-hjkmnp-tv-z]{8}$/,
   approvalId: /^ap-[0-9a-hjkmnp-tv-z]{12}$/,
   recordId: /^[da]-[0-9a-hjkmnp-tv-z]{8}$/,
+  curationId: /^c-[0-9a-hjkmnp-tv-z]{8}$/,
   sha256: /^[0-9a-f]{64}$/,
   stateHash: /^sha256:[0-9a-f]{64}$/,
   commit: /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/,
@@ -164,7 +167,7 @@ const approvalId = str({ pattern: PATTERNS.approvalId });
 export const codePath = str({
   nonEmpty: true,
   check: (p) => {
-    if (isMarkdownCodePath(p)) return '마크다운 문서는 연관 코드 경로에 넣을 수 없음. 문서는 sources로 연결한다 (PLAN 9)';
+    if (isMarkdownCodePath(p)) return '마크다운 문서는 연관 코드 경로에 넣을 수 없음. 문서는 sources로 연결한다';
     if (p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p)) return '저장소 기준 상대경로여야 함';
     if (p.split(/[\\/]/).includes('..')) return '`..`을 포함할 수 없음';
     return null;
@@ -218,7 +221,48 @@ export const recordMetaSchema = object(
 
 // ---------------------------------------------------------------- input (5.2)
 
+/** `input.recheck` of an incremental handoff. */
+function recheckSchema() {
+  const digest = nullable(str({ pattern: /^([0-9a-f]{64}|deleted)$/ }));
+  const affected = arrayOf(object({ index: int({ min: 0 }), reasons: arrayOf(nonEmpty, { min: 1 }) }));
+  return object({
+    basedOn: approvalId,
+    mergeBaseChanged: bool,
+    changes: arrayOf(object({ path: nonEmpty, before: digest, after: digest, reason: oneOf('edited', 'base_updated', 'added', 'removed') })),
+    materials: arrayOf(object({ ref: nonEmpty, before: nullable(sha256), after: nullable(sha256) })),
+    affected: object({ summary: affected, records: affected, unlinked: arrayOf(nonEmpty) }),
+    baseline: object({
+      summary: arrayOf(object({ text: nonEmpty, codePaths: arrayOf(nonEmpty) })),
+      records: arrayOf(object({}, { extra: true })),
+    }),
+  });
+}
+
 const fileStatus = oneOf('A', 'M', 'D');
+
+// ---------------------------------------------------------------- curation review history
+
+/** `.heirloom/curation/c-<id>.json`: one reviewed batch with its candidates and changes. */
+export const curationReviewSchema = object({
+  schemaVersion: v1,
+  id: str({ pattern: PATTERNS.curationId }),
+  taskId,
+  approvalId,
+  reviewedAt: timestamp,
+  batch: arrayOf(recordId),
+  candidates: arrayOf(
+    object(
+      { title: nonEmpty, evidence: arrayOf(recordId), decision: oneOf('accepted', 'held', 'rejected') },
+      { optional: { axiomId: recordId, reason: nonEmpty } },
+    ),
+  ),
+  changes: arrayOf(
+    object(
+      { op: oneOf('add', 'update', 'supersede', 'deprecate', 'relate'), target: recordId, decision: oneOf('approved', 'rejected', 'pending') },
+      { optional: { reason: nonEmpty } },
+    ),
+  ),
+});
 
 export const inputSchema = object({
   schemaVersion: v1,
@@ -228,7 +272,7 @@ export const inputSchema = object({
   branch: nullable(nonEmpty),
   base: object({ ref: nonEmpty, mergeBase: str({ pattern: PATTERNS.commit }) }),
   sdlcTaskRef: nullable(nonEmpty),
-  trigger: oneOf('auto', 'manual'),
+  trigger: oneOf('auto', 'manual', 'curation'),
   source: object({
     hash: stateHash,
     files: arrayOf(object({ path: nonEmpty, status: fileStatus, sha256: str({ pattern: /^([0-9a-f]{64}|deleted)$/ }) })),
@@ -242,6 +286,11 @@ export const inputSchema = object({
   unknowns: arrayOf(nonEmpty),
   projectRules: object({ prTemplates: arrayOf(nonEmpty), commitGuides: arrayOf(nonEmpty) }),
   createdAt: timestamp,
+}, {
+  optional: {
+    recheck: recheckSchema(),
+    curation: object({ batch: arrayOf(recordId), related: arrayOf(recordId), axioms: arrayOf(recordId), history: arrayOf(curationReviewSchema) }),
+  },
 });
 
 // ---------------------------------------------------------------- draft (5.3)
@@ -263,6 +312,8 @@ const addOp = object(
     optional: {
       id: recordId,
       relations: arrayOf(object({ type: oneOf('exception', 'coexist'), id: recordId }, { optional: { condition: text } })),
+      evidence: arrayOf(recordId),
+      baseIndex: int({ min: 0 }),
     },
     check: (o) => {
       /** @type {string[]} */
@@ -273,28 +324,41 @@ const addOp = object(
   },
 );
 
+const baseIndex = int({ min: 0 });
+
 const updateOp = object(
   { op: oneOf('update'), target: recordId, reason: nonEmpty, sources: arrayOf(draftSource) },
-  { optional: { title: nonEmpty, body: object({}, { extra: true }), codePaths: arrayOf(codePath), topics: arrayOf(nonEmpty) } },
+  { optional: { title: nonEmpty, body: object({}, { extra: true }), codePaths: arrayOf(codePath), topics: arrayOf(nonEmpty), baseIndex } },
 );
 
-export const draftSchema = object({
-  schemaVersion: v1,
-  taskId,
-  inputSourceHash: stateHash,
-  summary: arrayOf(object({ text: nonEmpty, codePaths: arrayOf(codePath) })),
-  records: arrayOf(
-    tagged('op', {
-      add: addOp,
-      update: updateOp,
-      supersede: object({ op: oneOf('supersede'), target: recordId, reason: nonEmpty, with: int({ min: 0 }) }),
-      deprecate: object({ op: oneOf('deprecate'), target: recordId, reason: nonEmpty, sources: arrayOf(draftSource) }),
-    }),
-  ),
-  missing: arrayOf(nonEmpty),
-  conflicts: arrayOf(object({ refs: arrayOf(nonEmpty, { min: 2 }), note: nonEmpty })),
-  notes: text,
-});
+export const draftSchema = object(
+  {
+    schemaVersion: v1,
+    taskId,
+    inputSourceHash: stateHash,
+    summary: arrayOf(object({ text: nonEmpty, codePaths: arrayOf(codePath) }, { optional: { baseIndex } })),
+    records: arrayOf(
+      tagged('op', {
+        add: addOp,
+        update: updateOp,
+        supersede: object({ op: oneOf('supersede'), target: recordId, reason: nonEmpty, with: int({ min: 0 }) }, { optional: { baseIndex } }),
+        deprecate: object({ op: oneOf('deprecate'), target: recordId, reason: nonEmpty, sources: arrayOf(draftSource) }, { optional: { baseIndex } }),
+        relate: object(
+          { op: oneOf('relate'), target: recordId, relation: object({ type: oneOf('exception', 'coexist'), id: recordId, condition: nonEmpty }) },
+          { optional: { baseIndex } },
+        ),
+      }),
+    ),
+    missing: arrayOf(nonEmpty),
+    conflicts: arrayOf(object({ refs: arrayOf(nonEmpty, { min: 2 }), note: nonEmpty })),
+    notes: text,
+  },
+  {
+    optional: {
+      recheck: object({ extra: arrayOf(object({ kind: oneOf('summary', 'record'), baseIndex, reason: nonEmpty })) }),
+    },
+  },
+);
 
 // ---------------------------------------------------------------- approval (5.5)
 
@@ -302,19 +366,19 @@ export const approvalSchema = object({
   schemaVersion: v1,
   id: approvalId,
   taskId,
-  kind: oneOf('full', 'quick'),
+  kind: oneOf('full', 'quick', 'incremental'),
   target: object({ sourceHash: stateHash, materials: recordOf(nullable(sha256)), draftSha256: sha256 }),
-  summary: object({ initial: arrayOf(nonEmpty), final: arrayOf(nonEmpty, { min: 1 }) }),
+  summary: object({ initial: arrayOf(nonEmpty), final: arrayOf(nonEmpty, { min: 1 }) }, { optional: { origins: arrayOf(nullable(int({ min: 0 }))) } }),
   items: arrayOf(
     object(
       { index: int({ min: 0 }), decision: oneOf('approved', 'rejected', 'pending') },
-      { optional: { edited: object({}, { extra: true }) } },
+      { optional: { edited: object({}, { extra: true }), carried: bool, reason: nonEmpty } },
     ),
   ),
   approver: object({ fingerprint: nonEmpty, gitUser: nullable(nonEmpty) }),
   approvedAt: timestamp,
   signature: str({ pattern: /^[A-Za-z0-9+/]+={0,2}$/ }),
-});
+}, { optional: { basedOn: approvalId } });
 
 // ---------------------------------------------------------------- events (5.6)
 
@@ -331,6 +395,8 @@ export const EVENT_TYPES = /** @type {const} */ ([
   'stale',
   'discarded',
   'expired',
+  'agent_started',
+  'agent_finished',
 ]);
 
 export const eventSchema = object({ at: timestamp, type: oneOf(...EVENT_TYPES) }, { extra: true });
@@ -339,7 +405,7 @@ export const eventSchema = object({ at: timestamp, type: oneOf(...EVENT_TYPES) }
 
 export const indexSchema = object({
   schemaVersion: v1,
-  worktrees: recordOf(object({ repoId: str({ pattern: PATTERNS.repoId }), path: nonEmpty, lastSeen: timestamp })),
+  worktrees: recordOf(object({ repoId: str({ pattern: PATTERNS.repoId }), path: nonEmpty, lastSeen: timestamp }, { optional: { managed: bool } })),
   tasks: recordOf(taskId),
   reminders: recordOf(object({ sourceHash: stateHash, at: timestamp })),
   lastFetch: recordOf(timestamp),
@@ -355,11 +421,17 @@ export const projectConfigSchema = object(
       specGlobs: arrayOf(nonEmpty),
       recall: object({}, { optional: { maxRecords: int({ min: 1 }), maxTokens: int({ min: 1 }) } }),
       sessionIndex: object({}, { optional: { maxDecisions: int({ min: 0 }) } }),
+      curation: object({}, { optional: { minUnreviewed: int({ min: 1 }), maxAgeDays: int({ min: 1 }), minForAge: int({ min: 1 }), batchSize: int({ min: 1 }) } }),
     },
   },
 );
 
 export const userConfigSchema = object(
   { schemaVersion: v1 },
-  { optional: { dashboard: object({}, { optional: { idleMinutes: int({ min: 1 }), openBrowser: bool, staleDays: int({ min: 1 }), port: int({ min: 1024, max: 65535 }) } }) } },
+  {
+    optional: {
+      dashboard: object({}, { optional: { idleMinutes: int({ min: 1 }), openBrowser: bool, staleDays: int({ min: 1 }), port: int({ min: 1024, max: 65535 }) } }),
+      curation: object({}, { optional: { agent: object({}, { optional: { host: oneOf('claude-code'), command: nonEmpty, model: nullable(nonEmpty) } }) } }),
+    },
+  },
 );

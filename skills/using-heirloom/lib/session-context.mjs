@@ -1,25 +1,26 @@
-// Session-start context: the handoff convention plus a short project index
-// (PLAN 14.4, MVP-PLAN 7.4). Read-only: never creates ids or files.
+// Session-start context: the handoff convention plus a short project index.
+// Read-only: never creates ids or files.
 
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { loadProjectConfig } from './config.mjs';
 import { deriveState, readEvents } from './events.mjs';
-import { changedFiles, listRemotes, repoInfo, resolveBase, tryGit } from './git.mjs';
-import { baseBranchName, parseGithubRemote } from './github.mjs';
+import { changedFiles, repoInfo, resolveBase } from './git.mjs';
 import { readJson } from './fsx.mjs';
 import { matchesAny } from './glob.mjs';
 import { readIds } from './ids.mjs';
 import { findProjectRules } from './project-rules.mjs';
+import { remoteProvider, taskRemote } from './remote.mjs';
 import { taskPaths } from './paths.mjs';
 import { appliedTaskMerged, recordView } from './record-status.mjs';
 import { readIndex, tasksForWorktree } from './store.mjs';
+import { curationStatus } from './curation.mjs';
 
 const PENDING_SHOWN = 10;
 
 /**
- * Whether the task's target remote is not GitHub, so its PR step cannot run (MVP-PLAN 2절).
+ * Whether the task's target remote is neither GitHub nor GitLab, so no PR or MR can be opened.
  * @param {string} home
  * @param {string} taskId
  */
@@ -27,12 +28,12 @@ async function prImpossible(home, taskId) {
   const input = /** @type {any} */ (await readJson(taskPaths(home, taskId).input));
   if (!input) return false;
   const root = input.repo.root;
-  const { remote } = baseBranchName(input.base.ref, await listRemotes(root).catch(() => []));
-  return !parseGithubRemote(await tryGit(['remote', 'get-url', remote ?? 'origin'], { cwd: root }));
+  const { url } = await taskRemote(root, input.base.ref);
+  return (await remoteProvider({ cwd: root, url })).provider === null;
 }
 
 /** @type {Record<import('./record-status.mjs').ChangeKind, string>} */
-const CHANGE_LABEL = { add: '추가 제안', update: '수정 제안', supersede: '대체 제안', deprecate: '폐기 제안' };
+const CHANGE_LABEL = { add: '추가 제안', update: '수정 제안', supersede: '대체 제안', deprecate: '폐기 제안', relate: '관계 추가 제안' };
 
 /** @param {string} text */
 function stripFrontmatter(text) {
@@ -116,7 +117,8 @@ async function projectSection(cwd, home) {
   if (errors.length) lines.push('', `읽지 못한 기록 ${errors.length}개: ${errors.map((e) => e.split(': ')[0]).join(', ')}`);
 
   const ids = await readIds(info);
-  if (ids) {
+  const managed = ids ? (await readIndex(home)).worktrees[ids.worktreeId]?.managed === true : false;
+  if (ids && !managed) {
     const index = await readIndex(home);
     /** @type {string[]} */
     const pending = [];
@@ -125,13 +127,19 @@ async function projectSection(cwd, home) {
       if (state === 'approved') pending.push(`- ${taskId}: 승인됨, 아직 반영되지 않음 → 사용자에게 알리고, 요청하면 apply-approval 스킬로 처리한다.`);
       else if (state === 'applied') {
         if (await appliedTaskMerged({ home, taskId })) continue;
-        if (await prImpossible(home, taskId)) pending.push(`- ${taskId}: 기록 파일을 썼고 PR은 만들 수 없음(GitHub 원격 아님) → 사용자가 직접 머지한다. 대상 브랜치에 머지되면 이 목록에서 빠진다.`);
+        if (await prImpossible(home, taskId)) pending.push(`- ${taskId}: 기록 파일을 썼고 PR·MR은 만들 수 없음(지원하지 않는 원격) → 사용자가 직접 머지한다. 대상 브랜치에 머지되면 이 목록에서 빠진다.`);
         else pending.push(`- ${taskId}: 기록 파일을 썼지만 PR이 아직 없음 → apply-approval 스킬로 이어서 처리한다.`);
       }
-      else if (state === 'stale') pending.push(`- ${taskId}: 승인 이후 소스가 바뀌어 반영하지 못함 → prepare-handoff로 다시 인계해야 한다.`);
+      else if (state === 'stale') pending.push(`- ${taskId}: 승인 이후 소스나 자료가 바뀜(재확인 필요) → prepare-handoff를 다시 실행하면 바뀐 부분과 연결된 항목만 다시 승인받는다. 기존 승인은 보존된다.`);
       else if (state === 'awaiting_approval') pending.push(`- ${taskId}: 대시보드에서 사람의 승인을 기다리는 중.`);
     }
     if (pending.length) lines.push('', '## 이 작업 트리의 미처리 인계', ...pending);
+
+    const curation = await curationStatus({ home, repoId: ids.repoId }).catch(() => null);
+    if (curation?.inProgress.length) lines.push('', `맥락 정리: 진행 중(작업 ${curation.inProgress.map((t) => t.taskId).join(', ')}). 대시보드에서 확인한다.`);
+    else if (curation?.notify) {
+      lines.push('', `맥락 정리 안내: 검토하지 않은 decision이 ${curation.unreviewed}개다. 사용자가 원하면 대시보드에서 '정리 실행'을 고를 수 있다. 직접 실행하지 않는다.`);
+    }
   }
 
   const { commitGuides } = await findProjectRules(info.root);

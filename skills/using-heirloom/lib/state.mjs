@@ -1,5 +1,5 @@
-// Source and material state hashing. See docs/HEIRLOOM-PLAN.md section 5.2 and
-// docs/HEIRLOOM-MVP-PLAN.md section 7.3.
+// Source and material state hashing. A state is the content of the task's changes, not a
+// commit id: committing the same content keeps the state.
 
 import { createHash } from 'node:crypto';
 import { lstat, readFile, readlink } from 'node:fs/promises';
@@ -81,7 +81,7 @@ export async function hashMaterial(root, ref) {
 /**
  * Source state of a commit relative to the merge-base, computed from git objects only.
  * Produces the same hash as computeSourceState for a clean working tree at that commit,
- * so a review that covered `commit` can be compared with the current state (PLAN 5.2, 9).
+ * so a review that covered `commit` can be compared with the current state.
  * @param {{ root: string, mergeBase: string, commit: string }} options
  * @returns {Promise<{ hash: string, files: FileState[] }>}
  */
@@ -112,4 +112,16 @@ export async function computeCommitState({ root, mergeBase, commit }) {
   }
   files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return { hash: hashEntries(files), files };
+}
+
+/**
+ * Source state against the merge-base as it is now. After a rebase or merge of the target
+ * branch the frozen merge-base is no longer the task's base; the task's own changes are
+ * what counts. Falls back to the frozen merge-base when the ref is gone.
+ * @param {{ root: string, base: { ref: string, mergeBase: string } }} options
+ * @returns {Promise<{ mergeBase: string, hash: string, files: FileState[] }>}
+ */
+export async function currentSourceState({ root, base }) {
+  const mergeBase = (await tryGit(['merge-base', base.ref, 'HEAD'], { cwd: root })) ?? base.mergeBase;
+  return { mergeBase, ...(await computeSourceState({ root, mergeBase })) };
 }

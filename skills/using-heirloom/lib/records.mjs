@@ -1,5 +1,4 @@
 // decision/axiom record files: one Markdown file per record with a `---json` front matter.
-// See docs/HEIRLOOM-MVP-PLAN.md section 5.1.
 
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -79,7 +78,7 @@ export const SECTIONS = {
 };
 
 /**
- * Render the Markdown body of a record from draft body fields (PLAN 14.1, 15.1).
+ * Render the Markdown body of a record from draft body fields.
  * @param {'decision' | 'axiom'} kind
  * @param {Record<string, string>} body
  */

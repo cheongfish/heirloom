@@ -1,5 +1,4 @@
 // Error classification, exit codes and the single-retry policy.
-// See docs/HEIRLOOM-MVP-PLAN.md section 7.1 and docs/HEIRLOOM-PLAN.md section 8.
 
 export const EXIT = Object.freeze({ OK: 0, INTERNAL: 1, INPUT: 2, CONFLICT: 3, VERIFY: 4, TRANSIENT: 75 });
 
@@ -77,7 +76,7 @@ const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Run `fn`, retrying once after `delayMs` only when the failure is transient.
- * At most two attempts in total (PLAN 8).
+ * At most two attempts in total; nothing is retried unconditionally.
  * @template T
  * @param {() => Promise<T>} fn
  * @param {{ delayMs?: number, sleep?: (ms: number) => Promise<void> }} [options]

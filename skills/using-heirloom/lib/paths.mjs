@@ -1,4 +1,4 @@
-// Storage locations. See docs/HEIRLOOM-MVP-PLAN.md section 3.
+// Storage locations: ~/.heirloom (HEIRLOOM_HOME) for local state, <repo>/.heirloom for records.
 
 import { chmod, mkdir } from 'node:fs/promises';
 import os from 'node:os';
@@ -28,6 +28,7 @@ export function homePaths(home) {
     tasks: path.join(home, 'tasks'),
     keys: path.join(home, 'keys'),
     server: path.join(home, 'server'),
+    worktrees: path.join(home, 'worktrees'),
   };
 }
 
@@ -47,6 +48,24 @@ export function taskPaths(home, taskId) {
     handoff: path.join(dir, 'handoff.md'),
     approvals: path.join(dir, 'approvals'),
     events: path.join(dir, 'events.jsonl'),
+    curation: path.join(dir, 'curation.json'),
+    prBody: path.join(dir, 'pr-body.md'),
+    /** @param {'curate' | 'apply'} phase */
+    agentLog: (phase) => path.join(dir, `agent-${phase}.log`),
+  };
+}
+
+/**
+ * Files of one approval: the signed record and the input and draft it was given
+ * (the baseline survives a new prepare).
+ * @param {string} approvalsDir taskPaths().approvals
+ * @param {string} approvalId
+ */
+export function approvalFiles(approvalsDir, approvalId) {
+  return {
+    record: path.join(approvalsDir, `${approvalId}.json`),
+    input: path.join(approvalsDir, `${approvalId}.input.json`),
+    draft: path.join(approvalsDir, `${approvalId}.draft.json`),
   };
 }
 
@@ -58,6 +77,7 @@ export function repoPaths(root) {
     decisions: path.join(dir, 'decisions'),
     axioms: path.join(dir, 'axioms'),
     config: path.join(dir, 'config.json'),
+    curation: path.join(dir, 'curation'),
   };
 }
 

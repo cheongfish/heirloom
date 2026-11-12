@@ -34,6 +34,7 @@ Read the result:
   - `E_CONFLICT` (exit 3): the same work is being processed.
   - `E_TRANSIENT` (exit 75): the script already retried. Do not run it again.
 - Otherwise continue with `taskId`, `draftPath`, `source.files`, `materials`, `unknowns`, `relatedRecords` and `reviewMatchesSource`.
+- `recheck` is not null: this task was approved before and the code or materials changed since. Write an incremental draft (section 2.1) instead of a new one.
 
 ## 2. Write the draft
 
@@ -87,6 +88,24 @@ Write JSON to `draftPath`:
 - When expected material is missing, list it in `missing`. The handoff still goes ahead.
 - When `reviewMatchesSource` is false, the code changed after the final review. State that as a fact. Do not judge it as an error.
 
+### 2.1 Incremental recheck draft
+
+When `recheck` is not null, the human already approved this task once. Only the approved items that the change touches go back to the human. Read `recheck` in the output and `recheck.baseline` in `inputPath` (the approved summary and records, with the human's edits).
+
+- `recheck.changes` lists the files changed since the approval. `base_updated` means the target branch was rebased or merged in and also changed that file, so the task file's content differs from the approved one partly because of the target branch. `edited` is a change made in this branch.
+- `recheck.affected.summary` and `recheck.affected.records` are the baseline items up for recheck, with reasons. `unlinked` lists changed files linked to no item; then the whole summary is up for recheck.
+- Start from the baseline. Copy every baseline bullet and record into the draft and give each one `"baseIndex": <its position in the baseline>`.
+- **Copy items that are not up for recheck exactly as they are.** The check refuses a draft that changes or drops them. They keep their approval.
+- Rewrite, keep, or remove the items that are up for recheck, so that they describe the current code. New bullets and new records have no `baseIndex`.
+- Read the surrounding code and the related records, not only the changed lines. If you think a change touches an item that is not listed, add it with a reason. You can add items but not remove listed ones:
+
+```json
+"recheck": { "extra": [{ "kind": "record", "baseIndex": 2, "reason": "<why the change may touch it; say if you are unsure>" }] }
+```
+
+- A supersede's `with` is the index in the new draft. Keep it pointing at the same replacement.
+- This is not a second review of the implementation. Check only whether the approved description and decisions still fit the code.
+
 ## 3. Submit
 
 ```sh
@@ -113,7 +132,8 @@ It ends when the human answers or after 60 minutes (`--timeout-minutes` changes 
 
 - `approved`: the human's approval is the request to apply it. Run the `apply-approval` skill now. Do not ask first.
 - `applied` or `pr_created`: it was already applied elsewhere. Tell the user.
-- `discarded`, `expired` or `stale`: tell the user. Do not apply.
+- `discarded` or `expired`: tell the user. Do not apply.
+- `stale`: the code changed while the human was reviewing. Tell the user. When the change is finished, run this skill again: it starts an incremental recheck.
 - `timedOut: true` (still `awaiting_approval`): tell the user that no approval came yet. It can be applied later, because the next session start lists it.
 
 ## 5. Report

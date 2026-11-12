@@ -1,4 +1,4 @@
-// Per-task lock: prepare and submit for the same task never run concurrently (PLAN 8).
+// Per-task lock: prepare and submit for the same task never run concurrently.
 
 import path from 'node:path';
 

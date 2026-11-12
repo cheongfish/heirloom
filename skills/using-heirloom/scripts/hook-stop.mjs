@@ -1,5 +1,5 @@
-// Stop hook: remind the agent once per source state when every mechanical condition holds
-// (PLAN 7.5). Never blocks twice in a row, never fails, gives up after the time budget.
+// Stop hook: remind the agent once per source state when every mechanical condition holds.
+// Never blocks twice in a row, never fails, gives up after the time budget.
 
 import { evaluateStop } from '../lib/reminder.mjs';
 import { emit, readStdinJson } from '../lib/hook-io.mjs';

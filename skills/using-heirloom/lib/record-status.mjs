@@ -1,5 +1,5 @@
-// Merge detection and the active/pending status of decision and axiom records
-// (PLAN 14.3, MVP-PLAN 5.1 and 7.5).
+// Merge detection and the active/pending status of decision and axiom records.
+// The target branch is read from the local remote-tracking ref; nothing is fetched here.
 //
 // A record is active when its file on the target base branch says so: the base branch is
 // read from the local remote-tracking ref without fetching, so the result is as fresh as
@@ -25,7 +25,7 @@ import { readIndex } from './store.mjs';
 /** @typedef {import('./records.mjs').RecordDoc} RecordDoc */
 /** @typedef {import('./records.mjs').RecordMeta} RecordMeta */
 /** @typedef {'active' | 'inactive' | 'pending' | 'unknown'} RecordStatus */
-/** @typedef {'add' | 'update' | 'supersede' | 'deprecate'} ChangeKind */
+/** @typedef {'add' | 'update' | 'supersede' | 'deprecate' | 'relate'} ChangeKind */
 
 /**
  * @typedef {object} ViewRecord
@@ -135,7 +135,7 @@ async function lastFetch(commonDir) {
 }
 
 /**
- * Tasks of this worktree on the checked-out branch (the "same task" of PLAN 14.3), and the
+ * Tasks of this worktree on the checked-out branch (the task a pending record belongs to), and the
  * other tasks of the same repository with their state.
  * @param {string} home
  * @param {import('./git.mjs').RepoInfo} info
@@ -176,7 +176,7 @@ async function taskScope(home, info) {
  */
 function changeMerged(op, ops, approvalId, merged) {
   if (!merged) return false;
-  if (op.op === 'add' || op.op === 'update') return approvalIds(merged).has(approvalId);
+  if (op.op === 'add' || op.op === 'update' || op.op === 'relate') return approvalIds(merged).has(approvalId);
   if (op.op === 'deprecate') return merged.deprecation?.approval.id === approvalId;
   if (op.op === 'supersede') return merged.supersededBy === ops[op.with]?.id;
   return false;
@@ -184,7 +184,7 @@ function changeMerged(op, ops, approvalId, merged) {
 
 /**
  * Whether an applied task has reached its target branch, so it needs nothing more even
- * without a PR (decision 2026-11-12: a task whose PR cannot be opened ends at merge).
+ * without a PR (a task whose PR cannot be opened ends when its approval is merged).
  * Merged means every approved record change is on the base branch (squash merges too), or,
  * with no approved records, that the task branch has commits and the base contains them.
  * Reads the local remote-tracking ref without fetching. Returns null when it cannot tell.

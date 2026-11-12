@@ -1,4 +1,4 @@
-// Make sure the dashboard server runs and open a task screen or the overview (MVP-PLAN 6.5).
+// Make sure the dashboard server runs and open a task screen or the overview.
 // After a submit (`once`), the browser opens only the first time per task.
 
 import { access } from 'node:fs/promises';

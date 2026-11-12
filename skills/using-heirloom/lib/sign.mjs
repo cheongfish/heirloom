@@ -1,4 +1,4 @@
-// Approval signing with a per-user ed25519 key (PLAN 11.4, MVP-PLAN 6.6).
+// Approval signing with a per-user ed25519 key.
 // Only lib/ and dashboard/ may import anything but `verify` from this module (layout test).
 
 import { execFile, spawn } from 'node:child_process';

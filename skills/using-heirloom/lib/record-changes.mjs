@@ -1,4 +1,5 @@
-// Turn a verified approval into decision/axiom record changes (PLAN 14.2, MVP-PLAN 5.1).
+// Turn a verified approval into decision/axiom record changes. Records are never deleted:
+// superseded and deprecated ones are marked inactive.
 // Pure: takes the draft, the approval and the existing records; returns the files to write.
 // Running it again for the same approval yields the same files (crash recovery).
 
@@ -62,6 +63,23 @@ export function planRecordChanges({ draft, approval, existing }) {
     return clone(found);
   };
 
+  /**
+   * Sign a changed existing record with this approval and keep the approval it replaces.
+   * Several changes to one record in one approval make one revision.
+   * @param {RecordDoc} doc
+   * @param {string} reason
+   */
+  const revise = (doc, reason) => {
+    const { meta } = doc;
+    const last = meta.revisions?.at(-1);
+    if (last && meta.approval.id === approval.id && last.replacedBy === approval.id) {
+      last.reason = `${last.reason}; ${reason}`;
+      return;
+    }
+    meta.revisions = [...(meta.revisions ?? []), { approval: meta.approval, replacedBy: approval.id, taskId: approval.taskId, reason }];
+    meta.approval = signed;
+  };
+
   // 1. New records.
   ops.forEach((op, index) => {
     if (op.op !== 'add' || !approved(index)) return;
@@ -102,8 +120,7 @@ export function planRecordChanges({ draft, approval, existing }) {
       doc.meta.deprecation = { reason: op.reason, taskId: approval.taskId, approval: signed };
       out.set(op.target, doc);
     } else if (op.op === 'update') {
-      const current = out.get(op.target) ?? existing.get(op.target);
-      if (current?.meta.approval.id === approval.id) return; // already applied
+      if (existing.get(op.target)?.meta.approval.id === approval.id) return; // already applied
       const doc = target(op.target, () => false);
       const { meta } = doc;
       if (op.title !== undefined) meta.title = op.title;
@@ -114,8 +131,14 @@ export function planRecordChanges({ draft, approval, existing }) {
           if (typeof op.body[key] === 'string') doc.body = replaceSection(doc.body, heading, op.body[key]);
         }
       }
-      meta.revisions = [...(meta.revisions ?? []), { approval: meta.approval, replacedBy: approval.id, taskId: approval.taskId, reason: op.reason }];
-      meta.approval = signed;
+      revise(doc, op.reason);
+      out.set(op.target, doc);
+    } else if (op.op === 'relate') {
+      if (existing.get(op.target)?.meta.approval.id === approval.id) return; // already applied
+      const doc = target(op.target, () => false);
+      const { type, id, condition } = op.relation;
+      if (!doc.meta.relations.some((r) => r.type === type && r.id === id && r.condition === condition)) doc.meta.relations.push({ type, id, condition });
+      revise(doc, `관계 추가: ${type} ${id}`);
       out.set(op.target, doc);
     }
   });

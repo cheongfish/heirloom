@@ -1,5 +1,4 @@
-// Recall: the full text of active decisions and axioms related to a query
-// (PLAN 14.4, MVP-PLAN 7.2 recall.mjs). Read-only.
+// Recall: the full text of active decisions and axioms related to a query. Read-only.
 //
 // Relevance uses explicit ids, the record's codePaths against the query paths, and topics.
 // A path match is a hint, not proof that the record applies: every result carries the
@@ -22,7 +21,7 @@ export const SCORE = Object.freeze({ id: 100, path: 10, topic: 5 });
 /**
  * Token estimate: UTF-8 bytes ÷ 3. One Hangul syllable (3 bytes) counts as one token and
  * ASCII text as three characters per token, which errs on the high side for English
- * (decision 2026-11-12, MVP-PLAN 10).
+ * (a conservative estimate: about one token per Korean character).
  * @param {string} text
  */
 export function estimateTokens(text) {
@@ -125,7 +124,7 @@ export async function recall({ cwd, home, paths = [], topics = [], ids = [], lim
   let from = 'args';
   let queryPaths = paths.map(normalizePath).filter(Boolean);
   if (!queryPaths.length && !topics.length && !ids.length) {
-    // No query: the code files changed against the target branch (decision 2026-11-12).
+    // No query: the code files changed against the target branch.
     const base = await resolveBase({ cwd: info.root, configBase: config.baseBranch });
     queryPaths = (await changedFiles({ root: info.root, mergeBase: base.mergeBase })).map((f) => f.path).filter((p) => !isMarkdownCodePath(p));
     from = 'changed';
@@ -142,7 +141,7 @@ export async function recall({ cwd, home, paths = [], topics = [], ids = [], lim
     const { score, reasons } = scoreRecord(r.doc.meta, query);
     if (!score) continue;
     if (r.status === 'inactive') {
-      // Never served as a current rule (PLAN 18); named only when asked for by id.
+      // Never served as a current rule; named only when asked for by id.
       if (reasons.includes('id')) {
         inactive.push({
           id: r.id,
