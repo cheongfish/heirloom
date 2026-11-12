@@ -9,7 +9,9 @@ import {
   checkImports,
   checkNoDevFiles,
   checkSignUsage,
+  checkVendoredSeed,
 } from './checks.mjs';
+import { createHash } from 'node:crypto';
 
 /**
  * Create a temporary plugin root containing the given files.
@@ -153,4 +155,69 @@ test('sign usage: sign, aliased sign, namespace and dynamic import outside allow
   assert.match(errors, /apply-approval\/scripts\/c\.mjs/);
   assert.match(errors, /using-heirloom\/scripts\/d\.mjs/);
   assert.match(errors, /apply-approval\/scripts\/e\.mjs/, 'only verify may be imported outside lib/ and dashboard/');
+});
+
+/** @param {Record<string, string>} vendored file -> content @param {Record<string, string>} [extra] */
+function seedFixture(vendored, extra = {}, version = '3.2.1') {
+  const dir = 'skills/using-heirloom/dashboard/vendor/seed-design';
+  /** @type {Record<string, string>} */
+  const files = {};
+  /** @type {Record<string, string>} */
+  const hashes = {};
+  for (const [name, content] of Object.entries(vendored)) {
+    files[`${dir}/${name}`] = content;
+    hashes[name] = createHash('sha256').update(content).digest('hex');
+  }
+  files[`${dir}/VENDOR.json`] = JSON.stringify({ package: '@seed-design/css', version, files: hashes });
+  return { ...files, ...extra };
+}
+
+const SEED_OK = { LICENSE: 'Apache', NOTICE: 'notice', 'base.min.css': ':root{}', 'recipes/badge.css': '.seed-badge__root{}' };
+const STATIC = 'skills/using-heirloom/dashboard/static';
+
+test('vendored seed: pinned, licensed, unmodified copy with used classes passes', async (t) => {
+  const root = await fixture(seedFixture(SEED_OK, { [`${STATIC}/app.js`]: "el.className = 'seed-badge__root hl-x';\nconst v = '--seed-color-fg-neutral'; // data-seed" }));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  assert.deepEqual(await checkVendoredSeed(root), []);
+});
+
+test('vendored seed: wrong version, missing NOTICE, edited file, unlisted file are rejected', async (t) => {
+  const { NOTICE: _n, ...noNotice } = SEED_OK;
+  const files = seedFixture(noNotice, {}, '3.3.0');
+  files['skills/using-heirloom/dashboard/vendor/seed-design/base.min.css'] = ':root{color:red}';
+  files['skills/using-heirloom/dashboard/vendor/seed-design/recipes/extra.css'] = '';
+  const root = await fixture(files);
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const errors = await checkVendoredSeed(root);
+  assert.equal(errors.length, 4, errors.join('\n'));
+  assert.match(errors.join('\n'), /3\.3\.0/);
+  assert.match(errors.join('\n'), /NOTICE is required/);
+  assert.match(errors.join('\n'), /base\.min\.css: differs/);
+  assert.match(errors.join('\n'), /extra\.css: not listed/);
+});
+
+test('vendored seed: unknown or interpolated SEED classes, images and brand names in static/ are rejected', async (t) => {
+  const root = await fixture(
+    seedFixture(SEED_OK, {
+      [`${STATIC}/app.js`]: "a = 'seed-badge__root seed-nope'; b = `seed-badge__root--tone_${t}`;",
+      [`${STATIC}/logo.svg`]: '<svg/>',
+      [`${STATIC}/app.css`]: '/* 당근 */',
+    }),
+  );
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const errors = (await checkVendoredSeed(root)).join('\n');
+  assert.match(errors, /seed-nope is not defined/);
+  assert.match(errors, /seed-badge__root--tone_ is not defined/);
+  assert.match(errors, /logo\.svg: only HTML, JS and CSS/);
+  assert.match(errors, /app\.css: Karrot brand/);
+});
+
+test('vendored seed: index.html must link every vendored CSS file and nothing else', async (t) => {
+  const root = await fixture(
+    seedFixture(SEED_OK, { [`${STATIC}/index.html`]: '<link rel="stylesheet" href="/assets/seed/base.min.css"><link rel="stylesheet" href="/assets/seed/recipes/tabs.css">' }),
+  );
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const errors = (await checkVendoredSeed(root)).join('\n');
+  assert.match(errors, /recipes\/badge\.css is not linked/);
+  assert.match(errors, /links recipes\/tabs\.css, which is not vendored/);
 });

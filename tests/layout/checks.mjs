@@ -2,6 +2,7 @@
 // returns a list of human-readable violations (empty when the layout is valid).
 // See docs/HEIRLOOM-DESIGN.md sections 3 and 5 and AGENTS.md section 2.
 
+import { createHash } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -251,6 +252,89 @@ export async function checkSignUsage(root) {
       if (!named || names.some((n) => n !== 'verify')) {
         errors.push(`${where}: sign.mjs may only be imported as { verify } outside lib/ and dashboard/`);
       }
+    }
+  }
+  return errors;
+}
+
+export const SEED_PACKAGE = '@seed-design/css';
+export const SEED_VERSION = '3.2.1';
+const DASHBOARD = 'skills/using-heirloom/dashboard';
+const SEED_DIR = `${DASHBOARD}/vendor/seed-design`;
+const STATIC_DIR = `${DASHBOARD}/static`;
+const SEED_CLASS = /(?<![\w-])seed-[A-Za-z0-9_-]+/g;
+const BRAND = /당근|daangn|karrot/i;
+
+/**
+ * The vendored SEED Design CSS (MVP-PLAN 6.7): pinned version, LICENSE and NOTICE,
+ * files unchanged since vendoring, every SEED class the dashboard uses defined in the
+ * copied CSS, and no Karrot brand resources in the dashboard's own files.
+ * @param {string} root
+ * @returns {Promise<string[]>}
+ */
+export async function checkVendoredSeed(root) {
+  /** @type {string[]} */
+  const errors = [];
+  const seedDir = path.join(root, SEED_DIR);
+  let manifest;
+  try {
+    manifest = JSON.parse(await readFile(path.join(seedDir, 'VENDOR.json'), 'utf8'));
+  } catch {
+    return [`${SEED_DIR}/VENDOR.json: missing or not JSON (run tools/vendor-seed-design.mjs)`];
+  }
+  if (manifest.package !== SEED_PACKAGE || manifest.version !== SEED_VERSION) {
+    errors.push(`${SEED_DIR}: expected ${SEED_PACKAGE}@${SEED_VERSION}, found ${manifest.package}@${manifest.version}`);
+  }
+  const listed = Object.keys(manifest.files ?? {});
+  for (const required of ['LICENSE', 'NOTICE', 'base.min.css']) {
+    if (!listed.includes(required)) errors.push(`${SEED_DIR}: ${required} is required`);
+  }
+  let css = '';
+  for (const file of listed) {
+    let bytes;
+    try {
+      bytes = await readFile(path.join(seedDir, file));
+    } catch {
+      errors.push(`${SEED_DIR}/${file}: listed in VENDOR.json but missing`);
+      continue;
+    }
+    if (createHash('sha256').update(bytes).digest('hex') !== manifest.files[file]) {
+      errors.push(`${SEED_DIR}/${file}: differs from the vendored copy (do not edit; re-run tools/vendor-seed-design.mjs)`);
+    }
+    if (file.endsWith('.css')) css += bytes.toString('utf8');
+  }
+  const { files } = await walk(seedDir);
+  for (const file of files.sort()) {
+    const name = path.relative(seedDir, file).split(path.sep).join('/');
+    if (name !== 'VENDOR.json' && !listed.includes(name)) errors.push(`${SEED_DIR}/${name}: not listed in VENDOR.json`);
+  }
+
+  let html = '';
+  try {
+    html = await readFile(path.join(root, STATIC_DIR, 'index.html'), 'utf8');
+  } catch {
+    // no page yet
+  }
+  if (html) {
+    const linked = new Set([...html.matchAll(/href="\/assets\/seed\/([^"]+\.css)"/g)].map((m) => m[1]));
+    for (const file of listed.filter((f) => f.endsWith('.css'))) {
+      if (!linked.has(file)) errors.push(`${STATIC_DIR}/index.html: vendored ${file} is not linked`);
+    }
+    for (const file of linked) if (!listed.includes(file)) errors.push(`${STATIC_DIR}/index.html: links ${file}, which is not vendored`);
+  }
+
+  const defined = new Set([...css.matchAll(/\.(seed-[A-Za-z0-9_-]+)/g)].map((m) => m[1]));
+  const { files: own } = await walk(path.join(root, STATIC_DIR));
+  for (const file of own.sort()) {
+    const where = rel(root, file);
+    if (!/\.(html|js|css)$/.test(file)) {
+      errors.push(`${where}: only HTML, JS and CSS belong in dashboard/static/ (no images or brand resources)`);
+      continue;
+    }
+    const source = await readFile(file, 'utf8');
+    if (BRAND.test(source)) errors.push(`${where}: Karrot brand names must not appear in the dashboard`);
+    for (const cls of new Set([...source.matchAll(SEED_CLASS)].map((m) => m[0]))) {
+      if (!defined.has(cls)) errors.push(`${where}: class ${cls} is not defined in the vendored SEED CSS`);
     }
   }
   return errors;

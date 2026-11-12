@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { checkSkillFrontmatter, checkImports, checkNoDevFiles, checkSignUsage } from './checks.mjs';
+import { checkSkillFrontmatter, checkImports, checkNoDevFiles, checkSignUsage, checkVendoredSeed } from './checks.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -24,6 +24,10 @@ test('repository: no development files inside skills/', async () => {
 
 test('repository: sign() is only reachable from lib/ and dashboard/', async () => {
   assert.deepEqual(await checkSignUsage(ROOT), []);
+});
+
+test('repository: vendored SEED Design CSS is pinned, licensed, unmodified and covers the classes the dashboard uses', async () => {
+  assert.deepEqual(await checkVendoredSeed(ROOT), []);
 });
 
 test('repository: the four MVP skills exist', async () => {

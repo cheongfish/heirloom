@@ -14,5 +14,5 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true
   },
-  "include": ["skills/**/*.mjs", "tests/**/*.mjs"]
+  "include": ["skills/**/*.mjs", "tests/**/*.mjs", "tools/**/*.mjs"]
 }
