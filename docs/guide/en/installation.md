@@ -16,26 +16,24 @@ If Node is missing or older than 20, Heirloom does not block the session. The se
 
 ## Install
 
-Get the repository first.
+### As a marketplace plugin
+
+The repository is also a plugin marketplace (`.claude-plugin/marketplace.json`). Install from the `release` branch. It holds only the plugin files (`.claude-plugin/`, `hooks/`, `skills/`, `examples/`); tests and development files stay on `main`. Add it once and install the plugin. It then loads in every session.
+
+```text
+/plugin marketplace add <owner>/heirloom#release
+/plugin install heirloom@heirloom
+```
+
+Run `/plugin marketplace update heirloom` to pick up a new release.
+
+### For one session
+
+Clone the repository and start Claude Code with it as a plugin directory. Nothing is installed.
 
 ```sh
 git clone <heirloom repository URL> ~/tools/heirloom
 ```
-
-### As a marketplace plugin
-
-The repository is also a plugin marketplace (`.claude-plugin/marketplace.json`). Add it once and install the plugin. It then loads in every session.
-
-```text
-/plugin marketplace add ~/tools/heirloom
-/plugin install heirloom@heirloom
-```
-
-After `git pull` in the repository, run `/plugin marketplace update heirloom` to pick up the new version.
-
-### For one session
-
-Start Claude Code with the repository as a plugin directory. Nothing is installed.
 
 ```sh
 cd <your project>

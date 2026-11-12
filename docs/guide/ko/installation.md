@@ -16,26 +16,24 @@ Node를 찾지 못하거나 버전이 20 미만이면 Heirloom은 세션을 막�
 
 ## 설치
 
-먼저 저장소를 내려받습니다.
+### 마켓플레이스로 설치
+
+저장소 자체가 플러그인 마켓플레이스입니다(`.claude-plugin/marketplace.json`). `release` 브랜치에서 설치합니다. 이 브랜치에는 플러그인 파일(`.claude-plugin/`, `hooks/`, `skills/`, `examples/`)만 있고, 테스트와 개발용 파일은 `main`에만 있습니다. 한 번 추가하고 플러그인을 설치하면 모든 세션에서 불러옵니다.
+
+```text
+/plugin marketplace add <owner>/heirloom#release
+/plugin install heirloom@heirloom
+```
+
+새 release는 `/plugin marketplace update heirloom`으로 반영합니다.
+
+### 한 세션에서만 쓰기
+
+저장소를 내려받아 플러그인 디렉터리로 지정해 Claude Code를 실행합니다. 따로 설치되지는 않습니다.
 
 ```sh
 git clone <heirloom 저장소 URL> ~/tools/heirloom
 ```
-
-### 마켓플레이스로 설치
-
-저장소 자체가 플러그인 마켓플레이스입니다(`.claude-plugin/marketplace.json`). 한 번 추가하고 플러그인을 설치하면 모든 세션에서 불러옵니다.
-
-```text
-/plugin marketplace add ~/tools/heirloom
-/plugin install heirloom@heirloom
-```
-
-저장소에서 `git pull`한 뒤에는 `/plugin marketplace update heirloom`으로 새 버전을 반영합니다.
-
-### 한 세션에서만 쓰기
-
-저장소를 플러그인 디렉터리로 지정해 Claude Code를 실행합니다. 따로 설치되지는 않습니다.
 
 ```sh
 cd <작업할 프로젝트>

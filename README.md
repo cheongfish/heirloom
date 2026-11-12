@@ -12,12 +12,14 @@ Heirloom does not do the development work, and a handoff is not an approval. Onl
 
 Requires Node 20 or later, git and Claude Code. `gh` with a github.com remote is needed only to open PRs. There are no runtime dependencies to install.
 
+Install from the `release` branch, which holds only the plugin files:
+
 ```text
-/plugin marketplace add /path/to/heirloom
+/plugin marketplace add <owner>/heirloom#release
 /plugin install heirloom@heirloom
 ```
 
-To try it for one session without installing: `claude --plugin-dir /path/to/heirloom`.
+To try a checkout for one session without installing: `claude --plugin-dir /path/to/heirloom`.
 
 → [Installation guide](docs/guide/en/installation.md)
 
