@@ -7,6 +7,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { loadUserConfig } from './config.mjs';
 import { HeirloomError } from './errors.mjs';
 import { readJson } from './fsx.mjs';
 import { homePaths } from './paths.mjs';
@@ -15,10 +16,16 @@ import { VERSION } from './version.mjs';
 export const DEFAULT_PORT = 17380;
 const MAIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dashboard', 'main.mjs');
 
-/** @param {Record<string, string | undefined>} [env] */
-export function defaultPort(env = process.env) {
+/**
+ * Dashboard port: HEIRLOOM_PORT (development and tests), then the user config
+ * `dashboard.port`, then 17380.
+ * @param {string} home
+ * @param {Record<string, string | undefined>} [env]
+ */
+export async function resolvePort(home, env = process.env) {
   const n = Number(env.HEIRLOOM_PORT);
-  return Number.isInteger(n) && n > 0 && n < 65536 ? n : DEFAULT_PORT;
+  if (env.HEIRLOOM_PORT && Number.isInteger(n) && n > 0 && n < 65536) return n;
+  return (await loadUserConfig(home)).dashboard.port;
 }
 
 /**
@@ -93,7 +100,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * @param {{ home: string, port?: number, pluginRoot: string, env?: Record<string, string>, startTimeoutMs?: number }} options
  * @returns {Promise<{ status: 'reused' | 'started' | 'restarted', url: string, pid: number }>}
  */
-export async function ensureServer({ home, port = defaultPort(), pluginRoot, env = {}, startTimeoutMs = 5000 }) {
+export async function ensureServer({ home, port: requested, pluginRoot, env = {}, startTimeoutMs = 5000 }) {
+  const port = requested ?? (await resolvePort(home));
   const url = `http://127.0.0.1:${port}/`;
   const expected = await codeHash(pluginRoot);
   const health = await probeHealth(port);

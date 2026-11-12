@@ -37,7 +37,7 @@ export async function loadProjectConfig(root) {
 /**
  * @typedef {object} UserConfig
  * @property {1} schemaVersion
- * @property {{ idleMinutes: number, openBrowser: boolean, staleDays: number }} dashboard
+ * @property {{ idleMinutes: number, openBrowser: boolean, staleDays: number, port: number }} dashboard
  */
 
 /**
@@ -49,5 +49,5 @@ export async function loadUserConfig(home) {
   const raw = /** @type {Record<string, any> | undefined} */ (await readJson(file));
   if (raw !== undefined) assertValid(userConfigSchema, raw, file);
   const d = raw?.dashboard ?? {};
-  return { schemaVersion: 1, dashboard: { idleMinutes: d.idleMinutes ?? 30, openBrowser: d.openBrowser ?? true, staleDays: d.staleDays ?? 7 } };
+  return { schemaVersion: 1, dashboard: { idleMinutes: d.idleMinutes ?? 30, openBrowser: d.openBrowser ?? true, staleDays: d.staleDays ?? 7, port: d.port ?? 17380 } };
 }

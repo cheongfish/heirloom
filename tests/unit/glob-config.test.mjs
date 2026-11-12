@@ -62,7 +62,7 @@ test('loadProjectConfig: defaults without a file, merges and validates a file', 
 
 test('loadUserConfig: dashboard defaults', async () => {
   const home = await tempDir('home');
-  assert.deepEqual(await loadUserConfig(home), { schemaVersion: 1, dashboard: { idleMinutes: 30, openBrowser: true, staleDays: 7 } });
+  assert.deepEqual(await loadUserConfig(home), { schemaVersion: 1, dashboard: { idleMinutes: 30, openBrowser: true, staleDays: 7, port: 17380 } });
   await writeFile(path.join(home, 'config.json'), JSON.stringify({ schemaVersion: 1, dashboard: { idleMinutes: 5, staleDays: 3 } }));
-  assert.deepEqual((await loadUserConfig(home)).dashboard, { idleMinutes: 5, openBrowser: true, staleDays: 3 });
+  assert.deepEqual((await loadUserConfig(home)).dashboard, { idleMinutes: 5, openBrowser: true, staleDays: 3, port: 17380 });
 });

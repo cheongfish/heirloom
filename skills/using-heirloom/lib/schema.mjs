@@ -36,10 +36,11 @@ export const str = (opts = {}) => (v, at, errors) => {
   if (problem) errors.push(`${at}: ${problem}`);
 };
 
-/** @param {{ min?: number }} [opts] @returns {Validator} */
+/** @param {{ min?: number, max?: number }} [opts] @returns {Validator} */
 export const int = (opts = {}) => (v, at, errors) => {
   if (typeof v !== 'number' || !Number.isInteger(v)) return void errors.push(`${at}: 정수여야 함`);
   if (opts.min !== undefined && v < opts.min) errors.push(`${at}: ${opts.min} 이상이어야 함`);
+  if (opts.max !== undefined && v > opts.max) errors.push(`${at}: ${opts.max} 이하여야 함`);
 };
 
 /** @type {Validator} */
@@ -360,5 +361,5 @@ export const projectConfigSchema = object(
 
 export const userConfigSchema = object(
   { schemaVersion: v1 },
-  { optional: { dashboard: object({}, { optional: { idleMinutes: int({ min: 1 }), openBrowser: bool, staleDays: int({ min: 1 }) } }) } },
+  { optional: { dashboard: object({}, { optional: { idleMinutes: int({ min: 1 }), openBrowser: bool, staleDays: int({ min: 1 }), port: int({ min: 1024, max: 65535 }) } }) } },
 );

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { loadUserConfig } from '../lib/config.mjs';
 import { readJson, writeJsonAtomic } from '../lib/fsx.mjs';
 import { ensureDir, heirloomHome, homePaths } from '../lib/paths.mjs';
-import { codeHash, defaultPort } from '../lib/server-control.mjs';
+import { codeHash, resolvePort } from '../lib/server-control.mjs';
 import { VERSION } from '../lib/version.mjs';
 import { createDashboardServer } from './server.mjs';
 
@@ -42,7 +42,7 @@ async function shutdown(reason) {
 try {
   server = await createDashboardServer({
     home,
-    port: defaultPort(),
+    port: await resolvePort(home),
     version: VERSION,
     codeHash: hash,
     idleMs: config.dashboard.idleMinutes * 60_000,
