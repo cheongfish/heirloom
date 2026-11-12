@@ -3,19 +3,44 @@
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { watch } from 'node:fs';
-import { access, readdir } from 'node:fs/promises';
+import { access, readdir, readFile } from 'node:fs/promises';
 import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { draftDigest } from '../lib/canonical.mjs';
+import { loadUserConfig } from '../lib/config.mjs';
 import { HeirloomError, classifyError } from '../lib/errors.mjs';
 import { appendEvent, deriveState, readEvents } from '../lib/events.mjs';
 import { readJson } from '../lib/fsx.mjs';
+import { findUnhandedChanges, isStaleTask } from '../lib/overview.mjs';
 import { ensureDir, homePaths, taskPaths } from '../lib/paths.mjs';
+import { readRecords } from '../lib/records.mjs';
 import { PATTERNS } from '../lib/schema.mjs';
 import { VERSION } from '../lib/version.mjs';
 import { approveTask } from './approve.mjs';
 
 const MAX_BODY = 1024 * 1024;
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const STATIC_DIR = path.join(HERE, 'static');
+const SEED_DIR = path.join(HERE, 'vendor', 'seed-design');
+const TYPES = { '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
+
+/**
+ * Files served under /assets/: the dashboard's own app.js and app.css, and the vendored
+ * SEED CSS listed in VENDOR.json. Nothing else is reachable, so paths cannot escape.
+ * @returns {Promise<Map<string, { file: string, type: string }>>}
+ */
+async function assetMap() {
+  /** @type {Map<string, { file: string, type: string }>} */
+  const map = new Map();
+  for (const name of ['app.js', 'app.css']) map.set(name, { file: path.join(STATIC_DIR, name), type: TYPES[name.endsWith('.js') ? '.js' : '.css'] });
+  const manifest = /** @type {{ files: Record<string, string> } | undefined} */ (await readJson(path.join(SEED_DIR, 'VENDOR.json')));
+  for (const name of Object.keys(manifest?.files ?? {})) {
+    if (name.endsWith('.css')) map.set(`seed/${name}`, { file: path.join(SEED_DIR, ...name.split('/')), type: TYPES['.css'] });
+  }
+  return map;
+}
 
 /** @param {string} p */
 async function exists(p) {
@@ -39,24 +64,8 @@ async function exists(p) {
  * @property {number} [debounceMs]
  * @property {import('../lib/sign.mjs').Keystore} [keystore]
  * @property {(line: string) => void} [log]
+ * @property {() => number} [now] clock for the stale-task check (tests)
  */
-
-/** @param {string} token */
-function page(token) {
-  return `<!doctype html>
-<html lang="ko" data-seed data-seed-color-mode="system">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="heirloom-token" content="${token}">
-<title>Heirloom</title>
-</head>
-<body>
-<main><h1>Heirloom 대시보드</h1><p>화면은 M4b에서 구현한다.</p></main>
-</body>
-</html>
-`;
-}
 
 /**
  * @param {ServerOptions} options
@@ -73,7 +82,12 @@ export async function createDashboardServer(options) {
     debounceMs = 500,
     keystore,
     log = () => {},
+    now = Date.now,
   } = options;
+  const template = await readFile(path.join(STATIC_DIR, 'index.html'), 'utf8');
+  /** @param {string} token */
+  const page = (token) => template.replace('%HEIRLOOM_TOKEN%', token);
+  const assets = await assetMap();
   const token = randomBytes(32).toString('base64url');
   const tokenBuf = Buffer.from(token);
   /** @type {Set<http.ServerResponse>} */
@@ -166,7 +180,36 @@ export async function createDashboardServer(options) {
         updatedAt: events[events.length - 1].at,
       });
     }
-    return tasks.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+    tasks.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+    return tasks;
+  }
+
+  async function overview() {
+    const { staleDays } = (await loadUserConfig(home)).dashboard;
+    const at = now();
+    const tasks = (await listTasks()).map((t) => ({ ...t, stale: isStaleTask(t, at, staleDays) }));
+    const { changes, unchecked } = await findUnhandedChanges({ home });
+    return { tasks, unhanded: changes, unchecked, staleDays };
+  }
+
+  /**
+   * Existing records that update/supersede/deprecate ops point at, for display.
+   * @param {string} root
+   * @param {any[]} ops
+   */
+  async function targetsOf(root, ops) {
+    const wanted = new Set(ops.filter((op) => op.op !== 'add').map((op) => op.target));
+    /** @type {Record<string, { kind: string, title: string, active: boolean }>} */
+    const out = {};
+    if (!wanted.size) return out;
+    try {
+      for (const r of (await readRecords(root)).records) {
+        if (wanted.has(r.meta.id)) out[r.meta.id] = { kind: r.meta.kind, title: r.meta.title, active: r.meta.active };
+      }
+    } catch {
+      // repository gone: show ids only
+    }
+    return out;
   }
 
   /** @param {string} taskId */
@@ -181,16 +224,22 @@ export async function createDashboardServer(options) {
     } catch {
       // none yet
     }
+    const input = /** @type {any} */ (await readJson(paths.input));
+    // Approval ids are random; the event log gives the order.
+    const lastApproved = events.filter((e) => e.type === 'approved').at(-1)?.approvalId;
+    const latest = typeof lastApproved === 'string' && approvals.includes(lastApproved) ? await readJson(path.join(paths.approvals, `${lastApproved}.json`)) : undefined;
     return {
       taskId,
       state: deriveState(events),
-      input: (await readJson(paths.input)) ?? null,
+      input: input ?? null,
       draft: draft ?? null,
       draftInitial: (await readJson(paths.draftInitial)) ?? null,
       check: (await readJson(paths.check)) ?? null,
       draftSha256: draft === undefined ? null : draftDigest(draft),
       events,
       approvals,
+      latestApproval: latest ?? null,
+      targets: input && draft ? await targetsOf(input.repo.root, /** @type {any} */ (draft).records) : {},
     };
   }
 
@@ -217,7 +266,13 @@ export async function createDashboardServer(options) {
         });
         return res.end(page(token));
       }
-      if (pathname === '/api/tasks') return json(res, 200, { ok: true, tasks: await listTasks() });
+      if (pathname.startsWith('/assets/')) {
+        const asset = assets.get(pathname.slice('/assets/'.length));
+        if (!asset) return fail(res, 404, 'E_NOT_FOUND', '경로가 없음');
+        res.writeHead(200, { 'content-type': asset.type, 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff' });
+        return res.end(await readFile(asset.file));
+      }
+      if (pathname === '/api/tasks') return json(res, 200, { ok: true, ...(await overview()) });
       if (pathname === '/api/events') {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
         res.write(': connected\n\n');

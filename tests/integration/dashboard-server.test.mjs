@@ -258,3 +258,52 @@ test('idle shutdown fires without requests or SSE clients, not while an SSE clie
   assert.equal(idleB, 0, 'an open SSE connection keeps the server alive');
   req.destroy();
 });
+
+test('static assets: page links the vendored SEED CSS, app.css and app.js; only listed files are served', async (t) => {
+  const s = await start(await tempDir('home'));
+  t.after(() => s.close());
+  const page = await request(s.port, { path: '/r/r-x/w/w-y/t/t-20261112-abcdefgh' });
+  assert.equal(page.status, 200);
+  const hrefs = [...page.text.matchAll(/(?:href|src)="(\/assets\/[^"]+)"/g)].map((m) => m[1]);
+  assert.ok(hrefs.includes('/assets/seed/base.min.css'));
+  assert.ok(hrefs.includes('/assets/seed/recipes/action-button.css'));
+  assert.ok(hrefs.includes('/assets/app.css'));
+  assert.ok(hrefs.includes('/assets/app.js'));
+  for (const href of hrefs) {
+    const r = await request(s.port, { path: href });
+    assert.equal(r.status, 200, href);
+    assert.match(String(r.headers['content-type']), href.endsWith('.js') ? /text\/javascript/ : /text\/css/);
+    assert.equal(r.headers['x-content-type-options'], 'nosniff');
+  }
+  assert.equal((await request(s.port, { path: '/assets/seed/VENDOR.json' })).status, 404);
+  assert.equal((await request(s.port, { path: '/assets/seed/LICENSE' })).status, 404);
+  assert.equal((await request(s.port, { path: '/assets/../server.mjs' })).status, 404);
+  assert.equal((await request(s.port, { path: '/assets/%2e%2e/server.mjs' })).status, 404);
+});
+
+test('task list: stale flag and the overview sections', async (t) => {
+  const { home, taskId } = await submittedTask();
+  const s = await start(home, { now: () => Date.now() + 8 * 24 * 3600_000 });
+  t.after(() => s.close());
+  const list = await request(s.port, { path: '/api/tasks' });
+  assert.equal(list.status, 200);
+  assert.equal(list.body.staleDays, 7);
+  assert.equal(list.body.tasks[0].taskId, taskId);
+  assert.equal(list.body.tasks[0].stale, true);
+  assert.deepEqual(list.body.unhanded, []);
+  assert.deepEqual(list.body.unchecked, []);
+});
+
+test('task detail: targets of supersede/deprecate/update ops and the latest approval', async (t) => {
+  const { home, taskId } = await submittedTask();
+  const s = await start(home);
+  t.after(() => s.close());
+  const task = (await request(s.port, { path: `/api/tasks/${taskId}` })).body;
+  assert.deepEqual(task.targets, {});
+  assert.equal(task.latestApproval, null);
+  await post(s, `/api/tasks/${taskId}/approve`, approvalBody(task));
+  const after = (await request(s.port, { path: `/api/tasks/${taskId}` })).body;
+  assert.equal(after.state, 'approved');
+  assert.equal(after.latestApproval.summary.final[0], 'a를 2로 바꿨다 (사람이 고침)');
+  assert.ok(!JSON.stringify(after).includes(s.token));
+});

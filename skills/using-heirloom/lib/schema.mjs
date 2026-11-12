@@ -354,5 +354,5 @@ export const projectConfigSchema = object(
 
 export const userConfigSchema = object(
   { schemaVersion: v1 },
-  { optional: { dashboard: object({}, { optional: { idleMinutes: int({ min: 1 }), openBrowser: bool } }) } },
+  { optional: { dashboard: object({}, { optional: { idleMinutes: int({ min: 1 }), openBrowser: bool, staleDays: int({ min: 1 }) } }) } },
 );

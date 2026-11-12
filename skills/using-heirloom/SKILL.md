@@ -41,6 +41,16 @@ Only a human approves, and only in the Heirloom dashboard.
 - Never tell the user that something is approved unless `apply-approval` verified a signed approval.
 - When the session start lists an approved but unapplied handoff, tell the user. Run `apply-approval` when the user asks you to.
 
+## Dashboard
+
+When the user wants to see pending approvals or reopen a handoff screen, run:
+
+```sh
+node <this skill>/scripts/open-dashboard.mjs [--task <taskId>]
+```
+
+Without `--task` it opens the overview of all handoffs. It prints the `url`; if `opened` is false, give the URL to the user. Never call the dashboard's HTTP API yourself.
+
 ## Commit messages
 
 When the session start lists commit message guide files, read them and follow them for every commit.

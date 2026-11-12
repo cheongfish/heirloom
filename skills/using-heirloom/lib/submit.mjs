@@ -2,8 +2,9 @@
 
 import { access } from 'node:fs/promises';
 
+import { openDashboard } from './dashboard-open.mjs';
 import { checkDraft } from './draft-check.mjs';
-import { HeirloomError } from './errors.mjs';
+import { HeirloomError, classifyError } from './errors.mjs';
 import { appendEvent, deriveState, readEvents } from './events.mjs';
 import { readJson, writeFileAtomic, writeJsonAtomic } from './fsx.mjs';
 import { git } from './git.mjs';
@@ -102,4 +103,27 @@ export async function submitDraft({ home, taskId }) {
       dashboardUrl: null,
     };
   });
+}
+
+/**
+ * submit-draft.mjs: register the draft, then make sure the dashboard runs and open it once
+ * per task. A dashboard problem never fails the submit: the draft and the waiting state are
+ * kept and the hint tells the user how to reach the screen (PLAN 11.3).
+ * @param {{ home: string, taskId: string } & Pick<import('./dashboard-open.mjs').OpenOptions, 'ensure' | 'open'>} options
+ */
+export async function submitAndOpen({ home, taskId, ensure, open }) {
+  const result = await submitDraft({ home, taskId });
+  try {
+    const d = await openDashboard({ home, taskId, once: true, ensure, open });
+    return { ...result, dashboardUrl: d.url, browserOpened: d.opened, browserNote: d.reason, dashboardError: null };
+  } catch (err) {
+    const e = classifyError(err);
+    return {
+      ...result,
+      dashboardUrl: null,
+      browserOpened: false,
+      browserNote: null,
+      dashboardError: { code: e.code, message: e.message, hint: e.hint ?? null },
+    };
+  }
 }

@@ -95,14 +95,16 @@ node <this skill>/scripts/submit-draft.mjs --task <taskId>
 
 - `E_VERIFY` (exit 4): the message lists each error with its JSON path. Fix them in `draftPath` and submit again. Stop after two rounds of fixes, and report the remaining errors to the user.
 - `E_CONFLICT` "소스가 바뀜": the code changed after step 1. Run step 1 again and rewrite the draft from the new result.
-- On success the state is `awaiting_approval`.
+- On success the state is `awaiting_approval`. The script also starts the dashboard and opens the browser the first time for this task.
+  - `dashboardUrl`: the task screen. `browserOpened` is false when the browser was already opened for this task, automatic opening is turned off, or no browser command worked (`browserNote` says which).
+  - `dashboardError` is set when the dashboard could not start, for example because another program uses its port. The handoff is still saved and waiting. Pass the message and the hint to the user.
 
 ## 4. Report
 
 Tell the user three things:
 
 - The handoff is ready and waiting for their approval.
-- Where the handoff file is (`handoffPath`).
+- Where to approve it: `dashboardUrl`, or the `dashboardError` hint when the dashboard did not start. Mention `handoffPath` as the readable copy.
 - Any warnings and unknown values.
 
 Do not say the work is approved. The approval may come hours later. You can end the session, because `apply-approval` continues from the saved approval.
