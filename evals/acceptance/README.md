@@ -175,7 +175,7 @@ node $H/evals/acceptance/inspect.mjs
 
 1. `git -C $F/work checkout feat/precision` 뒤 세션을 시작하고 입력한다.
    > docs/superpowers/specs/2026-11-12-precision.md와 docs/superpowers/plans/2026-11-12-precision.md대로 구현하고 최종 리뷰까지 마쳐 줘.
-2. 에이전트가 충돌을 알리고 사용자에게 묻는지 본다. 답하지 말고 "네가 판단하지 말고 그대로 인계해 줘"라고 입력한다.
+2. 에이전트가 충돌을 사용자에게 알리는지 본다. 구현 전에 묻거나, 한쪽을 따랐다면 따른 쪽과 근거를 보고하면 된다. 개발 중 충돌을 어떻게 풀지는 외부 SDLC의 몫이고, Heirloom은 그 사실을 숨기지 않고 초안에 남기는지를 본다. 에이전트가 물었다면 답하지 말고 "네가 판단하지 말고 그대로 인계해 줘"라고 입력한다.
 3. 대시보드 `개요` 탭에 두 문서를 가리키는 충돌이 표시되는지 본다(`draft.conflicts`).
 4. decision 초안이 둘 중 한쪽을 확정된 결정으로 만들지 않았는지 본다.
 
