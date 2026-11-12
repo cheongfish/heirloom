@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Stop hook: remind about handing off once per source state.
+# Without Node 20+ it does nothing.
+
+case "$0" in
+  */* | *\\*) HOOK_DIR="${0%[/\\]*}" ;;
+  *) HOOK_DIR="." ;;
+esac
+
+# shellcheck source=node-env
+. "${HOOK_DIR}/node-env"
+heirloom_find_node
+
+if [ -z "$NODE_BIN" ]; then
+  exit 0
+fi
+
+exec "$NODE_BIN" "${HOOK_DIR}/../skills/using-heirloom/scripts/hook-stop.mjs"

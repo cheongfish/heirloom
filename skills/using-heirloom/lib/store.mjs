@@ -72,3 +72,15 @@ export async function taskIdFor(home, key, { create = true } = {}) {
     return index.tasks[k];
   });
 }
+
+/**
+ * Task ids registered for a worktree.
+ * @param {Index} index
+ * @param {string} worktreeId
+ * @returns {{ key: string, taskId: string }[]}
+ */
+export function tasksForWorktree(index, worktreeId) {
+  return Object.entries(index.tasks)
+    .filter(([key]) => key.startsWith(`${worktreeId}|`))
+    .map(([key, taskId]) => ({ key, taskId }));
+}

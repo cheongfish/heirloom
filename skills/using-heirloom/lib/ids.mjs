@@ -110,3 +110,24 @@ export async function resolveIds(home, info) {
     return { repoId, worktreeId };
   });
 }
+
+/**
+ * Read existing ids without creating anything. Null when this checkout has never been
+ * used with Heirloom.
+ * @param {{ gitDir: string, commonDir: string }} info
+ * @returns {Promise<{ repoId: string, worktreeId: string } | null>}
+ */
+export async function readIds(info) {
+  /** @param {string} file @param {RegExp} pattern */
+  const read = async (file, pattern) => {
+    try {
+      const value = (await readFile(file, 'utf8')).trim();
+      return pattern.test(value) ? value : null;
+    } catch {
+      return null;
+    }
+  };
+  const repoId = await read(path.join(info.commonDir, 'heirloom-repo-id'), ID_PATTERNS.repo);
+  const worktreeId = await read(path.join(info.gitDir, 'heirloom-worktree-id'), ID_PATTERNS.worktree);
+  return repoId && worktreeId ? { repoId, worktreeId } : null;
+}
