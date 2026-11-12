@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Fake `gh` for tests. Appends its argv to $FAKE_GH_LOG and answers from $FAKE_GH_STATE:
-// { "authed": true, "prs": [{ "number", "url", "state", "headRefName", "baseRefName" }], "fail": "network" }
-import { appendFileSync, readFileSync } from 'node:fs';
+// { "authed": true, "prs": [{ "number", "url", "state", "headRefName", "baseRefName", "body" }], "fail": "network" }
+// `pr create` and `pr edit` write back to the state file, so a later `pr list` finds the PR and
+// its body can be checked (used by the acceptance runs).
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
 if (process.env.FAKE_GH_LOG) appendFileSync(process.env.FAKE_GH_LOG, `${JSON.stringify(args)}\n`);
@@ -10,6 +12,9 @@ try {
   state = { ...state, ...JSON.parse(readFileSync(String(process.env.FAKE_GH_STATE), 'utf8')) };
 } catch {
   // defaults
+}
+function save() {
+  if (process.env.FAKE_GH_STATE) writeFileSync(process.env.FAKE_GH_STATE, JSON.stringify(state, null, 2));
 }
 const flag = (name) => {
   const i = args.indexOf(name);
@@ -33,7 +38,22 @@ if (args[0] === '--version') {
   const prs = state.prs.filter((p) => p.headRefName === head && (wanted === 'all' || p.state.toLowerCase() === wanted));
   process.stdout.write(JSON.stringify(prs));
 } else if (args[0] === 'pr' && args[1] === 'create') {
-  process.stdout.write(`${state.createUrl ?? 'https://github.com/acme/widgets/pull/1'}\n`);
+  const number = state.prs.reduce((n, p) => Math.max(n, p.number), 0) + 1;
+  const url = state.createUrl ?? `https://github.com/${flag('--repo') ?? 'acme/widgets'}/pull/${number}`;
+  const body = flag('--body-file') ? readFileSync(flag('--body-file'), 'utf8') : (flag('--body') ?? '');
+  state.prs.push({ number, url, state: 'OPEN', headRefName: flag('--head'), baseRefName: flag('--base'), title: flag('--title'), body });
+  save();
+  process.stdout.write(`${url}\n`);
+} else if (args[0] === 'pr' && args[1] === 'edit') {
+  const pr = state.prs.find((p) => String(p.number) === args[2] || p.url === args[2]);
+  if (!pr) {
+    process.stderr.write(`no pull requests found for ${args[2]}\n`);
+    process.exit(1);
+  }
+  if (flag('--body-file')) pr.body = readFileSync(flag('--body-file'), 'utf8');
+  else if (flag('--body') !== undefined) pr.body = flag('--body');
+  save();
+  process.stdout.write(`${pr.url}\n`);
 } else if (args[0] === 'pr' && args[1] === 'view') {
   if (state.fail === 'network') {
     process.stderr.write('error connecting to api.github.com\n');

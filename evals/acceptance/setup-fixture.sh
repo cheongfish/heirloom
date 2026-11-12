@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 수동 수용 점검용 소비 프로젝트를 만든다 (MVP-PLAN M6, PLAN 18절).
+# 수동 수용 점검용 소비 프로젝트를 만든다 (MVP A1~A10, 3차 B1~B6).
 #
 #   upstream/   원격 역할의 저장소 (main)
 #   work/       작업 저장소 (upstream의 clone)
@@ -9,13 +9,18 @@
 #   feat/format           자료 누락 (spec이 없는 설계 문서를 참조함)
 #   feat/precision        문서 충돌 (spec과 plan이 반올림에 대해 다름)
 #   feat/rounding-change  병렬 worktree (feat/kelvin의 반올림 결정을 대체하는 spec)
+#   feat/units            3차 증분 재확인 (서로 다른 파일에 걸린 decision 두 개)
 #
 # 사용법:
-#   setup-fixture.sh <빈 디렉터리>                  로컬 원격. PR 단계는 not_github로 건너뜀
+#   setup-fixture.sh <빈 디렉터리>                  로컬 원격. PR 단계는 unsupported_remote로 건너뜀
 #   setup-fixture.sh <빈 디렉터리> <GitHub 저장소 URL>  비어 있는 개인 GitHub 저장소로 PR까지 점검
+#   setup-fixture.sh <빈 디렉터리> --fake-github     원격 주소는 github.com 형식, push는 로컬 upstream.
+#   setup-fixture.sh <빈 디렉터리> --fake-gitlab     원격 주소는 gitlab.com 형식, push는 로컬 upstream.
+#     가짜 모드는 tests/helpers/fake-gh·fake-glab를 PATH 앞에 두고 GIT_SSH_COMMAND=false로 쓴다.
+#     fetch는 실패하므로 upstream의 변경은 fetch-local.sh로 가져온다.
 set -euo pipefail
 
-target="${1:?usage: setup-fixture.sh <empty directory> [github-remote-url]}"
+target="${1:?usage: setup-fixture.sh <empty directory> [github-remote-url | --fake-github | --fake-gitlab]}"
 github="${2:-}"
 if [ -e "$target" ] && [ -n "$(ls -A "$target" 2>/dev/null)" ]; then
   echo "비어 있지 않은 디렉터리: $target" >&2
@@ -43,6 +48,11 @@ JSON
 # <type>: <요약>
 # type: feat, fix, docs, test, chore
 TXT
+  if [ "$github" = "--fake-gitlab" ]; then
+    mkdir -p .gitlab/merge_request_templates
+    printf '## 요약\n\n## 테스트\n' > .gitlab/merge_request_templates/Default.md
+    printf '## 버그\n\n## 재현\n' > .gitlab/merge_request_templates/Bug.md
+  fi
   g add -A
   g commit -q -m "initial"
 )
@@ -113,16 +123,35 @@ spec_branch feat/rounding-change docs/superpowers/specs/2026-11-13-rounding.md "
 - 켈빈 변환 결과는 소수 둘째 자리에서 반올림한다. 화면마다 반올림이 달라 결과가 어긋나기 때문이다. "반올림하지 않는다"는 기존 결정을 대체한다.
 MD
 
+spec_branch feat/units docs/superpowers/specs/2026-11-14-units.md "docs: units spec" <<'MD'
+# 켈빈 변환과 섭씨 표시
+
+## 요구사항
+- `src/temperature.mjs`에 `celsiusToKelvin(c)`와 `kelvinToCelsius(k)`를 추가한다. 절대영도(-273.15°C) 미만 입력은 `RangeError`를 던진다.
+- `src/format.mjs`에 `formatCelsius(c)`를 추가한다. 예: `formatCelsius(21.456)`은 `"21.5°C"`.
+- `node --test`로 실행되는 테스트를 `test/` 아래에 둔다.
+
+## 결정
+- 켈빈 변환 결과는 반올림하지 않는다. 표시 형식은 화면마다 다르므로 호출하는 쪽이 정해야 하기 때문이다.
+- 섭씨 표시는 소수 첫째 자리까지 고정하고 단위 기호 `°C`를 붙인다. 화면마다 표기가 달라 사용자가 값을 비교하기 어려웠기 때문이다.
+MD
+
 git checkout -q feat/kelvin
 
-if [ -n "$github" ]; then
+if [ "$github" = "--fake-github" ] || [ "$github" = "--fake-gitlab" ]; then
+  host=github.com
+  [ "$github" = "--fake-gitlab" ] && host=gitlab.com
+  git remote set-url origin "git@$host:acme/widgets.git"
+  git remote set-url --push origin "$target/upstream"
+  echo "원격: git@$host:acme/widgets.git (가짜. push는 $target/upstream, fetch는 fetch-local.sh)"
+elif [ -n "$github" ]; then
   git remote set-url origin "$github"
   git push -q origin main:main
   git fetch -q origin
   git remote set-head origin main
   echo "원격: $github (main을 올림)"
 else
-  echo "원격: $target/upstream (로컬). PR 단계는 not_github로 건너뛴다."
+  echo "원격: $target/upstream (로컬). PR 단계는 unsupported_remote로 건너뛴다."
 fi
 
 echo "작업 저장소: $target/work (브랜치 feat/kelvin)"

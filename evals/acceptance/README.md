@@ -1,5 +1,7 @@
 # MVP 수용 점검
 
+3차 기능(증분 재확인, GitLab MR, 맥락 정리)의 점검 B1~B6은 [phase3.md](phase3.md)에 있다.
+
 MVP-PLAN M6의 마지막 항목으로, PLAN 18절의 수용 시나리오 가운데 MVP 범위인 10개를 실제 Claude Code 세션에서 사람이 끝까지 돌려 본다. CI에서는 실행하지 않는다. '리뷰 후 수정'은 3차의 증분 재확인이 있어야 하므로 빠진다.
 
 자동 테스트가 이미 확인한 스크립트 동작(중복 반영 방지, 승인 복구, 서명 검증 등)을 다시 보는 것이 목적이 아니다. **에이전트가 규약대로 행동하는지**와 **흐름이 실제 세션에서 끝까지 이어지는지**를 본다.
@@ -20,7 +22,7 @@ MVP-PLAN M6의 마지막 항목으로, PLAN 18절의 수용 시나리오 가운�
 
 1. 원격 모드를 정한다.
    - **GitHub 모드(권장).** 비어 있는 개인 GitHub 저장소를 하나 만들고 `gh auth login`을 해 둔다. PR 생성까지 점검한다. 점검이 끝나면 저장소를 지운다.
-   - **로컬 모드.** 원격이 로컬 디렉터리다. PR 단계는 `pr.available: false`, `reason: not_github`로 건너뛰고, 에이전트가 PR을 만들지 않고 알리는지만 본다. 머지는 `merge-local.sh`로 흉내 낸다.
+   - **로컬 모드.** 원격이 로컬 디렉터리다. PR 단계는 `pr.available: false`, `reason: unsupported_remote`로 건너뛰고, 에이전트가 PR을 만들지 않고 알리는지만 본다. 머지는 `merge-local.sh`로 흉내 낸다.
 2. 마켓플레이스로 설치한 Heirloom이 있으면 꺼 둔다(`/plugin disable heirloom@heirloom`). 작업 트리의 코드를 `--plugin-dir`로 불러온다.
 3. 실행(Run)마다 새 fixture와 새 `HEIRLOOM_HOME`을 쓴다. 평소 쓰는 대시보드와 섞이지 않도록 포트를 바꾼다.
 
@@ -71,7 +73,7 @@ HEIRLOOM_HOME=$F/home node $H/evals/acceptance/inspect.mjs --events <taskId>
 3. 대시보드에서 작업 경계(브랜치, 변경 파일, spec), PR 요약, decision 초안을 확인한다. 초안에는 spec의 '반올림하지 않는다' 결정이 출처 인용과 함께 있어야 한다. 요약 불릿 하나를 고치고 승인한다.
 4. 세션을 연 채로 승인했다면, 입력하지 않아도 에이전트가 승인 알림을 받아 바로 반영하는지 본다. 세션이 이미 끝났거나 대기 시간(60분)이 지났다면 새 세션에서 입력한다.
    > 승인된 인계 반영해줘.
-5. 에이전트가 기록 파일을 커밋하고 PR을 만드는지 본다(GitHub 모드). 로컬 모드에서는 PR을 만들지 않고 `not_github`를 알리는지 본다.
+5. 에이전트가 기록 파일을 커밋하고 PR을 만드는지 본다(GitHub 모드). 로컬 모드에서는 PR을 만들지 않고 `unsupported_remote`를 알리는지 본다.
 6. 세션을 끝낸다. **머지 전에** 새 세션을 시작해 `<heirloom-project>`의 색인을 본다(에이전트에게 "Heirloom 색인 보여줘"). 새 decision이 `[머지 대기]`로 보여야 한다.
 7. 머지한다.
    - GitHub 모드: PR을 머지하고 `git -C $F/work fetch`.
