@@ -2,7 +2,7 @@
   "$schema": "https://antigravity.google/schemas/v1/plugin.json",
   "name": "heirloom",
   "displayName": "Heirloom",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Wraps up work done by external SDLC tools: prepares handoffs, collects human approval of PR summaries and decisions in a local dashboard, and preserves active decisions and axioms for the next task.",
   "author": {
     "name": "cheongfish"
