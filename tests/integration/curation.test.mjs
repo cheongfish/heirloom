@@ -21,6 +21,7 @@ import { renderBody, serializeRecord } from '../../skills/using-heirloom/lib/rec
 import { codeHash } from '../../skills/using-heirloom/lib/server-control.mjs';
 import { readIndex } from '../../skills/using-heirloom/lib/store.mjs';
 import { buildSessionContext } from '../../skills/using-heirloom/lib/session-context.mjs';
+import { recordSessionHost } from '../../skills/using-heirloom/lib/session-host.mjs';
 import { evaluateStop } from '../../skills/using-heirloom/lib/reminder.mjs';
 
 process.env.HEIRLOOM_KEYSTORE = 'file';
@@ -273,8 +274,10 @@ test('curation: Codex and Antigravity profiles run the same flow; an Antigravity
   const f = await fixture();
   t.after(() => f.server.close());
 
-  // Codex: the policy file the per-run hook reads is written before the run.
-  await writeFile(path.join(f.home, 'config.json'), JSON.stringify({ schemaVersion: 1, curation: { agent: { host: 'codex' } } }));
+  // Codex, chosen by the repository's last session (no host in the config): the policy file the
+  // per-run hook reads is written before the run.
+  await recordSessionHost({ home: f.home, cwd: f.user.dir, host: 'codex' });
+  assert.deepEqual((await f.call(`/api/repos/${f.repoId}/curation`)).body.agent, { host: 'codex', source: 'session' });
   const started = await f.post(`/api/repos/${f.repoId}/curate`, {});
   assert.equal(started.status, 200, JSON.stringify(started.body));
   const { taskId, worktree } = started.body;
@@ -284,11 +287,13 @@ test('curation: Codex and Antigravity profiles run the same flow; an Antigravity
   assert.equal(codexCall.cwd, worktree);
   assert.equal(codexCall.args[0], 'exec');
   assert.ok(codexCall.args.includes('--ignore-user-config'));
+  assert.equal((await f.call(`/api/tasks/${taskId}`)).body.agent.last.host, 'codex');
   const policy = JSON.parse(await readFile(path.join(f.home, 'tasks', taskId, 'agent-curate.policy.json'), 'utf8'));
   assert.deepEqual(policy.writes, [path.join(f.home, 'tasks', taskId, 'draft.json')]);
   assert.equal(deriveState(await readEvents(taskPaths(f.home, taskId).events)), 'awaiting_approval');
 
-  // Antigravity: a run stopped by a missing permission exits with 0 but is a failure.
+  // Antigravity from the user config (no session recorded): a run stopped by a missing
+  // permission exits with 0 but is a failure.
   const g = await fixture();
   t.after(() => g.server.close());
   await writeFile(path.join(g.home, 'config.json'), JSON.stringify({ schemaVersion: 1, curation: { agent: { host: 'antigravity' } } }));

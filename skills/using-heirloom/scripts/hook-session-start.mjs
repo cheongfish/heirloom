@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { emit, hookHost, logHook, readStdinJson } from '../lib/hook-io.mjs';
 import { heirloomHome } from '../lib/paths.mjs';
 import { buildSessionContext } from '../lib/session-context.mjs';
+import { recordSessionHost, sessionHostOf } from '../lib/session-host.mjs';
 
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const host = hookHost(process.argv[2]);
@@ -30,4 +31,13 @@ if (process.env.HEIRLOOM_DISABLE_CONVENTION !== '1') {
   output = host.sessionStartOutput(context);
 }
 if (output !== null) emit(output);
+// Context curation of this repository runs with the host of its latest session.
+const sessionHost = sessionHostOf(process.argv[2], raw);
+if (sessionHost) {
+  try {
+    await recordSessionHost({ home, cwd, host: sessionHost });
+  } catch (err) {
+    process.stderr.write(`heirloom session-start: ${err instanceof Error ? err.message : String(err)}\n`);
+  }
+}
 await logHook({ home, hook: 'session-start', host: host.name, input: raw, output });

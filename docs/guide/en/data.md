@@ -25,7 +25,7 @@ The environment variable `HEIRLOOM_HOME` changes this location. Directories are 
 | Path | Content |
 | --- | --- |
 | `config.json` | Optional. [User settings](configuration.md#user-settings) |
-| `index.json` | Worktree registry and the task key → task ID mapping |
+| `index.json` | Worktree registry (including the host of each worktree's last session) and the task key → task ID mapping |
 | `ids/<hash>/heirloom-repo-id`, `heirloom-worktree-id` | Repository and worktree IDs, only when the repository's `.git` cannot be written (for example in Codex's default sandbox). Normally these IDs live in `.git`. |
 | `tasks/<taskId>/input.json` | Input frozen at handoff (source state, materials) |
 | `tasks/<taskId>/draft.json`, `draft.initial.json` | The agent's draft and a copy of its first version |

@@ -26,7 +26,9 @@ import path from 'node:path';
 import { loadUserConfig } from './config.mjs';
 import { HeirloomError } from './errors.mjs';
 import { appendEvent, readEvents } from './events.mjs';
+import { readJson } from './fsx.mjs';
 import { taskPaths } from './paths.mjs';
+import { curationAgent } from './session-host.mjs';
 
 /** @typedef {'curate' | 'apply'} AgentPhase */
 /** @typedef {'claude-code' | 'codex' | 'antigravity'} AgentHost */
@@ -197,8 +199,9 @@ function alive(pid) {
 
 /**
  * @typedef {object} AgentStatus
- * @property {{ phase: AgentPhase, pid: number, log: string, at: string } | null} running
- * @property {{ phase: AgentPhase, exitCode: number | null, timedOut: boolean, error: string | null, at: string, log: string | null } | null} last
+ * @property {{ phase: AgentPhase, pid: number, log: string, at: string, host: AgentHost } | null} running
+ * @property {{ phase: AgentPhase, exitCode: number | null, timedOut: boolean, error: string | null, at: string, log: string | null, host: AgentHost } | null} last
+ *   `host`: the profile the run used (runs recorded before hosts were tracked count as Claude Code)
  *   the last finished run; a run whose process is gone without a finish notice counts as
  *   finished with error `interrupted`
  */
@@ -224,12 +227,14 @@ export function agentStatusOf(events) {
         error: typeof e.error === 'string' ? e.error : null,
         at: e.at,
         log: typeof started?.log === 'string' ? started.log : null,
+        host: started?.host ?? 'claude-code',
       };
     }
   }
   for (const e of open.values()) {
-    if (alive(e.pid)) status.running = { phase: e.phase, pid: e.pid, log: e.log, at: e.at };
-    else if (!status.last || status.last.at < e.at) status.last = { phase: e.phase, exitCode: null, timedOut: false, error: 'interrupted', at: e.at, log: e.log };
+    const host = e.host ?? 'claude-code';
+    if (alive(e.pid)) status.running = { phase: e.phase, pid: e.pid, log: e.log, at: e.at, host };
+    else if (!status.last || status.last.at < e.at) status.last = { phase: e.phase, exitCode: null, timedOut: false, error: 'interrupted', at: e.at, log: e.log, host };
   }
   return status;
 }
@@ -245,7 +250,9 @@ export async function startAgent({ home, taskId, phase, worktree, pluginRoot, ti
   if (agentStatusOf(await readEvents(paths.events)).running) {
     throw new HeirloomError('E_CONFLICT', '이 작업의 헤드리스 실행이 아직 진행 중임');
   }
-  const { agent } = (await loadUserConfig(home)).curation;
+  // The host of the repository's latest session, else the configured one.
+  const meta = /** @type {{ repoId?: string } | undefined} */ (await readJson(paths.curation));
+  const agent = meta?.repoId ? await curationAgent({ home, repoId: meta.repoId }) : (await loadUserConfig(home)).curation.agent;
   const run = agentInvocation({ agent, phase, taskId, worktree, taskDir: paths.dir, pluginRoot, home });
   for (const file of run.files) await writeFile(file.path, file.content, { mode: 0o600 });
   const logFile = paths.agentLog(phase);
@@ -282,7 +289,7 @@ export async function startAgent({ home, taskId, phase, worktree, pluginRoot, ti
     return { pid: null, log: logFile, error: /** @type {string} */ (error) };
   }
   const pid = child.pid;
-  await appendEvent(paths.events, { type: 'agent_started', phase, pid, log: logFile });
+  await appendEvent(paths.events, { type: 'agent_started', phase, pid, log: logFile, host: agent.host });
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;

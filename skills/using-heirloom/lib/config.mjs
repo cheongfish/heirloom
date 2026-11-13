@@ -46,7 +46,7 @@ export async function loadProjectConfig(root) {
 }
 
 /** The command each headless profile runs when `curation.agent.command` is not set. */
-const AGENT_COMMANDS = /** @type {Record<string, string>} */ ({ 'claude-code': 'claude', codex: 'codex', antigravity: 'agy' });
+export const AGENT_COMMANDS = /** @type {Record<string, string>} */ ({ 'claude-code': 'claude', codex: 'codex', antigravity: 'agy' });
 
 /**
  * @typedef {object} UserConfig

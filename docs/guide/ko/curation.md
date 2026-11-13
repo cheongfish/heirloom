@@ -48,6 +48,6 @@ decision이 대상 브랜치에서 활성이고, 머지된 어떤 정리에서�
 
 - 헤드리스 에이전트는 사용자 권한으로 실행되고 사용자의 `gh`·`glab` 로그인을 씁니다. 단계마다 쓸 수 있는 도구를 제한합니다([보안](security.md#헤드리스-정리-실행) 참고).
 - PR은 github.com 원격에서, MR은 GitLab 원격에서만 만듭니다. 다른 원격이면 기록을 정리 worktree에 커밋하는 데까지 하고, 브랜치 push와 머지는 직접 해야 합니다.
-- 실행 명령은 사용자 설정 `curation.agent`에서 읽습니다([설정](configuration.md#사용자-설정)). Claude Code, Codex, Antigravity 프로필이 있습니다.
+- 호스트는 그 저장소의 마지막 세션 호스트(Claude Code, Codex, Antigravity)입니다. 세션을 시작할 때 기록하고, 실행 전에 대시보드에 보여 줍니다. 세션 기록이 없으면 `curation.agent.host`를 씁니다([설정](configuration.md#사용자-설정)). 설정의 `command`와 `model`은 그 호스트가 설정의 호스트와 같을 때만 쓰고, 다른 호스트는 기본 명령(`claude`, `codex`, `agy`)으로 실행합니다.
 - Antigravity: 허용 목록 밖의 명령이 필요한 실행은 출력 없이 멈추고, 대시보드에 `permission_denied` 실패로 보입니다. 다시 실행하거나 그 단계를 직접 실행합니다.
 - Codex: 초안 단계는 Codex 샌드박스 안에서 실행되어 대시보드에 접속하지 못합니다. 초안은 그대로 제출되고 대시보드 화면이 갱신됩니다.

@@ -405,7 +405,7 @@ export const eventSchema = object({ at: timestamp, type: oneOf(...EVENT_TYPES) }
 
 export const indexSchema = object({
   schemaVersion: v1,
-  worktrees: recordOf(object({ repoId: str({ pattern: PATTERNS.repoId }), path: nonEmpty, lastSeen: timestamp }, { optional: { managed: bool } })),
+  worktrees: recordOf(object({ repoId: str({ pattern: PATTERNS.repoId }), path: nonEmpty, lastSeen: timestamp }, { optional: { managed: bool, host: oneOf('claude-code', 'codex', 'antigravity'), hostAt: timestamp } })),
   tasks: recordOf(taskId),
   reminders: recordOf(object({ sourceHash: stateHash, at: timestamp })),
   lastFetch: recordOf(timestamp),

@@ -48,6 +48,6 @@ A run that fails, times out (30 minutes) or cannot start (the command is missing
 
 - The headless agent runs with your user's permissions and uses your `gh` or `glab` login. Its tools are limited per step (see [Security](security.md#headless-curation-runs)).
 - Only github.com and GitLab remotes get a PR (an MR on GitLab). With another remote, the records are committed in the curation worktree; push and merge the branch yourself.
-- The command comes from the user setting `curation.agent` ([Configuration](configuration.md#user-settings)): Claude Code, Codex or Antigravity profile.
+- The host is the one of the repository's last session (Claude Code, Codex or Antigravity), recorded when a session starts; the dashboard shows it before you run. Without a recorded session it is `curation.agent.host` ([Configuration](configuration.md#user-settings)). The configured `command` and `model` apply when the host is the configured one; another host runs its default command (`claude`, `codex`, `agy`).
 - Antigravity: a run that needs a command outside its allowed list stops without output; the dashboard shows it as failed with `permission_denied`. Run it again, or run the step by hand.
 - Codex: the drafting step runs in Codex's sandbox, where the dashboard cannot be reached; the draft is still submitted and the dashboard screen updates.

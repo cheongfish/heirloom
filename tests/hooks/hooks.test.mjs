@@ -243,6 +243,25 @@ test('HEIRLOOM_DISABLE_CONVENTION=1 (evaluation only) injects nothing at session
   assert.equal(JSON.parse(stop.stdout).decision, 'block');
 });
 
+test('session-start records the session host for the worktree Heirloom knows (curation follows it)', { skip }, async () => {
+  const upstream = await makeRepo();
+  const repo = await cloneRepo(upstream);
+  const home = await tempDir('home');
+  const { resolveIds } = await import('../../skills/using-heirloom/lib/ids.mjs');
+  const { repoInfo } = await import('../../skills/using-heirloom/lib/git.mjs');
+  const { worktreeId } = await resolveIds(home, await repoInfo(repo.dir));
+  const index = async () => JSON.parse(await readFile(path.join(home, 'index.json'), 'utf8')).worktrees[worktreeId];
+
+  runHook('session-start', { input: { cwd: repo.dir, source: 'startup', transcript_path: '/h/.codex/sessions/2026/11/13/rollout-x.jsonl' }, env: { HEIRLOOM_HOME: home } });
+  assert.equal((await index()).host, 'codex');
+  runHook('session-start', { host: 'antigravity', input: { cwd: repo.dir, workspacePaths: [repo.dir] }, env: { HEIRLOOM_HOME: home } });
+  assert.equal((await index()).host, 'antigravity');
+  runHook('session-start', { input: { cwd: repo.dir, source: 'startup', transcript_path: '/h/.claude/projects/-r/s.jsonl' }, env: { HEIRLOOM_HOME: home } });
+  assert.equal((await index()).host, 'claude-code');
+  runHook('session-start', { input: { cwd: repo.dir, source: 'startup' }, env: { HEIRLOOM_HOME: home } });
+  assert.equal((await index()).host, 'claude-code', 'an unknown host leaves the record as it was');
+});
+
 test('HEIRLOOM_HOOK_LOG=1 records each hook input and output in HEIRLOOM_HOME/hook-log.jsonl', { skip }, async () => {
   const upstream = await makeRepo();
   const repo = await cloneRepo(upstream);

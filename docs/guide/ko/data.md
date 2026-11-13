@@ -25,7 +25,7 @@ Heirloom은 데이터를 두 곳에 둡니다. 저장소에는 팀이 공유할 
 | 경로 | 내용 |
 | --- | --- |
 | `config.json` | 선택. [사용자 설정](configuration.md#사용자-설정) |
-| `index.json` | 작업 트리 등록부와 작업 키 → 작업 ID 매핑 |
+| `index.json` | 작업 트리 등록부(작업 트리마다 마지막 세션의 호스트 포함)와 작업 키 → 작업 ID 매핑 |
 | `ids/<해시>/heirloom-repo-id`, `heirloom-worktree-id` | 저장소의 `.git`에 쓸 수 없을 때만(예: Codex 기본 샌드박스) 두는 저장소·worktree ID. 보통은 `.git`에 있습니다. |
 | `tasks/<taskId>/input.json` | 인계 때 고정한 입력(소스 상태, 자료) |
 | `tasks/<taskId>/draft.json`, `draft.initial.json` | 에이전트 초안과 최초 초안 사본 |

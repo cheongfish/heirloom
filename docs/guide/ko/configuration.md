@@ -24,7 +24,7 @@ JSON이라 주석을 넣을 수 없습니다. 알 수 없는 키나 범위를 �
 | `dashboard.idleMinutes` | `30` | 열린 화면도 요청도 없을 때 서버가 종료되기까지의 분 |
 | `dashboard.openBrowser` | `true` | 인계 뒤 브라우저를 자동으로 열지 여부. 직접 여는 요청에는 영향이 없습니다. |
 | `dashboard.staleDays` | `7` | 전체 목록에서 '오래된 미처리 건'으로 보이는 기준(일) |
-| `curation.agent.host` | `"claude-code"` | [맥락 정리](curation.md)에 쓰는 헤드리스 에이전트 프로필: `claude-code`, `codex`, `antigravity`. |
+| `curation.agent.host` | `"claude-code"` | 저장소의 세션 기록이 없을 때 [맥락 정리](curation.md)에 쓰는 헤드리스 에이전트 프로필: `claude-code`, `codex`, `antigravity`. 정리는 보통 그 저장소의 마지막 세션 호스트로 실행합니다. |
 | `curation.agent.command` | 프로필별 `"claude"`, `"codex"`, `"agy"` | 정리 때 대시보드가 실행하는 명령. `PATH`에 있는 이름이나 절대 경로. 대시보드 요청으로는 바꿀 수 없습니다. |
 | `curation.agent.model` | `null` | 헤드리스 에이전트에 넘길 모델(`--model`, Codex는 `-m`). `null`이면 명령의 기본값을 씁니다. |
 
