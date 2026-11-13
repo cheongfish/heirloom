@@ -12,6 +12,7 @@ export const name = 'claude-code';
 export function readHookInput(raw) {
   return {
     cwd: typeof raw.cwd === 'string' ? raw.cwd : undefined,
+    workspaces: [],
     transcriptPath: typeof raw.transcript_path === 'string' ? raw.transcript_path : undefined,
     continuation: raw.stop_hook_active === true,
     // Claude Code runs Stop only when the agent finishes a turn, not after an interrupt.

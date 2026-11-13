@@ -26,11 +26,13 @@ export const name = 'antigravity';
  * @returns {HookInput}
  */
 export function readHookInput(raw) {
-  const workspace = Array.isArray(raw.workspacePaths) && typeof raw.workspacePaths[0] === 'string' ? raw.workspacePaths[0] : undefined;
+  const workspaces = Array.isArray(raw.workspacePaths) ? raw.workspacePaths.filter((p) => typeof p === 'string') : [];
+  const workspace = workspaces[0];
   const reason = raw.terminationReason;
   const erred = typeof raw.error === 'string' && raw.error !== '';
   return {
     cwd: typeof raw.cwd === 'string' ? raw.cwd : workspace,
+    workspaces,
     transcriptPath: typeof raw.transcriptPath === 'string' ? raw.transcriptPath : undefined,
     // `continuation_active` is the name the release notes used when the field was added.
     continuation: raw.continuationActive === true || raw.continuation_active === true,

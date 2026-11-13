@@ -1,6 +1,6 @@
 {
   "name": "heirloom",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Wraps up work done by external SDLC tools: prepares handoffs, collects human approval of PR summaries and decisions in a local dashboard, and preserves active decisions and axioms for the next task.",
   "author": {
     "name": "cheongfish"

@@ -3,7 +3,22 @@
 import { appendFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
+import { tryGit } from './git.mjs';
 import { hostAdapter } from './hosts/index.mjs';
+
+/**
+ * The folder the hook works in: the hook's cwd when it is inside a git repository, else the
+ * first of the session's other folders that is, else the cwd as given. Antigravity reports a
+ * folder added with `--add-dir` as cwd when it comes first, which would hide the repository.
+ * @param {import('./hosts/index.mjs').HookInput} input
+ */
+export async function hookCwd(input) {
+  const first = input.cwd ?? process.cwd();
+  for (const dir of [...new Set([first, ...input.workspaces])]) {
+    if (await tryGit(['rev-parse', '--show-toplevel'], { cwd: dir })) return dir;
+  }
+  return first;
+}
 
 /**
  * Read the hook input JSON from stdin. Returns {} for a TTY, empty or invalid input,

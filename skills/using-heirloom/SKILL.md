@@ -64,6 +64,8 @@ When the session start lists commit message guide files, read them and follow th
 
 ## Heirloom scripts
 
+Run Heirloom only through the scripts the skills name. Never import or call its library modules yourself (for example with `node -e`), and never create or edit files under `~/.heirloom/`. When a script reports a missing or unavailable input, report it to the user instead of working around it.
+
 Heirloom scripts print exactly one JSON object.
 
 - `{"ok": true, "data": ...}` means success.
