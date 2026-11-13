@@ -15,13 +15,14 @@ const json = async (rel) => JSON.parse(await readFile(path.join(ROOT, rel), 'utf
 test('plugin manifests, package files and lib/version.mjs carry the same version', async () => {
   const plugin = (await json('.claude-plugin/plugin.json')).version;
   const marketplace = (await json('.claude-plugin/marketplace.json')).plugins.find((/** @type {any} */ p) => p.name === 'heirloom')?.version;
+  const codex = (await json('.codex-plugin/plugin.json')).version;
   const pkg = (await json('package.json')).version;
   const lock = await json('package-lock.json');
   const { VERSION } = await import('../../skills/using-heirloom/lib/version.mjs');
   assert.match(plugin, /^\d+\.\d+\.\d+$/);
   assert.deepEqual(
-    { marketplace, pkg, lock: lock.version, lockRoot: lock.packages?.['']?.version, runtime: VERSION },
-    { marketplace: plugin, pkg: plugin, lock: plugin, lockRoot: plugin, runtime: plugin },
+    { marketplace, codex, pkg, lock: lock.version, lockRoot: lock.packages?.['']?.version, runtime: VERSION },
+    { marketplace: plugin, codex: plugin, pkg: plugin, lock: plugin, lockRoot: plugin, runtime: plugin },
   );
 });
 

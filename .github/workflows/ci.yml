@@ -2,7 +2,7 @@ name: CI
 
 # CI runs on main only, and only when files the plugin runs from change (skills, examples,
 # hooks). Branches: main (plugin source), develop, release (what users install:
-# .claude-plugin, hooks, skills, examples; no tests).
+# .claude-plugin, .codex-plugin, hooks, skills, examples; no tests).
 on:
   push:
     branches: [main]

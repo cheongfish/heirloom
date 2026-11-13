@@ -94,6 +94,7 @@ Work flows **develop → main → release**. `develop` is where work is committe
 - **PR title:** `[YYYYMMDD] (<source> -> <target>) [<type>, …] : <short title>`, with the date in KST, the target `main` or `release`, and the commit types of `.gitmessage` that the PR contains. For example `[20261113] (develop -> main) [feat, chore] : 테스트 주기 설정과 릴리스 절차 추가`.
 - **Version:** the user gives it; never pick one. It changes only in the PR into `main`, in all of these at once (`tests/layout/version.test.mjs` checks them):
   - `.claude-plugin/plugin.json` and the `heirloom` entry of `.claude-plugin/marketplace.json`,
+  - `.codex-plugin/plugin.json`,
   - `skills/using-heirloom/lib/version.mjs`,
   - `package.json` and `package-lock.json` (`npm version <x.y.z> --no-git-tag-version` updates both).
 - **CHANGELOG:** `CHANGELOG.md` on `main`, in Korean, in the Keep a Changelog form: `## [x.y.z] - YYYY-MM-DD` with `### 추가`, `### 변경`, `### 수정`, `### 삭제` as needed. It changes only in the PR into `main`. It is never part of `release`.

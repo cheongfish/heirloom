@@ -47,6 +47,21 @@ test('repository: Claude Code manifest version matches package.json', async () =
   assert.equal(VERSION, pkg.version, 'lib/version.mjs matches package.json');
 });
 
+test('repository: the Codex manifest shares skills and hooks with Claude Code through ./ paths', async () => {
+  const claude = JSON.parse(await readFile(path.join(ROOT, '.claude-plugin', 'plugin.json'), 'utf8'));
+  const codex = JSON.parse(await readFile(path.join(ROOT, '.codex-plugin', 'plugin.json'), 'utf8'));
+  assert.equal(codex.name, claude.name);
+  assert.equal(codex.description, claude.description);
+  assert.equal(codex.skills, './skills/');
+  assert.equal(codex.hooks, './hooks/hooks.json', 'an explicit path: Codex would otherwise discover hooks/hooks.json on its own');
+  for (const rel of [codex.skills, codex.hooks]) {
+    assert.match(rel, /^\.\//, 'Codex requires manifest paths to start with ./');
+    await readFile(path.join(ROOT, rel, rel.endsWith('/') ? 'using-heirloom/SKILL.md' : ''), 'utf8');
+  }
+  assert.equal(typeof codex.interface?.displayName, 'string');
+  assert.equal(typeof codex.interface?.shortDescription, 'string');
+});
+
 test('repository: the marketplace lists this plugin with the manifest name and version', async () => {
   const manifest = JSON.parse(await readFile(path.join(ROOT, '.claude-plugin', 'plugin.json'), 'utf8'));
   const market = JSON.parse(await readFile(path.join(ROOT, '.claude-plugin', 'marketplace.json'), 'utf8'));
