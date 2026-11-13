@@ -44,6 +44,9 @@ flowchart LR
 ## 선택 기능
 
 ### phase별 테스트
+
+계기: Superpowers 계획이 task마다 전체 테스트를 돌려 시간이 오래 걸리는 문제([obra/superpowers#2437](https://github.com/obra/superpowers/issues/2437))
+
 - 구현 계획의 task를 성격(같은 모듈·계약)과 순서에 따라 phase로 나눕니다.
 - task마다 그 task의 테스트만 돌리고, phase가 끝날 때마다 전체 테스트를 돌립니다.
 - 최종 리뷰와 인계 전에도 전체 테스트를 돌립니다.
