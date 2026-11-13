@@ -42,7 +42,7 @@ A candidate you held or rejected is not proposed again without new evidence: a d
 A run that fails, times out (30 minutes) or cannot start (the command is missing) leaves the task where it was. The task screen shows the reason, the log file and two ways on:
 
 - **다시 실행** (run again): runs the same step again. Runs are never retried automatically.
-- **By hand:** `cd` into the worktree shown on the screen, start Claude Code there and run `/curate-decisions` (before approval) or `/apply-approval` (after approval).
+- **By hand:** `cd` into the worktree shown on the screen, start your host there and run `curate-decisions` (before approval) or `apply-approval` (after approval): `/curate-decisions` in Claude Code and Antigravity, `$curate-decisions` in Codex.
 
 ## Limits
 

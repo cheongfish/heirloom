@@ -42,7 +42,7 @@ decision이 대상 브랜치에서 활성이고, 머지된 어떤 정리에서�
 실행이 실패하거나, 시간 상한(30분)을 넘기거나, 시작하지 못하면(실행 파일 없음) 작업은 그 상태에 그대로 있습니다. 작업 화면이 이유와 로그 파일을 보여 주고, 두 가지 방법을 안내합니다.
 
 - **다시 실행:** 같은 단계를 다시 실행합니다. 자동으로 재시도하지는 않습니다.
-- **직접 실행:** 화면에 보이는 worktree로 `cd`한 뒤 Claude Code를 열고 `/curate-decisions`(승인 전) 또는 `/apply-approval`(승인 뒤)을 실행합니다.
+- **직접 실행:** 화면에 보이는 worktree로 `cd`한 뒤 호스트를 열고 `curate-decisions`(승인 전) 또는 `apply-approval`(승인 뒤)을 실행합니다. Claude Code와 Antigravity는 `/curate-decisions`, Codex는 `$curate-decisions`입니다.
 
 ## 한계
 

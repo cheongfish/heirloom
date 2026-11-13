@@ -6,5 +6,4 @@ The following features are not supported yet and are planned for later versions.
 
 | Feature | Current behavior |
 | --- | --- |
-| Codex and Antigravity hosts | Only Claude Code is supported. |
 | Windows keychain | The private key is kept in a file (mode 0600). |

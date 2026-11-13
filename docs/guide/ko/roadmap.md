@@ -6,5 +6,4 @@
 
 | 기능 | 현재 동작 |
 | --- | --- |
-| Codex, Antigravity 호스트 | Claude Code만 지원합니다. |
 | Windows 키체인 | 개인키를 파일(0600)로 보관합니다. |

@@ -8,7 +8,7 @@
 | --- | --- |
 | Node.js | 20 or later. Heirloom uses only Node built-in modules, so no `npm install` is needed. |
 | git | The project you work on must be a git repository. The target branch comes from `origin/HEAD` or the project setting `baseBranch`. |
-| Claude Code | The only supported host for now. |
+| Host | Claude Code, Codex or Antigravity CLI. Install steps and support levels per host: [Hosts](hosts.md). |
 | `gh` (optional) | Needed only to open pull requests on github.com. `gh auth login` must be done. GitHub Enterprise hosts are not supported. |
 | `glab` (optional) | Needed only to open merge requests on GitLab: gitlab.com, or a self-hosted GitLab that `glab auth login --hostname <host>` was done for (any other host counts as unsupported). The commands Heirloom uses follow glab 1.36. |
 | Operating system | Linux, macOS, WSL. The Windows keychain is not used yet (the key is kept in a file). |
@@ -19,7 +19,7 @@ If Node is missing or older than 20, Heirloom does not block the session. The se
 
 ### As a marketplace plugin
 
-The repository is also a plugin marketplace (`.claude-plugin/marketplace.json`). Install from the `release` branch. It holds only the plugin files (`.claude-plugin/`, `hooks/`, `skills/`, `examples/`); tests and development files stay on `main`. Add it once and install the plugin. It then loads in every session.
+The repository is also a plugin marketplace (`.claude-plugin/marketplace.json`). Install from the `release` branch. It holds only the plugin files (the host manifests, `hooks/`, `hooks.json`, `rules/`, `skills/`, `examples/`); tests and development files stay on `main`. Add it once and install the plugin. It then loads in every session. The steps below are for Claude Code; Codex and Antigravity are in [Hosts](hosts.md#install).
 
 ```text
 /plugin marketplace add cheongfish/heirloom#release
@@ -49,5 +49,6 @@ claude --plugin-dir ~/tools/heirloom
 
 ## Next
 
+- [Hosts](hosts.md)
 - [Workflow](workflow.md)
 - [Configuration](configuration.md)

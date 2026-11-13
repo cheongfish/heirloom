@@ -2,7 +2,7 @@
 
 [English](README.en.md)
 
-Heirloom은 Superpowers 같은 SDLC 도구로 끝낸 작업을 마무리하는 Claude Code 플러그인입니다. 인계를 준비하고, 사람이 로컬 대시보드에서 PR 요약과 결정(decision)을 승인하게 합니다. 승인된 기록은 저장소에 쓰고 PR을 엽니다. 이후 작업에는 활성 decision과 axiom을 제공합니다.
+Heirloom은 Superpowers 같은 SDLC 도구로 끝낸 작업을 마무리하는 Claude Code·Codex·Antigravity용 플러그인입니다. 인계를 준비하고, 사람이 로컬 대시보드에서 PR 요약과 결정(decision)을 승인하게 합니다. 승인된 기록은 저장소에 쓰고 PR을 엽니다. 이후 작업에는 활성 decision과 axiom을 제공합니다.
 
 Heirloom은 개발 작업을 대신하지 않으며, 인계는 승인이 아닙니다. 승인은 사람만, 대시보드에서만 합니다.
 
@@ -10,9 +10,9 @@ Heirloom은 개발 작업을 대신하지 않으며, 인계는 승인이 아닙�
 
 ## 설치
 
-Node 20 이상, git, Claude Code가 필요합니다. PR을 만들 때만 github.com 원격이면 `gh`, GitLab 원격(gitlab.com 또는 자체 호스팅)이면 `glab`이 필요합니다. 따로 설치할 런타임 의존성은 없습니다.
+Node 20 이상, git, 그리고 호스트(Claude Code, Codex, Antigravity CLI 중 하나)가 필요합니다. PR을 만들 때만 github.com 원격이면 `gh`, GitLab 원격(gitlab.com 또는 자체 호스팅)이면 `glab`이 필요합니다. 따로 설치할 런타임 의존성은 없습니다.
 
-플러그인 파일만 담은 `release` 브랜치에서 설치합니다.
+플러그인 파일만 담은 `release` 브랜치에서 설치합니다. Claude Code에서는:
 
 ```text
 /plugin marketplace add cheongfish/heirloom#release
@@ -20,6 +20,8 @@ Node 20 이상, git, Claude Code가 필요합니다. PR을 만들 때만 github.
 ```
 
 설치하지 않고 내려받은 저장소를 한 세션에서만 쓰려면 `claude --plugin-dir /path/to/heirloom`으로 실행합니다.
+
+Codex와 Antigravity는 설치 절차가 따로 있습니다(Codex는 `/hooks`에서 훅 신뢰도 필요). 호스트별 지원 등급과 차이: [호스트](docs/guide/ko/hosts.md).
 
 → [설치 가이드](docs/guide/ko/installation.md)
 
@@ -68,8 +70,9 @@ decision이 쌓이면 대시보드가 정리를 제안합니다. 실행을 고�
 
 다음 기능을 지원할 예정입니다.
 
-- Codex·Antigravity 호스트
 - Windows 키체인
+
+피드백: [이슈 열기](https://github.com/cheongfish/heirloom/issues/new?template=feedback.yml).
 
 → [지원 예정](docs/guide/ko/roadmap.md)
 

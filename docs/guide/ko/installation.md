@@ -8,7 +8,7 @@
 | --- | --- |
 | Node.js | 20 이상. Heirloom은 Node 내장 모듈만 쓰므로 `npm install`이 필요 없습니다. |
 | git | 소비 프로젝트가 git 저장소여야 합니다. 대상 브랜치는 `origin/HEAD` 또는 프로젝트 설정의 `baseBranch`로 정합니다. |
-| Claude Code | 현재 지원하는 유일한 호스트입니다. |
+| 호스트 | Claude Code, Codex, Antigravity CLI. 호스트별 설치와 지원 등급은 [호스트](hosts.md)를 봅니다. |
 | `gh` (선택) | github.com에서 PR을 만들 때만 필요합니다. `gh auth login`이 되어 있어야 합니다. GitHub Enterprise 호스트는 지원하지 않습니다. |
 | `glab` (선택) | GitLab에서 MR을 만들 때만 필요합니다. gitlab.com이거나, `glab auth login --hostname <호스트>`를 해 둔 자체 호스팅 GitLab이어야 합니다(그 밖의 호스트는 지원하지 않는 원격으로 봅니다). Heirloom이 쓰는 명령은 glab 1.36 기준입니다. |
 | 운영체제 | Linux, macOS, WSL. Windows 키체인은 아직 쓰지 않습니다(파일로 보관). |
@@ -19,7 +19,7 @@ Node를 찾지 못하거나 버전이 20 미만이면 Heirloom은 세션을 막�
 
 ### 마켓플레이스로 설치
 
-저장소 자체가 플러그인 마켓플레이스입니다(`.claude-plugin/marketplace.json`). `release` 브랜치에서 설치합니다. 이 브랜치에는 플러그인 파일(`.claude-plugin/`, `hooks/`, `skills/`, `examples/`)만 있고, 테스트와 개발용 파일은 `main`에만 있습니다. 한 번 추가하고 플러그인을 설치하면 모든 세션에서 불러옵니다.
+저장소 자체가 플러그인 마켓플레이스입니다(`.claude-plugin/marketplace.json`). `release` 브랜치에서 설치합니다. 이 브랜치에는 플러그인 파일(호스트별 매니페스트, `hooks/`, `hooks.json`, `rules/`, `skills/`, `examples/`)만 있고, 테스트와 개발용 파일은 `main`에만 있습니다. 한 번 추가하고 플러그인을 설치하면 모든 세션에서 불러옵니다. 아래는 Claude Code 절차이며, Codex와 Antigravity는 [호스트](hosts.md#설치)를 봅니다.
 
 ```text
 /plugin marketplace add cheongfish/heirloom#release
@@ -49,5 +49,6 @@ claude --plugin-dir ~/tools/heirloom
 
 ## 다음 단계
 
+- [호스트](hosts.md)
 - [작업 흐름](workflow.md)
 - [설정](configuration.md)

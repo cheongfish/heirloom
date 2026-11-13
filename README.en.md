@@ -2,7 +2,7 @@
 
 [한국어](README.md)
 
-Heirloom is a Claude Code plugin that wraps up work finished with an SDLC tool such as Superpowers. It prepares a handoff and lets a human approve the PR summary and the decisions in a local dashboard. It then writes the approved records into the repository and opens the pull request. Later work receives the active decisions and axioms.
+Heirloom is a plugin for Claude Code, Codex and Antigravity that wraps up work finished with an SDLC tool such as Superpowers. It prepares a handoff and lets a human approve the PR summary and the decisions in a local dashboard. It then writes the approved records into the repository and opens the pull request. Later work receives the active decisions and axioms.
 
 Heirloom does not do the development work, and a handoff is not an approval. Only a human approves, in the dashboard.
 
@@ -10,9 +10,9 @@ Heirloom does not do the development work, and a handoff is not an approval. Onl
 
 ## Installation
 
-Requires Node 20 or later, git and Claude Code. Opening the PR needs `gh` for a github.com remote, or `glab` for a GitLab remote (gitlab.com or self-hosted). There are no runtime dependencies to install.
+Requires Node 20 or later, git and one of the hosts: Claude Code, Codex or Antigravity CLI. Opening the PR needs `gh` for a github.com remote, or `glab` for a GitLab remote (gitlab.com or self-hosted). There are no runtime dependencies to install.
 
-Install from the `release` branch, which holds only the plugin files:
+Install from the `release` branch, which holds only the plugin files. In Claude Code:
 
 ```text
 /plugin marketplace add cheongfish/heirloom#release
@@ -20,6 +20,8 @@ Install from the `release` branch, which holds only the plugin files:
 ```
 
 To try a checkout for one session without installing: `claude --plugin-dir /path/to/heirloom`.
+
+Codex and Antigravity have their own install steps (Codex also needs the hooks trusted in `/hooks`). Support levels and differences per host: [Hosts](docs/guide/en/hosts.md).
 
 → [Installation guide](docs/guide/en/installation.md)
 
@@ -68,8 +70,9 @@ Approvals are signed with a per-user ed25519 key. The dashboard listens on `127.
 
 Planned:
 
-- Codex and Antigravity hosts,
 - Windows keychain.
+
+Feedback: [open an issue](https://github.com/cheongfish/heirloom/issues/new?template=feedback.yml).
 
 → [Roadmap](docs/guide/en/roadmap.md)
 
