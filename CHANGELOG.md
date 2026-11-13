@@ -2,6 +2,18 @@
 
 이 문서는 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 형식을 따릅니다. 버전은 `main`의 태그와 같습니다.
 
+## [0.3.3] - 2026-11-13
+
+### 추가
+
+- Cursor CLI(`agent`) 지원(잠정 등급 B). 전용 매니페스트 `.cursor-plugin/plugin.json`이 Cursor 형식 훅 파일 `hooks/hooks-cursor.json`(sessionStart)과 상시 규칙 `.cursor-plugin/rules/heirloom.mdc`를 가리킵니다. 인계, 대화에서 정한 결정 기록, 승인 반영, 결정 회수가 동작합니다. Cursor CLI가 stop 훅을 실행하지 않아 종료 시 상기는 없습니다. 설치는 `agent --plugin-dir <클론>`으로 확인했습니다.
+- Cursor에서는 인계 준비가 에이전트 셸의 `CURSOR_CONVERSATION_ID`·`AGENT_TRANSCRIPTS`로 자기 세션 기록을 찾아, 같은 폴더에서 세션이 겹쳐도 대화를 정확히 고정합니다.
+
+### 수정
+
+- 훅 입력의 `cwd`가 git 저장소가 아니면 작업 폴더 목록에서 첫 git 저장소를 씁니다. Antigravity에서 `--add-dir`로 더한 폴더가 앞에 오면 훅이 저장소 밖에서 판정해 상기와 세션 기록이 빠지던 문제를 고쳤습니다.
+- 에이전트가 Heirloom 상태를 직접 고쳐 우회하지 않도록 스킬과 상시 규칙에 금지를 더했습니다. Heirloom은 스킬에 적힌 스크립트로만 실행하고 `~/.heirloom/`을 고치지 않으며, 막히면 사용자에게 알립니다.
+
 ## [0.3.2] - 2026-11-13
 
 ### 추가
