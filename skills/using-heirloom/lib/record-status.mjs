@@ -141,7 +141,7 @@ async function lastFetch(commonDir) {
  * @param {import('./git.mjs').RepoInfo} info
  */
 async function taskScope(home, info) {
-  const ids = await readIds(info);
+  const ids = await readIds(info, home);
   /** @type {Set<string>} */
   const own = new Set();
   /** @type {Map<string, string | null>} taskId → state */

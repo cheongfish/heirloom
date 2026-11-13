@@ -117,7 +117,7 @@ async function projectSection(cwd, home) {
   }
   if (errors.length) lines.push('', `읽지 못한 기록 ${errors.length}개: ${errors.map((e) => e.split(': ')[0]).join(', ')}`);
 
-  const ids = await readIds(info);
+  const ids = await readIds(info, home);
   const managed = ids ? (await readIndex(home)).worktrees[ids.worktreeId]?.managed === true : false;
   if (ids && !managed) {
     const index = await readIndex(home);

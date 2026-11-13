@@ -26,6 +26,7 @@ Heirloom은 데이터를 두 곳에 둡니다. 저장소에는 팀이 공유할 
 | --- | --- |
 | `config.json` | 선택. [사용자 설정](configuration.md#사용자-설정) |
 | `index.json` | 작업 트리 등록부와 작업 키 → 작업 ID 매핑 |
+| `ids/<해시>/heirloom-repo-id`, `heirloom-worktree-id` | 저장소의 `.git`에 쓸 수 없을 때만(예: Codex 기본 샌드박스) 두는 저장소·worktree ID. 보통은 `.git`에 있습니다. |
 | `tasks/<taskId>/input.json` | 인계 때 고정한 입력(소스 상태, 자료) |
 | `tasks/<taskId>/draft.json`, `draft.initial.json` | 에이전트 초안과 최초 초안 사본 |
 | `tasks/<taskId>/check.json` | 출처 검사 결과 |
@@ -48,4 +49,5 @@ Heirloom은 데이터를 두 곳에 둡니다. 저장소에는 팀이 공유할 
 | 진행 중인 작업의 `tasks/<taskId>/` | 지우면 그 인계와 승인을 잃습니다. |
 | `worktrees/` | 직접 지우지 않습니다. 저장소에서 `git worktree remove`를 쓰거나 대시보드에서 정리 작업을 폐기합니다. |
 | `keys/public/` | 지우지 마세요. 과거 승인의 서명을 검증할 수 없게 됩니다. |
+| `ids/` | 지우지 마세요. 저장소가 새 ID를 받아 진행 중인 작업과의 연결을 잃습니다. |
 | `keys/private.key` 또는 키체인 항목 | 지우면 다음 승인 때 새 키가 만들어집니다. 이전 승인 검증에는 공개키만 필요합니다. |

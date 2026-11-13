@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cp, readFile, rm } from 'node:fs/promises';
+import { chmod, cp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { makeRepo, tempDir } from '../helpers/git-fixture.mjs';
@@ -10,6 +10,7 @@ import {
   newRecordId,
   newApprovalId,
   ID_PATTERNS,
+  readIds,
   resolveIds,
 } from '../../skills/using-heirloom/lib/ids.mjs';
 import { readIndex, taskIdFor } from '../../skills/using-heirloom/lib/store.mjs';
@@ -91,6 +92,46 @@ test('resolveIds: a moved worktree keeps its ids', async (t) => {
   const after = await resolveIds(home, await repoInfo(moved));
   assert.deepEqual(after, before);
   assert.equal((await readIndex(home)).worktrees[before.worktreeId].path, moved);
+});
+
+// Codex's workspace-write sandbox makes .git read-only.
+const asRoot = process.getuid?.() === 0;
+
+test('resolveIds: a read-only .git keeps the ids under HEIRLOOM_HOME, and readIds finds them there', { skip: asRoot || process.platform === 'win32' }, async (t) => {
+  const repo = await makeRepo();
+  const home = await tempDir('home');
+  const info = await repoInfo(repo.dir);
+  await chmod(info.gitDir, 0o555);
+  t.after(() => chmod(info.gitDir, 0o755));
+
+  const first = await resolveIds(home, info);
+  assert.match(first.repoId, ID_PATTERNS.repo);
+  assert.match(first.worktreeId, ID_PATTERNS.worktree);
+  assert.deepEqual(await resolveIds(home, info), first, 'stable across calls');
+  assert.deepEqual(await readIds(info, home), first);
+  assert.equal(await readIds(info, await tempDir('other-home')), null, 'only that home knows them');
+  assert.equal((await readdir(info.gitDir)).some((n) => n.startsWith('heirloom-')), false, 'nothing written into .git');
+});
+
+test('resolveIds: ids already in .git win over HEIRLOOM_HOME, also when .git is read-only later', { skip: asRoot || process.platform === 'win32' }, async (t) => {
+  const repo = await makeRepo();
+  const home = await tempDir('home');
+  const info = await repoInfo(repo.dir);
+  const before = await resolveIds(home, info);
+  await chmod(info.gitDir, 0o555);
+  t.after(() => chmod(info.gitDir, 0o755));
+  assert.deepEqual(await resolveIds(home, info), before);
+  assert.deepEqual(await readIds(info, home), before);
+});
+
+test('readIds: ids in .git are read without a home; an invalid id file is ignored', async () => {
+  const repo = await makeRepo();
+  const home = await tempDir('home');
+  const info = await repoInfo(repo.dir);
+  const ids = await resolveIds(home, info);
+  assert.deepEqual(await readIds(info), ids);
+  await writeFile(path.join(info.gitDir, 'heirloom-repo-id'), 'garbage\n');
+  assert.equal(await readIds(info, home), null);
 });
 
 test('taskIdFor: one task per (worktree, branch, spec); lookup without create', async (t) => {

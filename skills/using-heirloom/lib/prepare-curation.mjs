@@ -28,7 +28,7 @@ const OPEN = new Set(['prepared', 'drafted', 'awaiting_approval', 'approved', 'a
  */
 export async function curationTaskOf({ home, cwd }) {
   const info = await repoInfo(cwd);
-  const ids = await readIds(info);
+  const ids = await readIds(info, home);
   const taskId = ids ? await taskIdFor(home, { worktreeId: ids.worktreeId, branch: info.branch, specRef: null }, { create: false }) : null;
   const meta = taskId ? await readCurationMeta(home, taskId) : null;
   if (!taskId || !meta || meta.worktree !== info.root) {
