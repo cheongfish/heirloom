@@ -41,6 +41,7 @@ The files are JSON, so they cannot hold comments. Unknown keys and out-of-range 
 | `curation.maxAgeDays` | `30` | … or when this many days passed since the last curation |
 | `curation.minForAge` | `3` | … and at least this many decisions are unreviewed |
 | `curation.batchSize` | `20` | Maximum number of unreviewed decisions one curation reviews |
+| `testCadence.mode` | `"off"` | How often the development workflow (Superpowers and the like) runs tests. `"phase"` adds rules at session start: the plan groups its tasks into phases, each task runs only its own tests, task reviews rely on the implementer's reported runs (a focused test only for a specific doubt), and the full test suite runs only at the end of each phase and at the end (before the final review and the handoff). The test commands are the ones the plan states. |
 
 ## Environment variables
 

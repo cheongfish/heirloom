@@ -16,6 +16,7 @@ import { taskPaths } from './paths.mjs';
 import { appliedTaskMerged, recordView } from './record-status.mjs';
 import { readIndex, tasksForWorktree } from './store.mjs';
 import { curationStatus } from './curation.mjs';
+import { testCadenceBlock } from './test-cadence.mjs';
 
 const PENDING_SHOWN = 10;
 
@@ -172,6 +173,12 @@ export async function buildSessionContext({ cwd, home, pluginRoot, budgetMs = 25
     if (project) parts.push(`<heirloom-project>\n${project}\n</heirloom-project>`);
   } catch (err) {
     parts.push(`<heirloom-project>\n프로젝트 맥락을 읽지 못했다: ${err instanceof Error ? err.message : String(err)}\n</heirloom-project>`);
+  }
+  try {
+    const cadence = testCadenceBlock((await loadProjectConfig((await repoInfo(cwd)).root)).testCadence);
+    if (cadence) parts.push(cadence);
+  } catch {
+    // not a repository, or an unreadable setting: no cadence rules (the default)
   }
   return parts.join('\n\n');
 }

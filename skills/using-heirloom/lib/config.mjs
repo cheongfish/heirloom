@@ -17,6 +17,7 @@ export const DEFAULT_SPEC_GLOBS = Object.freeze(['docs/superpowers/specs/**', '*
  * @property {{ maxRecords: number, maxTokens: number }} recall
  * @property {{ maxDecisions: number }} sessionIndex
  * @property {CurationConfig} curation
+ * @property {{ mode: 'off' | 'phase' }} testCadence opt-in rule for how often the full test suite runs
  */
 
 /** @typedef {{ minUnreviewed: number, maxAgeDays: number, minForAge: number, batchSize: number }} CurationConfig */
@@ -40,6 +41,7 @@ export async function loadProjectConfig(root) {
     recall: { maxRecords: c.recall?.maxRecords ?? 8, maxTokens: c.recall?.maxTokens ?? 6000 },
     sessionIndex: { maxDecisions: c.sessionIndex?.maxDecisions ?? 30 },
     curation: { ...CURATION_DEFAULTS, ...(c.curation ?? {}) },
+    testCadence: { mode: c.testCadence?.mode ?? 'off' },
   };
 }
 
