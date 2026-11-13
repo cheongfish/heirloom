@@ -40,7 +40,7 @@ export function agentInvocation({ agent, phase, taskId, worktree, taskDir, plugi
   if (phase === 'curate') {
     tools = [
       ...read,
-      `Write(${absolute(draft)})`,
+      // Claude Code checks every file write against Edit(...) rules; a Write(...) rule is ignored.
       `Edit(${absolute(draft)})`,
       `Bash(node ${path.join(skills, 'curate-decisions', 'scripts')}/*)`,
       `Bash(node ${path.join(skills, 'prepare-handoff', 'scripts', 'submit-draft.mjs')} *)`,
@@ -55,7 +55,6 @@ export function agentInvocation({ agent, phase, taskId, worktree, taskDir, plugi
   } else {
     tools = [
       ...read,
-      `Write(${absolute(body)})`,
       `Edit(${absolute(body)})`,
       `Bash(node ${path.join(skills, 'apply-approval', 'scripts')}/*)`,
       'Bash(git status *)',
@@ -63,7 +62,8 @@ export function agentInvocation({ agent, phase, taskId, worktree, taskDir, plugi
       'Bash(git commit *)',
       'Bash(git push *)',
       'Bash(gh pr create *)',
-      'Bash(gh pr edit *)',
+      // PR bodies are updated through the REST API: `gh pr edit` fails on some gh versions.
+      'Bash(gh api -X PATCH repos/*/pulls/*)',
     ];
     prompt = [
       `Heirloom context curation, task ${taskId}: the human approved it in the dashboard.`,
