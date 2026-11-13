@@ -2,6 +2,16 @@
 
 이 문서는 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 형식을 따릅니다. 버전은 `main`의 태그와 같습니다.
 
+## [0.2.1] - 2026-11-13
+
+### 수정
+
+- 증분 재확인 뒤 기존 PR 본문을 고칠 때 `gh pr edit` 대신 GitHub REST API(`gh api -X PATCH repos/<repo>/pulls/<n> -F body=@<파일>`)를 씁니다. 일부 gh 버전(예: 2.45)에서 `gh pr edit`가 GraphQL 오류로 실패하던 문제입니다. 헤드리스 정리의 반영 단계 허용 도구도 같이 바꿨습니다.
+
+### 변경
+
+- 헤드리스 정리의 허용 도구에서 Claude Code가 파일 쓰기 확인에 쓰지 않는 `Write(…)` 규칙을 빼고 `Edit(…)`만 남겼습니다.
+
 ## [0.2.0] - 2026-11-13
 
 ### 추가

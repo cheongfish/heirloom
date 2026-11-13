@@ -87,8 +87,8 @@ A PR for this branch already exists. Do not create another one.
 - Otherwise update the PR body only if the user asks, with the same command.
 
   ```sh
-  # GitHub
-  gh pr edit <pr.existing.number> --body-file <file>
+  # GitHub (REST API: `gh pr edit` fails on some gh versions with a GraphQL error about Projects classic)
+  gh api -X PATCH repos/<pr.repo>/pulls/<pr.existing.number> -F body=@<file>
   # GitLab
   node <this skill>/scripts/open-mr.mjs --task <taskId> --iid <pr.existing.iid> --body-file <file>
   ```
