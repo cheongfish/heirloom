@@ -1,15 +1,16 @@
 name: CI
 
 # CI runs on main only, and only when files the plugin runs from change (skills, examples,
-# hooks). Branches: main (plugin source), develop, release (what users install:
-# .claude-plugin, hooks, skills, examples; no tests).
+# hooks, and Antigravity's hooks.json and rules). Branches: main (plugin source), develop,
+# release (what users install: the host manifests, hooks, hooks.json, rules, skills, examples;
+# no tests).
 on:
   push:
     branches: [main]
-    paths: ['skills/**', 'examples/**', 'hooks/**']
+    paths: ['skills/**', 'examples/**', 'hooks/**', 'hooks.json', 'rules/**']
   pull_request:
     branches: [main]
-    paths: ['skills/**', 'examples/**', 'hooks/**']
+    paths: ['skills/**', 'examples/**', 'hooks/**', 'hooks.json', 'rules/**']
 
 jobs:
   test:

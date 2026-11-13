@@ -1,17 +1,17 @@
 # Configuration
 
-[한국어](../ko/configuration.md)
-
 All settings files are optional; without them the defaults apply. Copy an example file, which lists every setting at its default, and change only what you need.
 
 | Settings | Location | Example |
 | --- | --- | --- |
-| User settings | `~/.heirloom/config.json` | [`examples/user-config.example.json`](../../../examples/user-config.example.json) |
-| Project settings | `<repository>/.heirloom/config.json` (committed) | [`examples/project-config.example.json`](../../../examples/project-config.example.json) |
+| User settings | `~/.heirloom/config.json` | [`examples/user-config.example.json`](../../examples/user-config.example.json) |
+| Project settings | `<repository>/.heirloom/config.json` (committed) | [`examples/project-config.example.json`](../../examples/project-config.example.json) |
+
+The `examples/` folder is in the plugin's install folder ([Install](install.md#install-locations)) and in the repository.
 
 ```sh
-cp examples/user-config.example.json ~/.heirloom/config.json
-cp examples/project-config.example.json <repository>/.heirloom/config.json
+cp <plugin folder>/examples/user-config.example.json ~/.heirloom/config.json
+cp <plugin folder>/examples/project-config.example.json <repository>/.heirloom/config.json
 ```
 
 The files are JSON, so they cannot hold comments. Unknown keys and out-of-range values are reported as errors. Both files need `"schemaVersion": 1`.
@@ -24,9 +24,9 @@ The files are JSON, so they cannot hold comments. Unknown keys and out-of-range 
 | `dashboard.idleMinutes` | `30` | Minutes without an open screen or a request before the server stops |
 | `dashboard.openBrowser` | `true` | Whether to open the browser automatically after a handoff. Explicit requests to open the dashboard are not affected. |
 | `dashboard.staleDays` | `7` | Days after which an unfinished task is listed as stale in the overview |
-| `curation.agent.host` | `"claude-code"` | Headless agent profile used by [context curation](curation.md). Only `claude-code` exists so far. |
-| `curation.agent.command` | `"claude"` | Command the dashboard runs for a curation. A name on `PATH` or an absolute path. Requests to the dashboard can never change it. |
-| `curation.agent.model` | `null` | Model passed to the headless agent (`--model`). `null` uses the command's default. |
+| `curation.agent.host` | `"claude-code"` | Headless agent profile used by [context curation](curation.md) when no session of the repository has been recorded: `claude-code`, `codex` or `antigravity`. A curation normally runs with the host of the repository's last session. |
+| `curation.agent.command` | by profile: `"claude"`, `"codex"`, `"agy"` | Command the dashboard runs for a curation. A name on `PATH` or an absolute path. Requests to the dashboard can never change it. |
+| `curation.agent.model` | `null` | Model passed to the headless agent (`--model`, or `-m` for Codex). `null` uses the command's default. |
 
 ## Project settings
 

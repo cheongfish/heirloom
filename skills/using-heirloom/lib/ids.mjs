@@ -2,7 +2,7 @@
 // Note: ids.mjs and store.mjs import each other; both only use the other's exports at call time.
 
 import { createHash, randomBytes } from 'node:crypto';
-import { access, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { writeFileAtomic } from './fsx.mjs';
@@ -85,12 +85,55 @@ async function exists(p) {
   }
 }
 
+/** Errors that mean the git directory cannot be written (read-only mount, sandbox, permissions). */
+const READ_ONLY = new Set(['EROFS', 'EACCES', 'EPERM']);
+
+/**
+ * Where an id file goes when the git directory is read-only: under HEIRLOOM_HOME, keyed by
+ * the git directory's real path. Such an id does not follow the repository when it moves.
+ * @param {string} home
+ * @param {string} gitDirectory
+ * @param {string} name
+ */
+async function fallbackIdFile(home, gitDirectory, name) {
+  let real = gitDirectory;
+  try {
+    real = await realpath(gitDirectory);
+  } catch {
+    // keep the given path
+  }
+  return path.join(home, 'ids', createHash('sha256').update(real).digest('hex').slice(0, 24), name);
+}
+
+/**
+ * An id that lives in `<gitDirectory>/<name>`, or under HEIRLOOM_HOME when the git directory
+ * cannot be written. An id already in the git directory always wins.
+ * @param {string} home
+ * @param {string} gitDirectory
+ * @param {string} name
+ * @param {() => string} make
+ * @param {RegExp} pattern
+ * @returns {Promise<{ value: string, file: string }>}
+ */
+async function idIn(home, gitDirectory, name, make, pattern) {
+  const file = path.join(gitDirectory, name);
+  try {
+    return { value: await readOrCreateId(file, make, pattern), file };
+  } catch (err) {
+    if (!READ_ONLY.has(String(/** @type {NodeJS.ErrnoException} */ (err).code))) throw err;
+  }
+  const fallback = await fallbackIdFile(home, gitDirectory, name);
+  await mkdir(path.dirname(fallback), { recursive: true, mode: 0o700 });
+  return { value: await readOrCreateId(fallback, make, pattern), file: fallback };
+}
+
 /**
  * Resolve (and register) the repository and worktree ids for a checkout.
  *
  * - Repository id lives in `<commonDir>/heirloom-repo-id`, worktree id in
  *   `<gitDir>/heirloom-worktree-id`. They are separate files because the main
- *   worktree's git dir is the common dir.
+ *   worktree's git dir is the common dir. When the git directory is read-only (for
+ *   example in a sandbox that protects `.git`), the id is kept under `<home>/ids/` instead.
  * - If the index already maps this worktree id to another path that still exists,
  *   this checkout is a copy: it gets a new worktree id (and a new repository id when
  *   the whole repository was copied). A moved worktree keeps its ids.
@@ -100,19 +143,19 @@ async function exists(p) {
  * @returns {Promise<{ repoId: string, worktreeId: string }>}
  */
 export async function resolveIds(home, info) {
-  const repoFile = path.join(info.commonDir, 'heirloom-repo-id');
-  const worktreeFile = path.join(info.gitDir, 'heirloom-worktree-id');
-  let repoId = await readOrCreateId(repoFile, newRepoId, ID_PATTERNS.repo);
-  let worktreeId = await readOrCreateId(worktreeFile, newWorktreeId, ID_PATTERNS.worktree);
+  const repo = await idIn(home, info.commonDir, 'heirloom-repo-id', newRepoId, ID_PATTERNS.repo);
+  const worktree = await idIn(home, info.gitDir, 'heirloom-worktree-id', newWorktreeId, ID_PATTERNS.worktree);
+  let repoId = repo.value;
+  let worktreeId = worktree.value;
 
   return updateIndex(home, async (index) => {
     const known = index.worktrees[worktreeId];
     if (known && known.path !== info.root && (await exists(known.path))) {
       worktreeId = newWorktreeId();
-      await writeFileAtomic(worktreeFile, `${worktreeId}\n`, { mode: 0o644 });
+      await writeFileAtomic(worktree.file, `${worktreeId}\n`, { mode: 0o644 });
       if (info.gitDir === info.commonDir) {
         repoId = newRepoId();
-        await writeFileAtomic(repoFile, `${repoId}\n`, { mode: 0o644 });
+        await writeFileAtomic(repo.file, `${repoId}\n`, { mode: 0o644 });
       }
     }
     const managed = index.worktrees[worktreeId]?.managed;
@@ -123,11 +166,12 @@ export async function resolveIds(home, info) {
 
 /**
  * Read existing ids without creating anything. Null when this checkout has never been
- * used with Heirloom.
+ * used with Heirloom. With `home`, ids kept under HEIRLOOM_HOME (read-only `.git`) are found too.
  * @param {{ gitDir: string, commonDir: string }} info
+ * @param {string} [home]
  * @returns {Promise<{ repoId: string, worktreeId: string } | null>}
  */
-export async function readIds(info) {
+export async function readIds(info, home) {
   /** @param {string} file @param {RegExp} pattern */
   const read = async (file, pattern) => {
     try {
@@ -137,7 +181,13 @@ export async function readIds(info) {
       return null;
     }
   };
-  const repoId = await read(path.join(info.commonDir, 'heirloom-repo-id'), ID_PATTERNS.repo);
-  const worktreeId = await read(path.join(info.gitDir, 'heirloom-worktree-id'), ID_PATTERNS.worktree);
+  /** @param {string} dir @param {string} name @param {RegExp} pattern */
+  const find = async (dir, name, pattern) => {
+    const file = path.join(dir, name);
+    if (await exists(file)) return read(file, pattern);
+    return home ? read(await fallbackIdFile(home, dir, name), pattern) : null;
+  };
+  const repoId = await find(info.commonDir, 'heirloom-repo-id', ID_PATTERNS.repo);
+  const worktreeId = await find(info.gitDir, 'heirloom-worktree-id', ID_PATTERNS.worktree);
   return repoId && worktreeId ? { repoId, worktreeId } : null;
 }

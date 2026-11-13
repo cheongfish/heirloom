@@ -93,7 +93,7 @@ export async function evaluateStop({ cwd, home, stopHookActive, transcriptPath }
   } catch {
     return { remind: false, reason: 'not_git' };
   }
-  const known = await readIds(info);
+  const known = await readIds(info, home);
   const index = known ? await readIndex(home) : null;
   // A curation worktree is driven by its curation task, never by handoff reminders.
   if (known && index?.worktrees[known.worktreeId]?.managed) return { remind: false, reason: 'managed' };

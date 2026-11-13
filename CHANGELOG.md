@@ -2,6 +2,25 @@
 
 이 문서는 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 형식을 따릅니다. 버전은 `main`의 태그와 같습니다.
 
+## [0.3.0] - 2026-11-13
+
+### 추가
+
+- Codex 지원(잠정 등급 A). 전용 매니페스트 `.codex-plugin/plugin.json`이 Claude Code와 같은 스킬과 훅 파일을 씁니다. 훅은 Codex 세션의 `/hooks`에서 신뢰해야 실행됩니다. 종료 훅은 Codex 세션 기록의 셸 명령에서 세션이 읽은 spec을 찾습니다.
+- Antigravity CLI 지원(잠정 등급 A). 전용 매니페스트 `.antigravity-plugin/plugin.json`, 플러그인 루트의 `hooks.json`, 압축 뒤에도 남는 상시 규칙 `rules/heirloom.md`를 둡니다. 종료 훅은 정상 종료(`NO_TOOL_CALL`)에서만 상기하므로 취소·오류·`/compact` 뒤에 작업을 재개시키지 않습니다.
+- 맥락 정리의 Codex·Antigravity 헤드리스 프로필. 단계별 허용 범위를 호스트 중립 정책으로 정하고, Codex는 실행별 허용 목록 훅(`hook-allowlist.mjs`), Antigravity는 실행별 권한 규칙으로 제한합니다. Codex 반영 단계는 샌드박스가 `.git`을 쓸 수 없어 샌드박스 없이 허용 목록 훅만으로 실행합니다.
+- 피드백 이슈 양식(`.github/ISSUE_TEMPLATE/feedback.yml`).
+
+### 변경
+
+- 맥락 정리는 그 저장소의 마지막 세션 호스트로 실행합니다. 세션 시작 훅이 작업 트리마다 호스트를 기록하고, 기록이 없을 때만 사용자 설정 `curation.agent.host`를 씁니다. 대시보드가 실행할 호스트를 보여 줍니다.
+- 사용자 설정 `curation.agent.host`가 `codex`, `antigravity`를 받고, `command`의 기본값이 호스트마다 다릅니다(`claude`, `codex`, `agy`).
+- 사용자 문서를 사람이 읽는 짧은 README와 에이전트가 읽는 영어 문서(`docs/agent/`)로 나눴습니다. `docs/guide/`는 없어졌습니다.
+
+### 수정
+
+- 저장소의 `.git`에 쓸 수 없으면(Codex 기본 샌드박스) 저장소·worktree ID를 `~/.heirloom/ids/`에 저장합니다. 전에는 인계가 `EROFS`로 실패했습니다.
+
 ## [0.2.1] - 2026-11-13
 
 ### 수정

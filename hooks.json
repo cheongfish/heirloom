@@ -1,0 +1,18 @@
+{
+  "heirloom": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "./hooks/run-hook.cmd session-start antigravity",
+        "timeout": 10
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "./hooks/run-hook.cmd stop antigravity",
+        "timeout": 10
+      }
+    ]
+  }
+}

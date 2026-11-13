@@ -1,7 +1,5 @@
 # Data locations
 
-[한국어](../ko/data.md)
-
 Heirloom keeps data in two places. The repository holds only the records a team shares. Task state, approvals and keys stay on your computer.
 
 ## In the project: `<repository>/.heirloom/`
@@ -25,7 +23,8 @@ The environment variable `HEIRLOOM_HOME` changes this location. Directories are 
 | Path | Content |
 | --- | --- |
 | `config.json` | Optional. [User settings](configuration.md#user-settings) |
-| `index.json` | Worktree registry and the task key → task ID mapping |
+| `index.json` | Worktree registry (including the host of each worktree's last session) and the task key → task ID mapping |
+| `ids/<hash>/heirloom-repo-id`, `heirloom-worktree-id` | Repository and worktree IDs, only when the repository's `.git` cannot be written (for example in Codex's default sandbox). Normally these IDs live in `.git`. |
 | `tasks/<taskId>/input.json` | Input frozen at handoff (source state, materials) |
 | `tasks/<taskId>/draft.json`, `draft.initial.json` | The agent's draft and a copy of its first version |
 | `tasks/<taskId>/check.json` | Source check result |
@@ -48,4 +47,5 @@ The environment variable `HEIRLOOM_HOME` changes this location. Directories are 
 | `tasks/<taskId>/` of open tasks | No: the handoff and its approval are lost. |
 | `worktrees/` | Not by hand: use `git worktree remove` from the repository, or discard the curation in the dashboard. |
 | `keys/public/` | No: past approvals can no longer be verified. |
+| `ids/` | No: the repository gets new IDs and loses the link to its open tasks. |
 | `keys/private.key` or the keychain entry | A new key is created at the next approval. Verifying past approvals needs only the public keys. |

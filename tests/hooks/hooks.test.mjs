@@ -16,11 +16,12 @@ const BASH = skip ? '' : execFileSync('bash', ['-c', 'command -v bash'], { encod
 
 /**
  * @param {'session-start' | 'stop'} hook
- * @param {{ input?: unknown, env?: Record<string, string | undefined>, cwd?: string }} [options]
+ * @param {{ input?: unknown, env?: Record<string, string | undefined>, cwd?: string, host?: string }} [options]
+ *   `host`: the host argument a host's hooks file passes after the hook name
  */
-function runHook(hook, { input = {}, env = {}, cwd = ROOT } = {}) {
+function runHook(hook, { input = {}, env = {}, cwd = ROOT, host } = {}) {
   const started = Date.now();
-  const result = spawnSync(BASH, [RUN_HOOK, hook], {
+  const result = spawnSync(BASH, [RUN_HOOK, hook, ...(host ? [host] : [])], {
     cwd,
     input: typeof input === 'string' ? input : JSON.stringify(input),
     encoding: 'utf8',
@@ -130,6 +131,153 @@ test('stop passes the transcript on: a spec already on main counts once the sess
   const out = JSON.parse(r.stdout);
   assert.equal(out.decision, 'block');
   assert.match(out.reason, /docs\/superpowers\/specs\/units\.md \(이번 세션에서 읽음\)/);
+});
+
+test('codex: the shared hooks.json gives the same SessionStart and Stop output, and a Codex transcript counts', { skip }, async () => {
+  const upstream = await makeRepo({ 'README.txt': 'hello\n', 'docs/superpowers/specs/units.md': '# 단위\n' });
+  const repo = await cloneRepo(upstream);
+  repo.git('checkout', '-q', '-b', 'feat');
+  await repo.write('src/a.mjs', 'export const a = 1;\n');
+  const env = { HEIRLOOM_HOME: await tempDir('home') };
+
+  // Codex hook input: same field names as Claude Code, plus a few of its own.
+  const start = runHook('session-start', { input: { session_id: 's', hook_event_name: 'SessionStart', source: 'compact', cwd: repo.dir, model: 'm', transcript_path: null }, env });
+  assert.equal(start.status, 0, start.stderr);
+  assert.match(JSON.parse(start.stdout).hookSpecificOutput.additionalContext, /prepare-handoff/);
+
+  const transcriptPath = path.join(await tempDir('transcript'), 'rollout.jsonl');
+  const exec = { type: 'response_item', payload: { type: 'custom_tool_call', name: 'exec', input: `await tools.exec_command({cmd:"cat docs/superpowers/specs/units.md",workdir:${JSON.stringify(repo.dir)}})` } };
+  await writeFile(transcriptPath, `${JSON.stringify(exec)}\n`);
+  const stop = runHook('stop', { input: { session_id: 's', turn_id: 'u', hook_event_name: 'Stop', stop_hook_active: false, last_assistant_message: '끝', cwd: repo.dir, transcript_path: transcriptPath }, env });
+  assert.equal(stop.status, 0, stop.stderr);
+  const out = JSON.parse(stop.stdout);
+  assert.equal(out.decision, 'block');
+  assert.match(out.reason, /units\.md \(이번 세션에서 읽음\)/);
+});
+
+test('host argument: codex is accepted; an unknown host falls back to Claude Code output with a note on stderr', { skip }, async () => {
+  const upstream = await makeRepo();
+  const repo = await cloneRepo(upstream);
+  const env = { HEIRLOOM_HOME: await tempDir('home') };
+  const codex = runHook('session-start', { host: 'codex', input: { cwd: repo.dir }, env });
+  assert.equal(codex.status, 0, codex.stderr);
+  assert.equal(JSON.parse(codex.stdout).hookSpecificOutput.hookEventName, 'SessionStart');
+
+  const unknown = runHook('session-start', { host: 'vim', input: { cwd: repo.dir }, env });
+  assert.equal(unknown.status, 0);
+  assert.equal(JSON.parse(unknown.stdout).hookSpecificOutput.hookEventName, 'SessionStart');
+  assert.match(unknown.stderr, /vim/);
+});
+
+test('antigravity: SessionStart injects a system message; Stop continues once, and only after a normal stop', { skip }, async () => {
+  const upstream = await makeRepo({ 'README.txt': 'hello\n' });
+  const repo = await cloneRepo(upstream);
+  repo.git('checkout', '-q', '-b', 'feat');
+  await repo.write('docs/superpowers/specs/units.md', '# 단위\n');
+  await repo.write('src/a.mjs', 'export const a = 1;\n');
+  const env = { HEIRLOOM_HOME: await tempDir('home') };
+  // Antigravity hook input: camelCase, the workspace in workspacePaths and cwd.
+  const common = { conversationId: 'c', workspacePaths: [repo.dir], cwd: repo.dir, transcriptPath: '/nowhere/transcript.jsonl', modelName: 'auto' };
+
+  const start = runHook('session-start', { host: 'antigravity', input: { ...common, hookEventName: 'SessionStart' }, env });
+  assert.equal(start.status, 0, start.stderr);
+  const steps = JSON.parse(start.stdout).injectSteps;
+  assert.equal(steps.length, 1);
+  assert.match(steps[0].systemMessage.systemMessage, /prepare-handoff/);
+
+  const stop = (/** @type {object} */ extra) => runHook('stop', { host: 'antigravity', input: { ...common, hookEventName: 'Stop', executionNum: 0, fullyIdle: true, continuationActive: false, ...extra }, env });
+  for (const reason of ['USER_CANCELED', 'ERROR']) {
+    const r = stop({ terminationReason: reason });
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), {}, `${reason}: no reminder, and an empty object rather than nothing`);
+  }
+  assert.deepEqual(JSON.parse(stop({ terminationReason: 'NO_TOOL_CALL', continuationActive: true }).stdout), {});
+
+  const first = stop({ terminationReason: 'NO_TOOL_CALL' });
+  const out = JSON.parse(first.stdout);
+  assert.equal(out.decision, 'continue');
+  assert.match(out.reason, /prepare-handoff/);
+  assert.deepEqual(JSON.parse(stop({ terminationReason: 'NO_TOOL_CALL' }).stdout), {}, 'once per state');
+});
+
+test('antigravity without Node: SessionStart injects the notice as a system message, Stop prints {}', { skip }, () => {
+  const env = { PATH: '', HEIRLOOM_NODE: undefined };
+  const start = runHook('session-start', { host: 'antigravity', env });
+  assert.equal(start.status, 0);
+  assert.match(JSON.parse(start.stdout).injectSteps[0].systemMessage.systemMessage, /Node 20 이상이 필요합니다/);
+  const stop = runHook('stop', { host: 'antigravity', env });
+  assert.equal(stop.status, 0);
+  assert.deepEqual(JSON.parse(stop.stdout), {});
+});
+
+test('antigravity: hooks.json at the plugin root runs run-hook.cmd from the plugin folder with the host name', { skip }, async () => {
+  const config = JSON.parse(await readFile(path.join(ROOT, 'hooks.json'), 'utf8'));
+  assert.deepEqual(Object.keys(config), ['heirloom']);
+  const { SessionStart, Stop, ...rest } = config.heirloom;
+  assert.deepEqual(rest, {}, 'only the two events');
+  assert.deepEqual(SessionStart.map((/** @type {any} */ h) => h.command), ['./hooks/run-hook.cmd session-start antigravity']);
+  assert.deepEqual(Stop.map((/** @type {any} */ h) => h.command), ['./hooks/run-hook.cmd stop antigravity']);
+  for (const h of [...SessionStart, ...Stop]) assert.equal(h.timeout, 10);
+
+  // As Antigravity runs it: sh -c in the folder that holds hooks.json.
+  const upstream = await makeRepo();
+  const repo = await cloneRepo(upstream);
+  const r = spawnSync('sh', ['-c', SessionStart[0].command], { cwd: ROOT, input: JSON.stringify({ cwd: repo.dir, workspacePaths: [repo.dir] }), encoding: 'utf8', env: { ...process.env, HEIRLOOM_HOME: await tempDir('home') } });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(JSON.parse(r.stdout).injectSteps[0].systemMessage.systemMessage);
+});
+
+test('HEIRLOOM_DISABLE_CONVENTION=1 (evaluation only) injects nothing at session start; Stop still reminds', { skip }, async () => {
+  const upstream = await makeRepo({ 'README.txt': 'hello\n' });
+  const repo = await cloneRepo(upstream);
+  repo.git('checkout', '-q', '-b', 'feat');
+  await repo.write('docs/superpowers/specs/units.md', '# 단위\n');
+  await repo.write('src/a.mjs', 'export const a = 1;\n');
+  const env = { HEIRLOOM_HOME: await tempDir('home'), HEIRLOOM_DISABLE_CONVENTION: '1' };
+  const claude = runHook('session-start', { input: { cwd: repo.dir }, env });
+  assert.equal(claude.status, 0, claude.stderr);
+  assert.equal(claude.stdout, '');
+  const antigravity = runHook('session-start', { host: 'antigravity', input: { cwd: repo.dir }, env });
+  assert.deepEqual(JSON.parse(antigravity.stdout), {});
+  const stop = runHook('stop', { input: { cwd: repo.dir, stop_hook_active: false }, env });
+  assert.equal(JSON.parse(stop.stdout).decision, 'block');
+});
+
+test('session-start records the session host for the worktree Heirloom knows (curation follows it)', { skip }, async () => {
+  const upstream = await makeRepo();
+  const repo = await cloneRepo(upstream);
+  const home = await tempDir('home');
+  const { resolveIds } = await import('../../skills/using-heirloom/lib/ids.mjs');
+  const { repoInfo } = await import('../../skills/using-heirloom/lib/git.mjs');
+  const { worktreeId } = await resolveIds(home, await repoInfo(repo.dir));
+  const index = async () => JSON.parse(await readFile(path.join(home, 'index.json'), 'utf8')).worktrees[worktreeId];
+
+  runHook('session-start', { input: { cwd: repo.dir, source: 'startup', transcript_path: '/h/.codex/sessions/2026/11/13/rollout-x.jsonl' }, env: { HEIRLOOM_HOME: home } });
+  assert.equal((await index()).host, 'codex');
+  runHook('session-start', { host: 'antigravity', input: { cwd: repo.dir, workspacePaths: [repo.dir] }, env: { HEIRLOOM_HOME: home } });
+  assert.equal((await index()).host, 'antigravity');
+  runHook('session-start', { input: { cwd: repo.dir, source: 'startup', transcript_path: '/h/.claude/projects/-r/s.jsonl' }, env: { HEIRLOOM_HOME: home } });
+  assert.equal((await index()).host, 'claude-code');
+  runHook('session-start', { input: { cwd: repo.dir, source: 'startup' }, env: { HEIRLOOM_HOME: home } });
+  assert.equal((await index()).host, 'claude-code', 'an unknown host leaves the record as it was');
+});
+
+test('HEIRLOOM_HOOK_LOG=1 records each hook input and output in HEIRLOOM_HOME/hook-log.jsonl', { skip }, async () => {
+  const upstream = await makeRepo();
+  const repo = await cloneRepo(upstream);
+  const home = await tempDir('home');
+  runHook('session-start', { host: 'codex', input: { cwd: repo.dir, source: 'startup' }, env: { HEIRLOOM_HOME: home, HEIRLOOM_HOOK_LOG: '1' } });
+  runHook('stop', { input: { cwd: repo.dir, stop_hook_active: true }, env: { HEIRLOOM_HOME: home, HEIRLOOM_HOOK_LOG: '1' } });
+  const lines = (await readFile(path.join(home, 'hook-log.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
+  assert.deepEqual(lines.map((l) => [l.hook, l.host]), [['session-start', 'codex'], ['stop', 'claude-code']]);
+  assert.equal(lines[0].input.source, 'startup');
+  assert.equal(typeof lines[0].output.hookSpecificOutput.additionalContext, 'string');
+  assert.equal(lines[1].output, null, 'nothing was printed');
+  assert.match(lines[0].at, /^\d{4}-/);
+
+  const quiet = await tempDir('home');
+  runHook('session-start', { input: { cwd: repo.dir }, env: { HEIRLOOM_HOME: quiet } });
+  await assert.rejects(readFile(path.join(quiet, 'hook-log.jsonl'), 'utf8'), 'no log without the variable');
 });
 
 test('stop gives up silently when the time budget is exceeded', { skip }, async () => {

@@ -1,7 +1,5 @@
 # Workflow
 
-[한국어](../ko/workflow.md)
-
 Heirloom does not do the development work. It takes over work finished with an SDLC tool such as Superpowers, and keeps the PR summary, decisions and axioms (project rules) that a human approved.
 
 ```
@@ -14,7 +12,7 @@ Heirloom does not do the development work. It takes over work finished with an S
 The agent does this.
 
 - **When.** After finishing the implementation and final review of a spec-based task, and before reporting completion, the agent runs the `prepare-handoff` skill.
-- **If the agent forgets.** The stop hook reminds it once. Three conditions must hold: there are code changes linked to a spec, no handoff exists for that state, and no reminder was given for the same state. A spec counts as linked when this branch changed it, and also when the session read a spec that was already on the target branch (checked in the Claude Code session transcript).
+- **If the agent forgets.** The stop hook reminds it once. Three conditions must hold: there are code changes linked to a spec, no handoff exists for that state, and no reminder was given for the same state. A spec counts as linked when this branch changed it, and also when the session read a spec that was already on the target branch (checked in the session transcript; how each host records reads is in [Hosts](hosts.md#differences)).
 - **If specs live elsewhere.** When the handed-off spec does not match the spec location setting (`specGlobs`), the agent asks after the handoff whether to add a matching pattern to `.heirloom/config.json`. Only if you agree does it create the file or add the pattern. The file is a project file; commit it.
 - **Work without a spec.** A small fix, for example, is handed off only when the user asks.
 - **Steps.**
@@ -36,7 +34,7 @@ A human does this. See [Dashboard](dashboard.md) for the screens.
 
 A task without decision or axiom changes ends with a **quick approval**: one confirmation of the summary. Opening or closing the screen is never taken as approval.
 
-The approval can come hours later. The agent does not hold its session open for it. In Claude Code, it waits in the background for up to 60 minutes after the handoff: if you approve while the session is still open, it applies the approval right away (section 3) without being asked. Otherwise it may end its session, and the next session picks the approval up.
+The approval can come hours later. The agent does not hold its session open for it. In Claude Code, it waits in the background for up to 60 minutes after the handoff (in other hosts, when the host can run a command in the background): if you approve while the session is still open, it applies the approval right away (section 3) without being asked. Otherwise it may end its session, and the next session picks the approval up.
 
 ## 3. Records and PR
 

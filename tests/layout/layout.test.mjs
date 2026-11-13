@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -45,6 +45,41 @@ test('repository: Claude Code manifest version matches package.json', async () =
   assert.deepEqual(Object.keys(pkg.dependencies ?? {}), [], 'runtime dependencies are not allowed');
   const { VERSION } = await import('../../skills/using-heirloom/lib/version.mjs');
   assert.equal(VERSION, pkg.version, 'lib/version.mjs matches package.json');
+});
+
+test('repository: the Codex manifest shares skills and hooks with Claude Code through ./ paths', async () => {
+  const claude = JSON.parse(await readFile(path.join(ROOT, '.claude-plugin', 'plugin.json'), 'utf8'));
+  const codex = JSON.parse(await readFile(path.join(ROOT, '.codex-plugin', 'plugin.json'), 'utf8'));
+  assert.equal(codex.name, claude.name);
+  assert.equal(codex.description, claude.description);
+  assert.equal(codex.skills, './skills/');
+  assert.equal(codex.hooks, './hooks/hooks.json', 'an explicit path: Codex would otherwise discover hooks/hooks.json on its own');
+  for (const rel of [codex.skills, codex.hooks]) {
+    assert.match(rel, /^\.\//, 'Codex requires manifest paths to start with ./');
+    await readFile(path.join(ROOT, rel, rel.endsWith('/') ? 'using-heirloom/SKILL.md' : ''), 'utf8');
+  }
+  assert.equal(typeof codex.interface?.displayName, 'string');
+  assert.equal(typeof codex.interface?.shortDescription, 'string');
+});
+
+test('repository: the Antigravity manifest has only schema fields, and its always-on rule carries the handoff rule', async () => {
+  const claude = JSON.parse(await readFile(path.join(ROOT, '.claude-plugin', 'plugin.json'), 'utf8'));
+  const manifest = JSON.parse(await readFile(path.join(ROOT, '.antigravity-plugin', 'plugin.json'), 'utf8'));
+  // The schema rejects unknown fields (additionalProperties: false).
+  const allowed = ['$schema', 'name', 'displayName', 'description', 'version', 'disabled', 'logo', 'suggestedPrompts', 'skills', 'author', 'homepage', 'repository', 'license', 'keywords', 'extensions'];
+  assert.deepEqual(Object.keys(manifest).filter((k) => !allowed.includes(k)), []);
+  assert.equal(manifest.name, claude.name);
+  assert.equal(manifest.description, claude.description);
+  assert.equal(manifest.skills, undefined, 'skills/ at the plugin root is loaded by default');
+
+  // Components are read from the plugin root, never from .antigravity-plugin/.
+  assert.deepEqual((await readdir(path.join(ROOT, '.antigravity-plugin'))).sort(), ['plugin.json']);
+  const rule = await readFile(path.join(ROOT, 'rules', 'heirloom.md'), 'utf8');
+  assert.match(rule, /^---\ntrigger: always_on\n/, 'a rule without a valid trigger is silently dropped');
+  assert.ok(Buffer.byteLength(rule) < 24_000, 'rules over 24,000 bytes are truncated');
+  const skill = await readFile(path.join(ROOT, 'skills', 'using-heirloom', 'SKILL.md'), 'utf8');
+  const core = skill.split('\n').find((line) => line.startsWith('Before you tell the user that the implementation'));
+  assert.ok(core && rule.includes(core), 'the rule repeats the convention sentence word for word');
 });
 
 test('repository: the marketplace lists this plugin with the manifest name and version', async () => {

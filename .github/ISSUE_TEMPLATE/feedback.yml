@@ -1,0 +1,51 @@
+name: 불편·개선 / Feedback
+description: Heirloom을 쓰며 불편했던 점이나 바라는 동작 / Something that got in your way, or how it should work
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        코드, spec 원문, 토큰·키, 사내 경로는 적지 마세요.
+        Please leave out code, spec text, tokens or keys, and internal paths.
+  - type: dropdown
+    id: host
+    attributes:
+      label: 호스트 / Host
+      options:
+        - Claude Code
+        - Codex
+        - Antigravity CLI
+        - Antigravity IDE / app
+        - 기타 / Other
+    validations:
+      required: true
+  - type: dropdown
+    id: step
+    attributes:
+      label: 단계 / Step
+      options:
+        - 설치 / Installation
+        - 세션 시작 규약 주입 / Convention at session start
+        - 종료 시 상기 / Reminder at stop
+        - 인계 (prepare-handoff) / Handoff
+        - 대시보드 승인 / Dashboard approval
+        - 반영·PR·MR (apply-approval) / Apply, PR, MR
+        - 맥락 정리 (curation) / Context curation
+        - 기타 / Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 불편한 점 / What got in your way
+      description: 무엇을 하려다 어떤 일이 있었는지 / What you were trying to do and what happened
+    validations:
+      required: true
+  - type: textarea
+    id: wanted
+    attributes:
+      label: 바라는 동작 / How it should work
+  - type: textarea
+    id: workaround
+    attributes:
+      label: 지금 쓰는 우회 방법 / Your workaround (optional)

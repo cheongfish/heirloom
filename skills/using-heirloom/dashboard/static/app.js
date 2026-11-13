@@ -438,6 +438,7 @@ async function runCuration(c, trigger) {
     [
       '맥락 정리를 실행할까요?',
       '',
+      `- ${agentHostText(c.agent)}로 실행합니다.`,
       '- 저장소의 전용 worktree(~/.heirloom/worktrees/)에 새 브랜치를 만들고, 그 안에서 헤드리스 에이전트를 실행합니다. 지금 작업 트리는 건드리지 않습니다.',
       '- 에이전트는 사용자 권한으로 실행되며, 승인 뒤 PR·MR을 만들 때 사용자의 gh·glab 인증을 씁니다.',
       '- 제안은 이 대시보드에서 항목마다 승인하기 전까지 아무 기록도 바꾸지 않습니다.',
@@ -454,6 +455,15 @@ async function runCuration(c, trigger) {
   }
 }
 
+/** Display names of the headless agent hosts. */
+const HOST_NAME = /** @type {Record<string, string>} */ ({ 'claude-code': 'Claude Code', codex: 'Codex', antigravity: 'Antigravity' });
+
+/** @param {{ host: string, source: string } | undefined} agent */
+function agentHostText(agent) {
+  if (!agent) return 'Claude Code';
+  return `${HOST_NAME[agent.host] ?? agent.host}(${agent.source === 'session' ? '이 저장소의 마지막 세션' : '사용자 설정'})`;
+}
+
 /** @param {any} c curation status of one repository */
 function curationRow(c) {
   /** @type {Child} */
@@ -465,7 +475,7 @@ function curationRow(c) {
   }
   const detail = c.error
     ? `확인하지 못함: ${c.error}`
-    : `검토하지 않은 decision ${c.unreviewed}개 · 마지막 정리 ${c.lastReviewedAt ? when(c.lastReviewedAt) : '없음'} · 대상 ${c.base}${c.unreadable ? ` · 읽지 못한 파일 ${c.unreadable}개` : ''}`;
+    : `검토하지 않은 decision ${c.unreviewed}개 · 마지막 정리 ${c.lastReviewedAt ? when(c.lastReviewedAt) : '없음'} · 대상 ${c.base}${c.unreadable ? ` · 읽지 못한 파일 ${c.unreadable}개` : ''} · 실행 호스트 ${agentHostText(c.agent)}`;
   return h(
     'div',
     { class: 'seed-list-item__root' },
@@ -735,7 +745,11 @@ function curationCard(task) {
 }
 
 /** @type {Record<string, string>} */
-const AGENT_ERROR = { command_missing: '실행 파일을 찾지 못함', interrupted: '실행이 중간에 끊김(대시보드 서버 종료 등)' };
+const AGENT_ERROR = {
+  command_missing: '실행 파일을 찾지 못함',
+  interrupted: '실행이 중간에 끊김(대시보드 서버 종료 등)',
+  permission_denied: '허용 목록 밖의 도구가 필요해 멈춤(Antigravity)',
+};
 
 /** @param {any} task */
 function agentCard(task) {
@@ -770,8 +784,8 @@ function agentCard(task) {
           {},
           '작업은 지금 상태 그대로 있습니다. 다시 실행하거나, 직접 실행하세요: ',
           h('code', {}, `cd ${meta.worktree}`),
-          ' 뒤 Claude Code에서 ',
-          h('code', {}, phase === 'curate' ? '/curate-decisions' : '/apply-approval'),
+          ` 뒤 ${HOST_NAME[agent.last.host] ?? 'Claude Code'}에서 `,
+          h('code', {}, `${agent.last.host === 'codex' ? '$' : '/'}${phase === 'curate' ? 'curate-decisions' : 'apply-approval'}`),
           agent.last.log ? [' · 로그 ', h('code', {}, agent.last.log)] : null,
         ),
       ),

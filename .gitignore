@@ -1,7 +1,12 @@
 node_modules/
 
-# Planning documents stay local (not pushed). User docs live in docs/guide/.
+# Planning documents stay local (not pushed). User docs: README.md, README.en.md and docs/agent/.
 docs/HEIRLOOM-PLAN.md
 docs/HEIRLOOM-DESIGN.md
 docs/HEIRLOOM-MVP-PLAN.md
+docs/HEIRLOOM-PHASE2-PLAN.md
 docs/HEIRLOOM-PHASE3-PLAN.md
+
+# Development instructions for agents working on this repository stay local (not pushed).
+AGENTS.md
+CLAUDE.md

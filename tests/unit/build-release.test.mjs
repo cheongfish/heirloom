@@ -11,6 +11,10 @@ import { RELEASE_PATHS, buildRelease } from '../../tools/build-release.mjs';
 const FILES = {
   '.claude-plugin/plugin.json': '{}\n',
   '.claude-plugin/marketplace.json': '{}\n',
+  '.codex-plugin/plugin.json': '{}\n',
+  '.antigravity-plugin/plugin.json': '{}\n',
+  'hooks.json': '{}\n',
+  'rules/heirloom.md': '---\ntrigger: always_on\n---\n',
   'hooks/hooks.json': '{}\n',
   'skills/a/SKILL.md': '# a\n',
   'skills/a/scripts/x.mjs': 'export {};\n',
@@ -18,7 +22,7 @@ const FILES = {
   'tests/unit/a.test.mjs': '',
   'evals/README.md': '',
   'tools/t.mjs': '',
-  'docs/guide/en/x.md': '',
+  'docs/agent/x.md': '',
   'package.json': '{}\n',
   'CHANGELOG.md': '# 변경 이력\n',
   'AGENTS.md': '',
@@ -34,6 +38,8 @@ test('the build branch holds only the plugin directories; the working tree, HEAD
   assert.equal(out.branch, 'release-build/20261113');
   const top = repo.git('ls-tree', '--name-only', 'release-build/20261113').split('\n').sort();
   assert.deepEqual(top, [...RELEASE_PATHS].sort(), 'no CHANGELOG, tests or tools');
+  assert.ok(RELEASE_PATHS.includes('.codex-plugin'), 'the Codex manifest is released');
+  for (const p of ['.antigravity-plugin', 'hooks.json', 'rules']) assert.ok(RELEASE_PATHS.includes(p), `${p} is released for Antigravity`);
   assert.equal(repo.git('show', 'release-build/20261113:skills/a/scripts/x.mjs'), 'export {};');
   assert.equal(repo.git('rev-parse', 'HEAD'), head);
   assert.equal(repo.git('branch', '--show-current'), 'main');
