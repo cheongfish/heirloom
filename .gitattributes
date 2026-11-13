@@ -1,0 +1,6 @@
+# Hook entry points run under bash, also on Windows (Git Bash). A checkout with CRLF line
+# endings (core.autocrlf=true) breaks them with "$'\r': command not found", so the hooks would
+# stop silently. Keep them LF everywhere. This file is part of the release tree.
+hooks/** text eol=lf
+*.sh text eol=lf
+*.cmd text eol=lf
