@@ -6,7 +6,7 @@ It is not the convention a development session follows. Inside a session, Heirlo
 
 ## What Heirloom is
 
-A plugin for Claude Code, Codex and Antigravity. After an SDLC tool (for example Superpowers) finishes spec-based work, or when the user asks to hand off other work (for example work asked for in the chat), the agent hands it off; Heirloom freezes the state, checks the agent's drafts against their sources (documents, or the user's messages in the session), and a human approves the PR summary and the decisions in a local dashboard. The agent then writes the approved records to `.heirloom/` in the repository and opens the PR. Later sessions get the active decisions and axioms.
+A plugin for Claude Code, Codex and Antigravity, with partial support for Cursor CLI. After an SDLC tool (for example Superpowers) finishes spec-based work, or when the user asks to hand off other work (for example work asked for in the chat), the agent hands it off; Heirloom freezes the state, checks the agent's drafts against their sources (documents, or the user's messages in the session), and a human approves the PR summary and the decisions in a local dashboard. The agent then writes the approved records to `.heirloom/` in the repository and opens the PR. Later sessions get the active decisions and axioms.
 
 ## Rules for agents using this folder
 
@@ -37,7 +37,7 @@ A plugin for Claude Code, Codex and Antigravity. After an SDLC tool (for example
 | --- | --- |
 | Node.js | 20 or later (`node --version`). Built-in modules only; no `npm install`. Without Node, the session start shows one line, "Heirloom 비활성: Node 20 이상이 필요합니다.", and Heirloom stays off. |
 | git | The project must be a git repository. The target branch comes from `origin/HEAD` or the project setting `baseBranch`. |
-| Host | Claude Code, Codex CLI or Antigravity CLI ([hosts.md](hosts.md)). |
+| Host | Claude Code, Codex CLI or Antigravity CLI; Cursor CLI in part ([hosts.md](hosts.md)). |
 | `gh` (optional) | To open PRs on github.com, logged in (`gh auth status`). GitHub Enterprise is not supported. |
 | `glab` (optional) | To open merge requests on gitlab.com or a self-hosted GitLab logged in with `glab auth login --hostname <host>`. Commands follow glab 1.36. |
 | OS | Linux, macOS, WSL. |
@@ -48,6 +48,9 @@ A plugin for Claude Code, Codex and Antigravity. After an SDLC tool (for example
 | --- | --- |
 | Windows keychain | The private key is kept in a file (mode 0600). |
 | GitHub Enterprise | Only github.com counts as GitHub. |
+| Reminder at stop in Cursor CLI | Cursor CLI runs no stop hook. The agent hands off from the convention alone; nothing reminds it. |
+| Context curation with Cursor | A curation runs with the repository's last Claude Code, Codex or Antigravity session, or `curation.agent.host`. |
+| Cursor IDE, other Cursor install methods | Not checked. Use the Cursor CLI with `--plugin-dir`. |
 
 ## Feedback
 

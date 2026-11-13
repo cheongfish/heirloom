@@ -82,6 +82,25 @@ test('repository: the Antigravity manifest has only schema fields, and its alway
   assert.ok(core && rule.includes(core), 'the rule repeats the convention sentence word for word');
 });
 
+test('repository: the Cursor manifest points at Cursor-format hooks and rules, never at the shared ones', async () => {
+  const claude = JSON.parse(await readFile(path.join(ROOT, '.claude-plugin', 'plugin.json'), 'utf8'));
+  const cursor = JSON.parse(await readFile(path.join(ROOT, '.cursor-plugin', 'plugin.json'), 'utf8'));
+  assert.equal(cursor.name, claude.name);
+  assert.equal(cursor.description, claude.description);
+  assert.equal(cursor.skills, './skills/');
+  // A path in the manifest replaces Cursor's default discovery of hooks/hooks.json (Claude Code
+  // format) and rules/ (Antigravity format).
+  assert.equal(cursor.hooks, './hooks/hooks-cursor.json');
+  assert.equal(cursor.rules, './.cursor-plugin/rules/');
+  const rule = await readFile(path.join(ROOT, '.cursor-plugin', 'rules', 'heirloom.mdc'), 'utf8');
+  assert.match(rule, /^---\n(?:.*\n)*?alwaysApply: true\n(?:.*\n)*?---\n/, 'an always-applied rule');
+  const skill = await readFile(path.join(ROOT, 'skills', 'using-heirloom', 'SKILL.md'), 'utf8');
+  const core = skill.split('\n').find((line) => line.startsWith('Before you tell the user that the implementation'));
+  assert.ok(core && rule.includes(core), 'the rule repeats the convention sentence word for word');
+  const antigravity = await readFile(path.join(ROOT, 'rules', 'heirloom.md'), 'utf8');
+  assert.equal(rule.split('\n---\n').slice(1).join('\n---\n'), antigravity.split('\n---\n').slice(1).join('\n---\n'), 'same body as the Antigravity rule');
+});
+
 test('repository: hook entry points keep LF line endings on every checkout (.gitattributes)', async () => {
   const { execFileSync } = await import('node:child_process');
   const files = ['hooks/run-hook.cmd', 'hooks/session-start', 'hooks/stop', 'hooks/node-env'];

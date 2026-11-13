@@ -1,6 +1,6 @@
 # Install
 
-Install from the `release` branch: it holds only the plugin files (host manifests, `.gitattributes`, `hooks/`, `hooks.json`, `rules/`, `skills/`, `examples/`). Ask the user before installing; trust prompts are theirs to answer.
+Install from the `release` branch: it holds only the plugin files (host manifests, `.gitattributes`, `hooks/`, `hooks.json`, `rules/`, `skills/`, `examples/`; `.cursor-plugin/` also holds Cursor's rule). Ask the user before installing; trust prompts are theirs to answer.
 
 ## Claude Code
 
@@ -36,6 +36,21 @@ agy plugin install ~/tools/heirloom
 - Remove: `agy plugin uninstall heirloom`.
 - Do not also run `agy plugin import claude` for Heirloom: its converted hooks would run next to Heirloom's own.
 
+## Cursor CLI
+
+Only the Cursor CLI (`agent`) is supported, and only in part ([hosts.md](hosts.md#support-level)).
+
+```sh
+git clone -b release https://github.com/cheongfish/heirloom ~/tools/heirloom
+agent --plugin-dir ~/tools/heirloom
+```
+
+- `--plugin-dir` loads the plugin for that session only; pass it every time (a shell alias helps). Other install methods (the plugin marketplace, `~/.cursor/plugins/local/`) and the Cursor IDE were not checked.
+- A new folder asks for workspace trust once; the user answers it.
+- Check: in a new session, ask "Do you see the Heirloom convention?". The answer should quote the convention.
+- Update: `git -C ~/tools/heirloom pull`.
+- Remove: stop passing `--plugin-dir`, then delete the clone.
+
 ## Install locations
 
 | Host | Plugin folder |
@@ -43,6 +58,7 @@ agy plugin install ~/tools/heirloom
 | Claude Code | `~/.claude/plugins/cache/heirloom/heirloom/<version>/` |
 | Codex | `~/.codex/plugins/cache/heirloom/heirloom/<version>/` |
 | Antigravity | `~/.gemini/config/plugins/heirloom/` |
+| Cursor CLI | The clone given to `--plugin-dir` (for example `~/tools/heirloom/`) |
 
 The installed version is `version` in `<plugin folder>/.claude-plugin/plugin.json`.
 

@@ -43,6 +43,8 @@ Read the result:
 
   The handoff still goes ahead. Decisions then need a document source. Mention the reason in the report.
 
+  Never try to make the conversation available yourself: do not record a session, do not write files under `~/.heirloom/`, and do not call Heirloom's library modules (for example `node -e` importing `lib/`). Only the hooks record sessions. If the user wants the conversation as a source, they start a new session or end the other one, and you run `prepare` again.
+
 ## 2. Write the draft
 
 Write JSON to `draftPath`:

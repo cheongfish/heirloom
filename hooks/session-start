@@ -15,6 +15,7 @@ if [ -z "$NODE_BIN" ]; then
   notice='Heirloom 비활성: Node 20 이상이 필요합니다. 설치 후 세션을 다시 시작하세요.'
   case "${1:-}" in
     antigravity) printf '{"injectSteps":[{"systemMessage":{"systemMessage":"%s"}}]}\n' "$notice" ;;
+    cursor) printf '{"additional_context":"%s"}\n' "$notice" ;;
     *) printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$notice" ;;
   esac
   exit 0

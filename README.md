@@ -28,7 +28,8 @@ flowchart LR
 
 ### 인계
 - spec 기반 작업이 끝나면 에이전트가 인계합니다.
-- spec 없이 채팅으로 맡긴 작업은 사용자가 요청할 때 인계합니다. 대화에서 사용자가 정한 결정은 그 발화를 인용해 기록할 수 있습니다.
+- spec 없이 채팅으로 맡긴 작업은 사용자가 요청할 때 인계합니다.
+    - 대화에서 사용자가 정한 결정은 그 발화를 인용해 기록할 수 있습니다.
 - 초안이 인용한 출처(문서, 사용자 발화)는 기계적으로 검사합니다.
 ### 승인
 - 대시보드(`http://127.0.0.1:17380/`)에서 요약과 결정을 항목마다 승인합니다.
@@ -72,13 +73,36 @@ Node 20 이상과 git이 필요합니다. PR을 만들려면 `gh`(GitHub)나 `gl
 # Codex (설치 뒤 Codex 세션의 /hooks에서 Heirloom 훅을 신뢰)
 codex plugin marketplace add cheongfish/heirloom@release
 codex plugin add heirloom@heirloom
+```
 
+```sh
 # Antigravity CLI
 git clone -b release https://github.com/cheongfish/heirloom ~/tools/heirloom
 agy plugin install ~/tools/heirloom
 ```
 
-## 에이전트에게 맡기기
+```sh
+# Cursor CLI (세션마다 플러그인 폴더를 지정)
+git clone -b release https://github.com/cheongfish/heirloom ~/tools/heirloom
+agent --plugin-dir ~/tools/heirloom
+```
+
+### Cursor 지원 범위
+
+Cursor는 CLI(`agent`)만 지원하고, 그중에서도 아래 기능만 동작합니다.
+
+- 동작
+    - 인계, 대화에서 정한 결정 기록
+    - 대시보드 승인, 기록과 PR
+    - 스킬, 세션 시작 맥락과 상시 규칙, 다음 세션의 결정 회수
+- 동작하지 않음
+    - 세션이 끝날 때 인계를 다시 알려 주는 기능. Cursor CLI가 stop 훅을 실행하지 않아, spec 작업을 마치고 인계를 빠뜨려도 다시 알려 주지 않습니다.
+    - 맥락 정리를 Cursor로 실행하는 기능. 맥락 정리는 Claude Code·Codex·Antigravity 중 하나로 실행됩니다.
+- 확인하지 않음
+    - Cursor IDE
+    - `--plugin-dir` 밖의 설치 방법(마켓플레이스, `~/.cursor/plugins/local/`)
+
+## 에이전트용 문서
 
 설치, 설정, 문제 해결은 에이전트에게 맡기면 됩니다. 자세한 문서는 에이전트가 읽도록 [`docs/agent/`](docs/agent/README.md)에 영어로 정리해 두었습니다.
 
@@ -95,6 +119,4 @@ agy plugin install ~/tools/heirloom
 
 Heirloom은 [Apache License 2.0](LICENSE)으로 배포합니다.
 
-대시보드에는 고정 버전의 [SEED Design](https://github.com/daangn/seed-design) CSS(Apache-2.0)가 들어 있습니다.
-
-`LICENSE`와 `NOTICE`는 `skills/using-heirloom/dashboard/vendor/seed-design/`에 있습니다.
+대시보드에는 고정 버전의 [SEED Design](https://github.com/daangn/seed-design) CSS(Apache-2.0)가 들어 있고, `LICENSE`와 `NOTICE`는 `skills/using-heirloom/dashboard/vendor/seed-design/`에 있습니다.
