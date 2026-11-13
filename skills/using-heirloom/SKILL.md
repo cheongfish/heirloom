@@ -18,7 +18,9 @@ Do not request a handoff:
 - after the user interrupted you, or when you stopped because of an error,
 - again for the same state. `prepare-handoff` reports when a handoff already exists for it.
 
-Work that has no spec (a small fix, a refactor) is handed off only when the user asks for it.
+Work that has no spec (a small fix, a refactor, work asked for in the chat) is handed off only when the user asks for it. The stop hook may tell you once per session that this work can be handed off; then tell the user in one sentence when you report the work as finished, and hand off only if they ask.
+
+Decisions the user makes in the conversation can be recorded too. `prepare-handoff` freezes the messages the user typed in this session, and a draft may quote them as a source. Never record your own suggestion as a decision unless the user's message states it.
 
 A handoff means "the agent reports the work is ready to hand off". It is not proof that the work is correct, and it is not an approval.
 

@@ -3,6 +3,7 @@
 
 import { matchesAny } from './glob.mjs';
 import { isMarkdownCodePath } from './schema.mjs';
+import { claimNotice } from './conversation.mjs';
 import { loadProjectConfig } from './config.mjs';
 import { countAttempts, deriveState, readEvents } from './events.mjs';
 import { readJson } from './fsx.mjs';
@@ -17,9 +18,19 @@ import { specsReadInTranscript } from './transcript.mjs';
 /**
  * @typedef {object} StopDecision
  * @property {boolean} remind
- * @property {'stop_hook_active' | 'not_git' | 'no_base' | 'managed' | 'no_changes' | 'no_code_changes' | 'no_spec' | 'already_reminded' | 'handoff_requested' | 'remind' | 'recheck' | 'recheck_not_needed'} reason
+ * @property {'stop_hook_active' | 'not_git' | 'no_base' | 'managed' | 'no_changes' | 'no_code_changes' | 'no_spec' | 'already_noticed' | 'notice' | 'already_reminded' | 'handoff_requested' | 'remind' | 'recheck' | 'recheck_not_needed'} reason
  * @property {string} [message] text for the agent when `remind` is true
  */
+
+/** The once-per-session notice for code changes without a spec. */
+export function noticeMessage() {
+  return [
+    'Heirloom 안내: 이 작업 트리에 spec과 연결되지 않은 코드 변경이 있다.',
+    '작업을 마쳤다고 사용자에게 보고하는 중이라면, 원하면 이 변경을 Heirloom 인계(prepare-handoff 스킬, --manual)로 넘겨 PR 요약과 대화에서 정한 결정을 대시보드에서 승인받을 수 있다고 한 문장으로 알린다. 인계는 사용자가 요청할 때만 한다.',
+    '아직 작업 중이거나, 사용자 입력을 기다리거나, 중단·오류로 멈춘 상태라면 알리지 않고 그대로 종료한다.',
+    '이 안내는 이 세션에서 다시 나오지 않는다.',
+  ].join('\n');
+}
 
 /** @param {string[]} specs */
 export function reminderMessage(specs) {
@@ -129,15 +140,26 @@ export async function evaluateStop({ cwd, home, stopHookActive, transcriptPath }
   // already on the target branch does not appear among the changes).
   const changedSpecs = state.files.filter((f) => f.status !== 'D' && matchesAny(f.path, config.specGlobs)).map((f) => f.path);
   const readSpecs = (await specsReadInTranscript({ transcriptPath, root: info.root, globs: config.specGlobs })).filter((p) => !changedSpecs.includes(p));
-  if (!changedSpecs.length && !readSpecs.length) return { remind: false, reason: 'no_spec' };
+  const handedOff = async () => {
+    if (!known || !index) return false;
+    for (const { taskId } of tasksForWorktree(index, known.worktreeId)) {
+      if (countAttempts(await readEvents(taskPaths(home, taskId).events), state.hash) > 0) return true;
+    }
+    return false;
+  };
+
+  // Work without a spec is handed off only when the user asks. The session is told once that
+  // it can be, so a chat-only user learns the option exists; it needs the transcript to know
+  // the session, and says nothing without it.
+  if (!changedSpecs.length && !readSpecs.length) {
+    if (!transcriptPath || (await handedOff())) return { remind: false, reason: 'no_spec' };
+    if (!(await claimNotice({ home, root: info.root, transcriptPath }))) return { remind: false, reason: 'already_noticed' };
+    return { remind: true, reason: 'notice', message: noticeMessage() };
+  }
 
   if (known && index) {
     if (index.reminders[known.worktreeId]?.sourceHash === state.hash) return { remind: false, reason: 'already_reminded' };
-    for (const { taskId } of tasksForWorktree(index, known.worktreeId)) {
-      if (countAttempts(await readEvents(taskPaths(home, taskId).events), state.hash) > 0) {
-        return { remind: false, reason: 'handoff_requested' };
-      }
-    }
+    if (await handedOff()) return { remind: false, reason: 'handoff_requested' };
   }
 
   const { worktreeId } = await resolveIds(home, info);

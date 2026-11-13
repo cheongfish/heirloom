@@ -13,6 +13,8 @@
 // transcript_full.jsonl`) is not documented. Each line is a step; a model step lists its tool
 // calls as `tool_calls: [{ name, args }]`. File reads are `read_file`/`view_file` with an
 // absolute path, commands are `run_command` with `CommandLine`. Anything else is ignored.
+// What the person typed is a `USER_INPUT` step from `USER_EXPLICIT`, its text wrapped in
+// `<USER_REQUEST>` next to harness metadata (local time, setting changes).
 
 /** @typedef {import('./index.mjs').HookInput} HookInput */
 /** @typedef {import('./index.mjs').TranscriptCall} TranscriptCall */
@@ -71,4 +73,17 @@ export function transcriptCalls(entry) {
     }
   }
   return calls;
+}
+
+const USER_REQUEST = /<USER_REQUEST>\n?([\s\S]*?)\n?<\/USER_REQUEST>/g;
+
+/**
+ * The text inside `<USER_REQUEST>` of a step the person typed. Slash commands such as
+ * `/compact` are commands, not messages.
+ * @param {any} entry
+ * @returns {string[]}
+ */
+export function transcriptUtterances(entry) {
+  if (typeof entry?.step_index !== 'number' || entry.type !== 'USER_INPUT' || entry.source !== 'USER_EXPLICIT' || typeof entry.content !== 'string') return [];
+  return [...entry.content.matchAll(USER_REQUEST)].map((m) => m[1]).filter((text) => text.trim() && !/^\/\S+\s*$/.test(text.trim()));
 }
