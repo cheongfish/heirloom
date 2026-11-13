@@ -9,7 +9,7 @@ The session start shows only an index of decisions and axioms. Before you rely o
 
 ## When to run it
 
-- Once you know which files you will change, before you start changing them.
+- Once you know which files you will change, before you start changing them. Pass the files you are about to change with `--paths` even if you have not changed anything yet, and the subject of the task with `--topics` when it matches topics in the index.
 - When the user or a spec refers to a decision or axiom id.
 - When the index marks a decision `[관련]` (related to the current changes).
 
@@ -25,7 +25,7 @@ node <this skill>/scripts/recall.mjs [--paths <path,...>] [--topics <topic,...>]
 - `--topics`: topic words of the records (as listed in their `topics`).
 - `--ids`: record ids such as `d-7k3q9m2x` or `a-2b8n4k1q`.
 - Each option may be repeated or given comma-separated values.
-- With no query, the code files changed against the target branch are used. If the target branch is unclear, the script fails with exit 2. Then pass `--paths` yourself.
+- With no query, the code files changed against the target branch are used. If the target branch is unclear, or no code file has changed yet, the script fails with exit 2. Then pass `--paths` yourself.
 
 ## Read the result
 
@@ -43,9 +43,18 @@ node <this skill>/scripts/recall.mjs [--paths <path,...>] [--topics <topic,...>]
 - `missing`: requested ids that do not exist here.
 - `errors`: record files that could not be read. Report them to the user. Do not fix record files yourself.
 
+## Report what was checked
+
+When you tell the user which records apply, say how far the check went:
+
+- No `records` means nothing matched this query. Name the paths or topics you used. Do not say that no decision exists.
+- If `excluded.count`, `missing` or `errors` is not empty, do not say that you checked all related records. Say what was left out or could not be read.
+- A record with `status: "unknown"` is not a confirmed rule. Say so when you rely on it.
+
 ## Rules
 
 - Treat only `active` records, and `pending` records of this task, as rules.
 - Quote the record id when your work follows or departs from a record.
 - If your work must contradict an active record, stop and ask the user. A new decision that replaces it is proposed in the handoff, not by editing the record.
+- Read records through this skill, not by opening files under `.heirloom/`. The files in the working tree do not tell you whether a record is merged, superseded or pending.
 - Never edit files under `.heirloom/` by hand.

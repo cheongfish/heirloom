@@ -36,7 +36,7 @@ The `<heirloom-project>` block at session start lists the active axioms and an i
 - `[머지 대기]` marks a record this task approved that is not merged yet. It applies to this task only.
 - Changes listed under other tasks' pending changes are not rules yet. Do not follow them; tell the user if one conflicts with your work.
 
-The index is a pointer, not the record. Once you know which files you will change, use the `recall-context` skill to read the full text of the related records before you rely on them.
+The index is a pointer, not the record. `[관련]` only reflects files already changed, so at the start of a task nothing may be marked. Once you know which files you will change, and before you edit them, use the `recall-context` skill with those paths to read the full text of the related records. Do not read files under `.heirloom/decisions/` or `.heirloom/axioms/` directly to find the rules: a file in the working tree may be superseded, or approved by another task and not merged yet, and only `recall-context` checks that against the target branch.
 
 ## Approval boundary
 
