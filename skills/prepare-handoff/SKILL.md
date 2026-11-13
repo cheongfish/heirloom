@@ -35,6 +35,7 @@ Read the result:
   - `E_TRANSIENT` (exit 75): the script already retried. Do not run it again.
 - Otherwise continue with `taskId`, `draftPath`, `source.files`, `materials`, `unknowns`, `relatedRecords` and `reviewMatchesSource`.
 - `recheck` is not null: this task was approved before and the code or materials changed since. Write an incremental draft (section 2.1) instead of a new one.
+- `specCoverage` is not null: the project's spec location patterns (`specGlobs`) do not match `specCoverage.uncovered`. The handoff itself is not affected; continue. After the report (step 5), ask the user whether to add the pattern (section 6).
 
 ## 2. Write the draft
 
@@ -147,3 +148,22 @@ Tell the user three things:
 - Any warnings and unknown values.
 
 Do not say the work is approved. The approval may come hours later. You can end the session, because `apply-approval` continues from the saved approval. If you started the wait, say that you will apply the approval when it comes.
+
+## 6. Add a spec location (ask first, then add)
+
+Heirloom recognizes spec-based work at session end by the project's spec location patterns. When `specCoverage` is set, the spec of this handoff is outside them.
+
+1. **Ask.** After the report, ask the user one question and wait for the answer. Say which spec is outside the patterns (`specCoverage.uncovered`), which pattern you would add (`specCoverage.suggested`), and that the setting goes into `.heirloom/config.json` in the repository. For example: "`design/rfc/units.md`는 Heirloom의 spec 위치 설정 밖에 있습니다. `.heirloom/config.json`에 `design/rfc/**/*.md`를 추가할까요?"
+2. **Add only on a yes.** If the user agrees, run:
+
+   ```sh
+   node <this skill>/scripts/add-spec-globs.mjs --glob <pattern> [--glob <pattern> ...]
+   ```
+
+   Use `specCoverage.suggested`, or the pattern the user gives instead. Patterns are relative to the repository root.
+3. **Report.** Tell the user whether the file was created (`data.created`) and which patterns were added (`data.added`). The file is a project file: they commit it. It is not part of the handoff state, so no new handoff or approval is needed.
+
+- If the user declines or does not answer, do nothing and do not ask again in this session.
+- When nobody can answer (a non-interactive run), do not ask and do not add: mention it in the report instead.
+- Never run the script without the user's yes, and never edit `.heirloom/config.json` yourself.
+- The approval wait (step 4) keeps running while you ask. If the approval arrives first, apply it as step 4 says, then ask.

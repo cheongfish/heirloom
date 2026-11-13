@@ -1,7 +1,10 @@
 {
   "schemaVersion": 1,
   "baseBranch": "main",
-  "specGlobs": ["docs/superpowers/specs/**", "**/specs/**/*.md"],
+  "specGlobs": [
+    "docs/superpowers/specs/**",
+    "**/specs/**/*.md"
+  ],
   "recall": {
     "maxRecords": 8,
     "maxTokens": 6000
@@ -14,5 +17,8 @@
     "maxAgeDays": 30,
     "minForAge": 3,
     "batchSize": 20
+  },
+  "testCadence": {
+    "mode": "off"
   }
 }

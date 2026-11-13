@@ -174,8 +174,32 @@ export async function prepareHandoff(options) {
       relatedRecords,
       projectRules: input.projectRules,
       recheck: input.recheck ? recheckReport(input.recheck) : null,
+      specCoverage: specCoverage(input.materials, config.specGlobs),
     };
   });
+}
+
+/**
+ * Specs of this handoff that the project's `specGlobs` do not match, with a pattern that
+ * would. The Stop hook only recognizes spec-based work through those patterns, so the agent
+ * offers the user to add one. Null when every spec is covered.
+ * @param {{ role: string, ref: string }[]} materials
+ * @param {string[]} specGlobs
+ */
+export function specCoverage(materials, specGlobs) {
+  const uncovered = materials.filter((m) => m.role === 'spec' && !matchesAny(m.ref, specGlobs)).map((m) => m.ref);
+  if (!uncovered.length) return null;
+  const suggested = [
+    ...new Set(
+      uncovered.map((ref) => {
+        const dir = path.posix.dirname(ref);
+        // A spec at the root gets its own path: `*.md` would match every document there.
+        if (dir === '.') return ref;
+        return ref.toLowerCase().endsWith('.md') ? `${dir}/**/*.md` : `${dir}/**`;
+      }),
+    ),
+  ];
+  return { uncovered, suggested, specGlobs };
 }
 
 /**
