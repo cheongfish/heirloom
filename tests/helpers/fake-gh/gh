@@ -44,6 +44,18 @@ if (args[0] === '--version') {
   state.prs.push({ number, url, state: 'OPEN', headRefName: flag('--head'), baseRefName: flag('--base'), title: flag('--title'), body });
   save();
   process.stdout.write(`${url}\n`);
+} else if (args[0] === 'api' && flag('-X') === 'PATCH') {
+  // REST update of a PR body: gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F body=@<file>
+  const m = /^repos\/[^/]+\/[^/]+\/pulls\/(\d+)$/.exec(args.find((a) => a.startsWith('repos/')) ?? '');
+  const pr = m && state.prs.find((p) => String(p.number) === m[1]);
+  if (!pr) {
+    process.stderr.write('gh: Not Found (HTTP 404)\n');
+    process.exit(1);
+  }
+  const field = args[args.indexOf('-F') + 1] ?? '';
+  if (field.startsWith('body=@')) pr.body = readFileSync(field.slice('body=@'.length), 'utf8');
+  save();
+  process.stdout.write(`${JSON.stringify({ number: pr.number, html_url: pr.url, body: pr.body })}\n`);
 } else if (args[0] === 'pr' && args[1] === 'edit') {
   const pr = state.prs.find((p) => String(p.number) === args[2] || p.url === args[2]);
   if (!pr) {

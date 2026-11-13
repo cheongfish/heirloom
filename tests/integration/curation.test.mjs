@@ -159,7 +159,9 @@ test('curation: run, headless draft, approval with reasons, headless apply, merg
   const [curateCall] = await calls(f.log);
   assert.equal(curateCall.cwd, worktree);
   const tools = curateCall.args[curateCall.args.indexOf('--allowedTools') + 1].split(',');
-  assert.ok(tools.includes(`Write(/${path.join(taskPaths(f.home, taskId).dir, 'draft.json')})`));
+  // Claude Code checks file writes against Edit(...) rules only; a Write(...) rule is ignored.
+  assert.ok(tools.includes(`Edit(/${path.join(taskPaths(f.home, taskId).dir, 'draft.json')})`));
+  assert.ok(!tools.some((/** @type {string} */ x) => x.startsWith('Write(')), 'no Write(...) rules');
   assert.ok(!tools.some((/** @type {string} */ x) => /git|gh |Bash\(\*/.test(x)), 'the curate step can not run git or gh');
 
   const detail = (await f.call(`/api/tasks/${taskId}`)).body;
@@ -197,7 +199,9 @@ test('curation: run, headless draft, approval with reasons, headless apply, merg
   assert.equal(done.exitCode, 0, await readFile(taskPaths(f.home, taskId).agentLog('apply'), 'utf8'));
   const applyCall = (await calls(f.log))[1];
   const applyTools = applyCall.args[applyCall.args.indexOf('--allowedTools') + 1].split(',');
-  for (const tool of ['Bash(git add .heirloom*)', 'Bash(git commit *)', 'Bash(git push *)', 'Bash(gh pr create *)']) assert.ok(applyTools.includes(tool), tool);
+  for (const tool of ['Bash(git add .heirloom*)', 'Bash(git commit *)', 'Bash(git push *)', 'Bash(gh pr create *)', 'Bash(gh api -X PATCH repos/*/pulls/*)']) assert.ok(applyTools.includes(tool), tool);
+  // `gh pr edit` fails on some gh versions (GraphQL error about Projects classic); bodies are updated through the REST API.
+  assert.ok(!applyTools.some((/** @type {string} */ x) => x.startsWith('Write(') || x.includes('gh pr edit')), 'no Write(...) rules and no gh pr edit');
   const files = f.upstream.git('ls-tree', '-r', '--name-only', branch, '.heirloom').split('\n');
   const reviewFile = files.find((x) => x.startsWith('.heirloom/curation/'));
   assert.ok(reviewFile, 'review history pushed');
