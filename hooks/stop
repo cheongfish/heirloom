@@ -15,4 +15,4 @@ if [ -z "$NODE_BIN" ]; then
   exit 0
 fi
 
-exec "$NODE_BIN" "${HOOK_DIR}/../skills/using-heirloom/scripts/hook-stop.mjs"
+exec "$NODE_BIN" "${HOOK_DIR}/../skills/using-heirloom/scripts/hook-stop.mjs" "$@"

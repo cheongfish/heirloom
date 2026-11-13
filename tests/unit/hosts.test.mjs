@@ -1,0 +1,66 @@
+// Host adapters: each host's hook input, hook output and transcript lines, mapped to and from
+// the host-neutral shapes the hook logic uses.
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+import { HOSTS, hostAdapter, transcriptCalls } from '../../skills/using-heirloom/lib/hosts/index.mjs';
+
+test('hostAdapter: known hosts, claude-code by default, unknown names rejected', () => {
+  assert.deepEqual([...HOSTS].sort(), ['claude-code', 'codex']);
+  assert.equal(hostAdapter(undefined).name, 'claude-code');
+  assert.equal(hostAdapter('').name, 'claude-code');
+  assert.equal(hostAdapter('codex').name, 'codex');
+  assert.throws(() => hostAdapter('vim'), /vim/);
+});
+
+test('readHookInput: cwd, transcript path and the continuation flag; wrong types are dropped', () => {
+  for (const name of ['claude-code', 'codex']) {
+    const host = hostAdapter(name);
+    assert.deepEqual(host.readHookInput({ cwd: '/w', transcript_path: '/t.jsonl', stop_hook_active: true, hook_event_name: 'Stop' }), {
+      cwd: '/w',
+      transcriptPath: '/t.jsonl',
+      continuation: true,
+    });
+    assert.deepEqual(host.readHookInput({ cwd: 3, transcript_path: null, stop_hook_active: 'yes' }), {
+      cwd: undefined,
+      transcriptPath: undefined,
+      continuation: false,
+    });
+  }
+});
+
+test('outputs: SessionStart additionalContext and Stop block (Claude Code and Codex share the format)', () => {
+  for (const name of ['claude-code', 'codex']) {
+    const host = hostAdapter(name);
+    assert.deepEqual(host.sessionStartOutput('규약'), { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: '규약' } });
+    assert.deepEqual(host.stopOutput('상기'), { decision: 'block', reason: '상기' });
+  }
+});
+
+test('transcriptCalls: Claude Code Read calls give the file path; other tools are ignored', () => {
+  const read = { type: 'assistant', message: { content: [{ type: 'text', text: 'x' }, { type: 'tool_use', name: 'Read', input: { file_path: '/r/a.md' } }, { type: 'tool_use', name: 'Bash', input: { command: 'cat /r/b.md' } }] } };
+  assert.deepEqual(transcriptCalls(read), [{ read: '/r/a.md' }]);
+  assert.deepEqual(transcriptCalls({ type: 'user', message: { content: 'cat /r/a.md' } }), []);
+});
+
+test('transcriptCalls: Codex shell calls give their command text; messages and other tools are ignored', () => {
+  const exec = { type: 'response_item', payload: { type: 'custom_tool_call', name: 'exec', input: 'const r = await tools.exec_command({cmd:"cat a.md",workdir:"/r"});' } };
+  assert.deepEqual(transcriptCalls(exec), [{ text: exec.payload.input }]);
+
+  const call = { type: 'response_item', payload: { type: 'function_call', name: 'exec_command', arguments: '{"cmd":"sed -n 1,9p a.md","workdir":"/r"}' } };
+  assert.deepEqual(transcriptCalls(call), [{ text: call.payload.arguments }]);
+
+  const shell = { type: 'response_item', payload: { type: 'local_shell_call', action: { type: 'exec', command: ['cat', 'a.md'], working_directory: '/r' } } };
+  assert.deepEqual(transcriptCalls(shell), [{ text: 'cat a.md workdir:"/r"' }]);
+
+  for (const other of [
+    { type: 'response_item', payload: { type: 'function_call', name: 'send_message_to_user_async', arguments: '{"message":"a.md"}' } },
+    { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'cat a.md' }] } },
+    { type: 'event_msg', payload: { type: 'task_started' } },
+    null,
+    'text',
+  ]) {
+    assert.deepEqual(transcriptCalls(other), []);
+  }
+});

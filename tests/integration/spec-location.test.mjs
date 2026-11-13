@@ -135,6 +135,57 @@ test('transcript: Read calls on spec files inside the repository, relative to th
   assert.deepEqual(await specsReadInTranscript({ transcriptPath: undefined, root: repo.dir, globs: DEFAULTS }), []);
 });
 
+/** A Codex rollout (JSON lines) with the given response items. */
+async function codexTranscript(/** @type {object[]} */ items) {
+  const file = path.join(await tempDir('transcript'), 'rollout.jsonl');
+  const lines = [
+    JSON.stringify({ timestamp: 't', type: 'session_meta', payload: { id: 's1', cwd: '/w' } }),
+    ...items.map((payload) => JSON.stringify({ timestamp: 't', type: 'response_item', payload })),
+    'not json',
+  ];
+  await writeFile(file, `${lines.join('\n')}\n`);
+  return file;
+}
+
+/** The shape Codex records: shell commands inside the JavaScript `exec` tool. */
+const codexExec = (/** @type {string} */ cmd, /** @type {string} */ workdir) => ({
+  type: 'custom_tool_call',
+  name: 'exec',
+  status: 'completed',
+  input: `const r = await tools.exec_command({cmd:${JSON.stringify(cmd)},workdir:${JSON.stringify(workdir)}});\ntext(r)`,
+});
+
+test('transcript (Codex): spec paths in shell commands that exist in the repository, relative to the root', async () => {
+  const { repo } = await workRepo({
+    'docs/superpowers/specs/units.md': '# 단위\n',
+    'docs/superpowers/specs/abs.md': '# 절대\n',
+    'docs/superpowers/specs/sub.md': '# 하위\n',
+    'docs/superpowers/specs/told.md': '# 말함\n',
+  });
+  const file = await codexTranscript([
+    { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'docs/superpowers/specs/told.md를 구현해 줘' }] },
+    codexExec('sed -n 1,80p docs/superpowers/specs/units.md && cat src/a.mjs', repo.dir),
+    { type: 'function_call', name: 'exec_command', arguments: JSON.stringify({ cmd: `cat '${path.join(repo.dir, 'docs/superpowers/specs/abs.md')}'` }) },
+    codexExec('cat superpowers/specs/sub.md', path.join(repo.dir, 'docs')),
+    codexExec('cat docs/superpowers/specs/missing.md /elsewhere/docs/superpowers/specs/other.md && ls docs/superpowers/specs/', repo.dir),
+    { type: 'function_call', name: 'send_message_to_user_async', arguments: JSON.stringify({ message: 'docs/superpowers/specs/told.md 읽음' }) },
+  ]);
+  assert.deepEqual(await specsReadInTranscript({ transcriptPath: file, root: repo.dir, globs: DEFAULTS }), [
+    'docs/superpowers/specs/abs.md',
+    'docs/superpowers/specs/sub.md',
+    'docs/superpowers/specs/units.md',
+  ]);
+});
+
+test('stop (Codex): a spec already on the target branch counts once a shell command read it', async () => {
+  const { repo, home } = await workRepo({ 'docs/superpowers/specs/units.md': '# 단위\n' });
+  await repo.write('src/a.mjs', 'export const a = 2;\n');
+  const read = await codexTranscript([codexExec('cat docs/superpowers/specs/units.md', repo.dir)]);
+  const decision = await evaluateStop({ cwd: repo.dir, home, stopHookActive: false, transcriptPath: read });
+  assert.equal(decision.remind, true);
+  assert.match(String(decision.message), /docs\/superpowers\/specs\/units\.md \(이번 세션에서 읽음\)/);
+});
+
 test('stop: a spec already on the target branch counts once the session read it', async () => {
   const { repo, home } = await workRepo({ 'docs/superpowers/specs/units.md': '# 단위\n' });
   await repo.write('src/a.mjs', 'export const a = 2;\n');
