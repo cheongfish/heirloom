@@ -263,6 +263,20 @@ test('no query: the changed code files are used', async () => {
   assert.deepEqual(out.records.map((r) => r.id), ['a-00000001', 'd-00000001']);
 });
 
+test('no query and no changed code files: an input error, not an empty result', async () => {
+  const { repo, home } = await setup();
+  // Only a Markdown file changed: there is still nothing to look up by.
+  await repo.write('docs/note.md', '# n\n');
+  await assert.rejects(recall({ cwd: repo.dir, home }), (/** @type {any} */ e) => {
+    assert.equal(e.code, 'E_INPUT');
+    assert.match(e.hint, /--paths/);
+    return true;
+  });
+  const run = spawnSync(process.execPath, [SCRIPT], { cwd: repo.dir, encoding: 'utf8', env: { ...process.env, HEIRLOOM_HOME: home } });
+  assert.equal(run.status, 2);
+  assert.equal(JSON.parse(run.stdout).ok, false);
+});
+
 test('recall.mjs prints one JSON object; a bad --limit exits 2', async () => {
   const { repo, home } = await setup();
   const run = (/** @type {string[]} */ args) => spawnSync(process.execPath, [SCRIPT, ...args], { cwd: repo.dir, encoding: 'utf8', env: { ...process.env, HEIRLOOM_HOME: home } });

@@ -81,7 +81,7 @@ Decisions from many handoffs can be reviewed together in a [context curation](cu
 The agent does this.
 
 - **At session start.** The agent receives a summary of the active axioms and an index of active decisions. Decisions related to the current changes come first.
-- **Once the task is known.** The agent runs the `recall-context` skill to fetch the full text of the records related to the files, topics or record IDs it is working on. Each result says why it matched. A path match is a hint; the agent still reads the record's scope.
+- **Once the task is known.** The agent runs the `recall-context` skill to fetch the full text of the records related to the files, topics or record IDs it is working on. Each result says why it matched. A path match is a hint; the agent still reads the record's scope. It passes the files it is about to change, so recall works before anything has changed; with no query and no changed code files, recall fails with exit 2 instead of returning an empty result.
 - **Limits.** Recall returns at most `recall.maxRecords` records within `recall.maxTokens` tokens ([Configuration](configuration.md#project-settings)). Records left out are listed by ID so the agent can ask for them.
 
 ### When a record is active

@@ -128,6 +128,12 @@ export async function recall({ cwd, home, paths = [], topics = [], ids = [], lim
     const base = await resolveBase({ cwd: info.root, configBase: config.baseBranch });
     queryPaths = (await changedFiles({ root: info.root, mergeBase: base.mergeBase })).map((f) => f.path).filter((p) => !isMarkdownCodePath(p));
     from = 'changed';
+    // An empty result here would read as "no related records" when nothing was looked up.
+    if (!queryPaths.length) {
+      throw new HeirloomError('E_INPUT', '조회 조건이 없고 대상 브랜치 대비 변경된 코드 파일도 없음', {
+        hint: '앞으로 수정할 코드 경로를 --paths로, 작업 주제를 --topics로 넘긴다.',
+      });
+    }
   }
   const query = { paths: queryPaths, topics, ids };
 
