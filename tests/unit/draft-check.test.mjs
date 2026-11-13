@@ -6,6 +6,7 @@ import path from 'node:path';
 import { tempDir } from '../helpers/git-fixture.mjs';
 import { checkDraft } from '../../skills/using-heirloom/lib/draft-check.mjs';
 import { ID_PATTERNS } from '../../skills/using-heirloom/lib/ids.mjs';
+import { sha256Of } from '../../skills/using-heirloom/lib/conversation.mjs';
 
 const H = 'a'.repeat(64);
 const SOURCE_HASH = `sha256:${'b'.repeat(64)}`;
@@ -230,4 +231,44 @@ test('curation handoff: summary code paths are not checked; candidate checks run
   ];
   const result = await checkDraft({ root, input: curationInput, draft: d, records: [existing('d-aaaaaaaa', true), existing('d-bbbbbbbb', true)], repoFiles: REPO_FILES });
   assert.deepEqual(result.errors, ['$.records[0].evidence: 근거 decision이 2개 이상이어야 함']);
+});
+
+test('conversation sources: the quote must be part of a message the person typed; its hash is filled', async () => {
+  const root = await fixture();
+  const typed = '변환 결과는\n반올림하지 않는다. 화면에서만 자른다.';
+  const conversation = [{ sha256: sha256Of(typed), text: typed }, { sha256: sha256Of('좋아'), text: '좋아' }];
+  /** @param {any} d */
+  const check = (d, conv = /** @type {any} */ (conversation)) => checkDraft({ root, input: input(), draft: d, records: [], repoFiles: REPO_FILES, conversation: conv });
+
+  const ok = draft();
+  ok.records[0].sources = [{ ref: '@conversation', quote: '변환 결과는 반올림하지 않는다.' }];
+  const result = await check(ok);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.draft.records[0].sources[0].sha256, sha256Of(typed));
+
+  const mixed = draft();
+  mixed.records[0].sources.push({ ref: '@conversation', quote: '화면에서만 자른다.' });
+  assert.deepEqual((await check(mixed)).errors, [], 'a document and the conversation together');
+
+  const invented = draft();
+  invented.records[0].sources = [{ ref: '@conversation', quote: '반올림은 화면 단위로 한다' }];
+  assert.match((await check(invented)).errors.join('\n'), /sources\[0\]\.quote: 사용자 발화에서 찾을 수 없음/);
+
+  const noQuote = draft();
+  noQuote.records[0].sources = [{ ref: '@conversation' }];
+  assert.match((await check(noQuote)).errors.join('\n'), /sources\[0\]\.quote: .*인용/);
+
+  const lines = draft();
+  lines.records[0].sources = [{ ref: '@conversation', lines: [1, 1], quote: '좋아' }];
+  assert.match((await check(lines)).errors.join('\n'), /sources\[0\]\.lines: 대화 출처에는 줄 범위를 쓰지 않음/);
+
+  const none = draft();
+  none.records[0].sources = [{ ref: '@conversation', quote: '좋아' }];
+  assert.match((await check(none, null)).errors.join('\n'), /sources\[0\]\.ref: 이 인계에는 고정된 대화가 없음/);
+  assert.match((await check(none, [])).errors.join('\n'), /고정된 대화가 없음/);
+
+  const deprecate = { ...draft(), records: [{ op: 'deprecate', target: 'd-aaaaaaaa', reason: '안 쓴다', sources: [{ ref: '@conversation', quote: '좋아' }] }] };
+  const deprecated = await checkDraft({ root, input: input(), draft: deprecate, records: [existing('d-aaaaaaaa', true)], repoFiles: REPO_FILES, conversation: /** @type {any} */ (conversation) });
+  assert.deepEqual(deprecated.errors, []);
+  assert.equal(deprecated.draft.records[0].sources[0].sha256, sha256Of('좋아'));
 });

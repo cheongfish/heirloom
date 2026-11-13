@@ -1,12 +1,14 @@
 // Mechanical checks of an agent-written draft against the frozen input. Content quality is
 // the human's job; these checks only verify that what the draft cites exists and that
-// related code paths point at real changed code.
+// related code paths point at real changed code. A source is a repository file, or the
+// messages the person typed in the session (`@conversation`), frozen by prepare.
 
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { globToRegExp } from './glob.mjs';
 import { ID_PATTERNS, newRecordId } from './ids.mjs';
+import { CONVERSATION_REF, findQuote } from './conversation.mjs';
 import { checkCurationDraft } from './curation.mjs';
 import { checkRecheckDraft } from './recheck.mjs';
 import { draftSchema, isMarkdownCodePath, validate } from './schema.mjs';
@@ -41,9 +43,11 @@ const isObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v)
  * @param {any} options.draft agent draft
  * @param {{ meta: { id: string, kind: string, active: boolean, supersededBy?: string | null, deprecation?: { taskId: string } } }[]} options.records existing records
  * @param {string[]} options.repoFiles tracked and untracked (non-ignored) repository files
+ * @param {import('./conversation.mjs').Utterance[] | null} [options.conversation] the messages
+ *   the person typed, frozen for this task; null when the task has none
  * @returns {Promise<CheckResult>}
  */
-export async function checkDraft({ root, input, draft, records, repoFiles }) {
+export async function checkDraft({ root, input, draft, records, repoFiles, conversation = null }) {
   const errors = validate(draftSchema, draft);
   /** @type {string[]} */
   const warnings = [];
@@ -93,6 +97,7 @@ export async function checkDraft({ root, input, draft, records, repoFiles }) {
    */
   const checkSource = async (source, at, requireQuote) => {
     if (!isObject(source) || typeof source.ref !== 'string') return;
+    if (source.ref === CONVERSATION_REF) return checkConversationSource(source, at);
     const abs = path.resolve(root, source.ref);
     let text = fileCache.get(abs);
     if (text === undefined) {
@@ -117,6 +122,30 @@ export async function checkDraft({ root, input, draft, records, repoFiles }) {
       where = `${source.ref} ${from}-${to}행`;
     }
     if (!normalize(region).includes(normalize(source.quote))) errors.push(`${at}.quote: 원문에서 찾을 수 없음 (${where})`);
+  };
+
+  /**
+   * A quote of the conversation must be part of one message the person typed. It always needs
+   * the quote: the quoted message is what the record keeps as its source.
+   * @param {any} source
+   * @param {string} at
+   */
+  const checkConversationSource = (source, at) => {
+    if (source.lines !== undefined) errors.push(`${at}.lines: 대화 출처에는 줄 범위를 쓰지 않음`);
+    if (!conversation?.length) {
+      errors.push(`${at}.ref: 이 인계에는 고정된 대화가 없음. prepare 결과의 conversation을 확인한다`);
+      return;
+    }
+    if (typeof source.quote !== 'string' || !source.quote.trim()) {
+      errors.push(`${at}.quote: 대화 출처에는 사용자 발화의 원문 인용(quote)이 필요함`);
+      return;
+    }
+    const message = findQuote(conversation, source.quote);
+    if (!message) {
+      errors.push(`${at}.quote: 사용자 발화에서 찾을 수 없음. 에이전트의 답이나 요약이 아닌, 사람이 입력한 문장을 그대로 인용한다`);
+      return;
+    }
+    source.sha256 = message.sha256;
   };
 
   /** @param {any} op @param {string} at */

@@ -36,6 +36,12 @@ Read the result:
 - Otherwise continue with `taskId`, `draftPath`, `source.files`, `materials`, `unknowns`, `relatedRecords` and `reviewMatchesSource`.
 - `recheck` is not null: this task was approved before and the code or materials changed since. Write an incremental draft (section 2.1) instead of a new one.
 - `specCoverage` is not null: the project's spec location patterns (`specGlobs`) do not match `specCoverage.uncovered`. The handoff itself is not affected; continue. After the report (step 5), ask the user whether to add the pattern (section 6).
+- `conversation`: the messages the user typed in this session, frozen at `conversation.path` for quoting (section 2, "Conversation sources"). `available: false` means there is nothing to quote, and `reason` says why:
+  - `no_session`: no session of this worktree was recorded (the host gave no transcript).
+  - `ambiguous`: another session of this worktree ran at the same time, so Heirloom did not guess which one is yours.
+  - `unreadable` or `empty`: the transcript could not be read, or has no typed messages.
+
+  The handoff still goes ahead. Decisions then need a document source. Mention the reason in the report.
 
 ## 2. Write the draft
 
@@ -71,14 +77,18 @@ Write JSON to `draftPath`:
 
 ### Records
 
-- Add a decision only when a source document explicitly states both the choice and its reason.
+- Add a decision only when a source document, or a message the user typed, explicitly states both the choice and its reason.
   - Quote that text exactly in `quote`, and give the line range it appears in.
-  - Do not infer reasons. Do not record agreements that are not written down.
+  - Do not infer reasons. Do not record agreements that are not written down or typed by the user.
   - Do not turn formatting rules, your own preferences or improvement ideas into decisions.
 - A draft with no records is normal. It gets a one-step quick approval.
 - `codePaths` on a record are the code paths the decision applies to.
   - Never put Markdown documents (`.md`, `.mdx`, `.markdown`) in any `codePaths`.
   - Documents belong in `sources` only.
+- **Conversation sources.** To quote the user's message, use `{"ref": "@conversation", "quote": "<exact text from one message>"}` with no `lines`.
+  - Read the messages in `conversation.path`. Quote only text from them: it holds what the user typed, not your replies or tool output.
+  - A quote must come from one message. Quote the sentence that states the choice and its reason, not a short "yes" to your proposal. If the user only agreed to your proposal, there is no source; leave the decision out and mention it in `notes`.
+  - When a document also states the decision, cite the document as well.
 - To replace an existing record from `relatedRecords`, use `{"op": "supersede", "target": "<old id>", "reason": "...", "with": <index of the add>}`.
 - To retire a record without a replacement, use `{"op": "deprecate", "target": "<id>", "reason": "...", "sources": [...]}`.
 - Never deactivate an axiom as a side effect of a decision. Propose axiom changes as their own records.
@@ -145,7 +155,7 @@ Tell the user three things:
 
 - The handoff is ready and waiting for their approval.
 - Where to approve it: `dashboardUrl`, or the `dashboardError` hint when the dashboard did not start. Mention `handoffPath` as the readable copy.
-- Any warnings and unknown values.
+- Any warnings and unknown values, and why the conversation was not available (`conversation.reason`) when that kept a decision out.
 
 Do not say the work is approved. The approval may come hours later. You can end the session, because `apply-approval` continues from the saved approval. If you started the wait, say that you will apply the approval when it comes.
 

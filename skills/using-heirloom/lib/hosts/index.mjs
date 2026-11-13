@@ -1,5 +1,6 @@
 // Host adapters. The hook logic (when to remind, what to inject) is host-neutral; an adapter
-// only reads a host's hook input, writes its hook output and reads its transcript lines.
+// only reads a host's hook input, writes its hook output and reads its transcript lines (tool
+// calls, and the messages the person typed).
 //
 // A host's hooks file names the host after the hook name (`run-hook.cmd stop <host>`). Codex
 // shares the Claude Code hooks file, so its hooks run without a name; that works because the
@@ -34,6 +35,8 @@ import * as codex from './codex.mjs';
  * @property {(message: string) => unknown} stopOutput
  * @property {unknown} emptyOutput what to print when there is nothing to say (null: print nothing)
  * @property {(entry: unknown) => TranscriptCall[]} transcriptCalls
+ * @property {(entry: unknown) => string[]} transcriptUtterances what the person typed, without
+ *   the text the harness adds as the user
  */
 
 /** @type {Record<string, HostAdapter>} */
@@ -60,4 +63,14 @@ export function hostAdapter(name) {
 export function transcriptCalls(entry) {
   if (!entry || typeof entry !== 'object') return [];
   return Object.values(ADAPTERS).flatMap((adapter) => adapter.transcriptCalls(entry));
+}
+
+/**
+ * The messages the person typed in one parsed transcript line, whichever host wrote it.
+ * @param {unknown} entry
+ * @returns {string[]}
+ */
+export function transcriptUtterances(entry) {
+  if (!entry || typeof entry !== 'object') return [];
+  return Object.values(ADAPTERS).flatMap((adapter) => adapter.transcriptUtterances(entry));
 }

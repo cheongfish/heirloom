@@ -1,6 +1,7 @@
 // Human-readable handoff file (~/.heirloom/tasks/<id>/handoff.md). Self-contained so that
 // the PR can be written later from this file and the approval alone.
 
+import { CONVERSATION_REF } from './conversation.mjs';
 import { carriedItems } from './recheck.mjs';
 
 /** @type {Record<string, string>} */
@@ -61,7 +62,7 @@ function renderAdd(op, heading) {
   lines.push(`- 연관 코드 경로: ${op.codePaths?.join(', ') || '(없음)'}`);
   if (op.topics?.length) lines.push(`- 주제: ${op.topics.join(', ')}`);
   for (const s of op.sources ?? []) {
-    const where = s.lines ? `${s.ref} ${s.lines[0]}-${s.lines[1]}행` : s.ref;
+    const where = s.ref === CONVERSATION_REF ? '대화 (사용자 발화)' : s.lines ? `${s.ref} ${s.lines[0]}-${s.lines[1]}행` : s.ref;
     lines.push(`- 출처: ${where}${s.quote ? ` — "${s.quote}"` : ''}`);
   }
   return lines.join('\n');

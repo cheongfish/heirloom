@@ -48,3 +48,27 @@ export function transcriptCalls(entry) {
   }
   return calls;
 }
+
+/**
+ * Text the harness puts into user lines: slash command echoes, `!` shell input and output,
+ * reminders, background task notifications and interrupt markers. None of it is typed by a
+ * person as a message.
+ */
+const HARNESS_TEXT = /^(?:<(?:command-name|command-message|command-args|local-command-[a-z-]+|bash-[a-z-]+|system-reminder|task-notification)>|\[Request interrupted)/;
+
+/**
+ * A transcript line the person typed (`{ type: 'user', message: { content } }`): the text of
+ * the message. Lines the harness writes as the user are skipped: `isMeta` (skill bodies),
+ * `isCompactSummary`, subagent lines (`isSidechain`), lines with an `origin` (task
+ * notifications), tool results and harness text.
+ * @param {any} entry
+ * @returns {string[]}
+ */
+export function transcriptUtterances(entry) {
+  if (entry?.type !== 'user' || entry.isMeta || entry.isCompactSummary || entry.isSidechain) return [];
+  // Newer versions mark typed messages `origin: { kind: 'human' }`; older ones have no origin.
+  if (entry.origin !== undefined && entry.origin?.kind !== 'human') return [];
+  const content = entry.message?.content;
+  const parts = typeof content === 'string' ? [content] : Array.isArray(content) ? content.filter((p) => p?.type === 'text' && typeof p.text === 'string').map((p) => p.text) : [];
+  return parts.filter((text) => text.trim() && !HARNESS_TEXT.test(text.trimStart()));
+}

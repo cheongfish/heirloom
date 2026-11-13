@@ -29,6 +29,7 @@ export function homePaths(home) {
     keys: path.join(home, 'keys'),
     server: path.join(home, 'server'),
     worktrees: path.join(home, 'worktrees'),
+    sessions: path.join(home, 'sessions'),
   };
 }
 
@@ -49,6 +50,7 @@ export function taskPaths(home, taskId) {
     approvals: path.join(dir, 'approvals'),
     events: path.join(dir, 'events.jsonl'),
     curation: path.join(dir, 'curation.json'),
+    conversation: path.join(dir, 'conversation.json'),
     prBody: path.join(dir, 'pr-body.md'),
     /** @param {'curate' | 'apply'} phase */
     agentLog: (phase) => path.join(dir, `agent-${phase}.log`),

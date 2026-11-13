@@ -33,6 +33,7 @@ Agents call the skills on their own. To call one yourself:
 | Hooks file | `hooks/hooks.json` | `hooks/hooks.json` (shared with Claude Code) | `hooks.json` at the plugin root |
 | After compaction | The convention is injected again | The convention is injected again | Always-on rule and compaction summary |
 | A spec the session read counts as linked (stop reminder) | Read tool calls | Shell commands that name the spec file | `read_file` calls and shell commands |
+| Messages the user typed (conversation source of a handoff) | `user` lines from a person (`origin.kind` `human`, or no origin); not tool results, meta lines, slash command echoes or `!` shell lines | `UserMessage` items of `item_completed` events; not the environment context or hook prompts | Text inside `<USER_REQUEST>` of `USER_INPUT` steps from `USER_EXPLICIT`; not slash commands |
 | Stop after an interruption | No stop hook | No stop hook (checked on an early interruption) | Runs, but Heirloom reminds only after a normal end of the turn |
 | Repository IDs | In `.git` | In `~/.heirloom/ids/` when the sandbox keeps `.git` read-only | In `.git` |
 | Headless context curation | `claude -p` with allowed tools | `codex exec` with a per-run allow-list hook ([Security](security.md#headless-curation-runs)) | `agy -p` with per-run permission rules |
