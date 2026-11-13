@@ -14,6 +14,7 @@ try {
     cwd: typeof input.cwd === 'string' ? input.cwd : process.cwd(),
     home: heirloomHome(),
     stopHookActive: input.stop_hook_active === true,
+    transcriptPath: typeof input.transcript_path === 'string' ? input.transcript_path : undefined,
   });
   if (decision.remind) emit({ decision: 'block', reason: decision.message });
 } catch (err) {

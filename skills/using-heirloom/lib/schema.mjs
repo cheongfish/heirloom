@@ -422,6 +422,7 @@ export const projectConfigSchema = object(
       recall: object({}, { optional: { maxRecords: int({ min: 1 }), maxTokens: int({ min: 1 }) } }),
       sessionIndex: object({}, { optional: { maxDecisions: int({ min: 0 }) } }),
       curation: object({}, { optional: { minUnreviewed: int({ min: 1 }), maxAgeDays: int({ min: 1 }), minForAge: int({ min: 1 }), batchSize: int({ min: 1 }) } }),
+      testCadence: object({}, { optional: { mode: oneOf('off', 'phase') } }),
     },
   },
 );
