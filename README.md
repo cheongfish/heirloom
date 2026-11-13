@@ -6,6 +6,24 @@
 * 에이전트가 인계를 준비하면 사람이 로컬 대시보드에서 PR 요약과 결정(decision)을 승인합니다.
 * 승인된 기록은 저장소에 남고 PR이 열리며 다음 작업은 그 결정을 이어받습니다.
 
+## SDLC에서의 위치
+
+```mermaid
+flowchart LR
+  H0["Heirloom: 활성 결정·규칙"] --> SDLC
+  subgraph SDLC["SDLC 도구 (예: Superpowers)"]
+    A[spec] --> B[계획] --> C[구현] --> R[최종 리뷰]
+  end
+  T["Heirloom 옵션: phase별 테스트"] -.-> B
+  T -.-> C
+  R -->|인계| D[대시보드 승인<br/>사람]
+  F[채팅으로 맡긴 작업] -.->|요청 시 인계| D
+  D --> E[".heirloom/ 기록 + PR"]
+  E -->|머지되면 활성| H0
+```
+
+점선 중 phase별 테스트는 [선택 기능](#선택-기능)을 켰을 때만 동작합니다.
+
 ## 하는 일
 
 ### 인계

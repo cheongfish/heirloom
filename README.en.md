@@ -6,6 +6,24 @@
 * When the agent prepares a handoff, a human approves the PR summary and the decisions in a local dashboard.
 * The approved records stay in the repository, the PR is opened, and later work picks the decisions up.
 
+## Where it fits in the SDLC
+
+```mermaid
+flowchart LR
+  H0["Heirloom: active decisions and axioms"] --> SDLC
+  subgraph SDLC["SDLC tool (e.g. Superpowers)"]
+    A[spec] --> B[plan] --> C[implementation] --> R[final review]
+  end
+  T["Heirloom option: phase tests"] -.-> B
+  T -.-> C
+  R -->|handoff| D[dashboard approval<br/>human]
+  F[work asked for in the chat] -.->|handoff on request| D
+  D --> E[".heirloom/ records + PR"]
+  E -->|active once merged| H0
+```
+
+Of the dashed lines, phase tests work only when you turn on the [optional feature](#optional-features).
+
 ## What it does
 
 ### Handoff
