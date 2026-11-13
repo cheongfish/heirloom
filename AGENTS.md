@@ -86,9 +86,11 @@ Run both `npm test` and `npm run typecheck` before you report a task as done. Re
 
 ## 6. Branches and releases
 
-Work flows **develop → main → release**. `develop` is where work is committed. `main` holds the released source, the `CHANGELOG.md` and the version tags. `release` holds only the plugin files users install (`/plugin marketplace add cheongfish/heirloom#release`).
+Work flows **develop → main → release**. `develop` is where work is committed, including the version bump and the CHANGELOG entry. `main` is the record of releases: one merge commit per PR from `develop`, with the version tags on those commits. `release` holds only the plugin files users install (`/plugin marketplace add cheongfish/heirloom#release`).
 
-- **Only pull requests change `main` and `release`.** Never push, fast-forward or merge into them directly. Merge every PR with a merge commit (`gh pr merge <n> --merge`), only after the user agrees to the merge, and after CI passes when CI runs.
+- **Only pull requests change `main` and `release`.** Never push, fast-forward or merge into them directly. Merge every PR with a merge commit (`gh pr merge <n> --merge`), only after the user agrees to the merge, and after CI passes when CI runs. The GitHub ruleset `protect main and release` enforces this: pull request required, merge commits only, no force push, no deletion, no bypass.
+- **`main` is not merged back into `develop`.** It does not need to be: `main` gets only merge commits of PRs from `develop`, so its content is always a state `develop` already had. This holds only if both stay true: nothing reaches `main` except a PR from `develop` (no direct commits, no conflict resolution on the `main` side), and PRs into `main` are never squashed or rebased. The tags are therefore not in `develop`'s history; read the current version from the version files on `develop`.
+- **Hotfix (exception).** When a released version needs a fix while `develop` holds unreleased work, branch `hotfix/<YYYYMMDD>` from `main`, open a PR into `main` with the fix and the version bump, then tag and release as below. Only in this case merge `origin/main` into `develop` afterwards (merge commit), so `develop` gets the fix. Delete the hotfix branch after the merge.
 - **Plugin files decide.** The files the plugin runs from are `skills/`, `examples/`, `hooks/`, and Antigravity's `hooks.json` and `rules/` at the repository root. CI runs on a PR into `main` (and on `main`) only when the PR changes them. A new version, a CHANGELOG entry, a tag and a release PR happen only when the PR into `main` changes them. A PR into `main` that changes nothing there (documents, tests, tools) gets no version, no tag and no release.
 - **PR body:** follow `.github/pull_request_template.md`.
 - **PR title:** `[YYYYMMDD] (<source> -> <target>) [<type>, …] : <short title>`, with the date in KST, the target `main` or `release`, and the commit types of `.gitmessage` that the PR contains. For example `[20261113] (develop -> main) [feat, chore] : 테스트 주기 설정과 릴리스 절차 추가`.
@@ -101,14 +103,13 @@ Work flows **develop → main → release**. `develop` is where work is committe
 
 ### Release steps
 
-1. **Prepare on `develop`.** Check that the PR will change `skills/`, `examples/` or `hooks/` (`git diff --stat origin/main...develop -- skills examples hooks hooks.json rules`). If not, open the PR into `main` without steps 1, 3 and 5. Otherwise, with the version from the user, bump the version files and add the CHANGELOG entry in one commit (`chore: x.y.z 릴리스 준비`). Run `npm test` and `npm run typecheck`, then push `develop`.
+1. **Prepare on `develop`.** Check that the PR will change the plugin files (`git diff --stat origin/main...develop -- skills examples hooks hooks.json rules`). If not, open the PR into `main` without the version bump and skip steps 3 to 5. Otherwise, with the version from the user, bump the version files and add the CHANGELOG entry in one commit (`chore: x.y.z 릴리스 준비`). Run `npm test` and `npm run typecheck`, then push `develop`.
 2. **PR `develop` → `main`.** Open it with `gh pr create --base main --head develop`, the title format above and the template body. Wait for CI when it runs. Merge with a merge commit once the user agrees.
 3. **Tag.** Fetch, then tag the merge commit on `main` with the bare version (`0.2.0`, no `v`) and push the tag. Tags go on `main` commits only.
-4. **Sync `develop`.** Merge `origin/main` into `develop` with a merge commit and push, so `develop` carries the new version and CHANGELOG.
-5. **PR → `release`.** Fetch, then build the release on a temporary branch from the tagged `main` commit:
+4. **PR → `release`.** Fetch, then build the release on a temporary branch from the tagged `main` commit:
    ```sh
    node tools/build-release.mjs --from origin/main --base origin/release --branch release-build/<YYYYMMDD>
    git push -u origin release-build/<YYYYMMDD>
    ```
    Open the PR into `release` (title `[YYYYMMDD] (main -> release) [chore] : x.y.z 릴리스`). Merge with a merge commit once the user agrees.
-6. **Delete the temporary branch** right after the merge, locally and on the remote: `git branch -D release-build/<YYYYMMDD>` and `git push origin --delete release-build/<YYYYMMDD>`.
+5. **Delete the temporary branch** right after the merge, locally and on the remote: `git branch -D release-build/<YYYYMMDD>` and `git push origin --delete release-build/<YYYYMMDD>`.
