@@ -44,6 +44,9 @@ Of the dashed lines, phase tests work only when you turn on the [optional featur
 ## Optional features
 
 ### Tests per phase
+
+Why: Superpowers plans run the full test suite for every task, which takes a long time ([obra/superpowers#2437](https://github.com/obra/superpowers/issues/2437)).
+
 - The implementation plan groups its tasks into phases by their nature (same module or contract) and order.
 - Each task runs only its own tests, and the full test suite runs at the end of every phase.
 - The full test suite also runs before the final review and the handoff.
