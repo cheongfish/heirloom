@@ -17,11 +17,12 @@ Heirloom is a multi-host agent plugin. The first host is Claude Code; Codex and 
 | `docs/HEIRLOOM-PLAN.md` | Product behavior and trust boundaries. Section 20 collects the structural decisions. |
 | `docs/HEIRLOOM-DESIGN.md` | Runtime, directory layout, skills, test rules. |
 | `docs/HEIRLOOM-MVP-PLAN.md` | Data schemas, storage paths, script I/O, dashboard server, milestones M0–M6. |
+| `docs/HEIRLOOM-PHASE2-PLAN.md` | Phase 2 (Codex and Antigravity hosts): host research, grade criteria, step 1 experiments, host adapters, headless profiles, milestones P1–P5. |
 | `docs/HEIRLOOM-PHASE3-PLAN.md` | Phase 3 (incremental recheck, glab, curation): additions to the MVP schemas, milestones N1–N4. |
 | `README.md`, `README.en.md`, `docs/guide/{en,ko}/` | User documentation: a summary per area in the README, details in the guide. |
 | `examples/*.example.json` | Copyable user and project configuration with every setting at its default. |
 
-The four planning documents are **local only**. They are listed in `.gitignore` and must never be committed or pushed. If they are missing in your checkout, ask the user for them; do not recreate them from memory.
+The five planning documents are **local only**. They are listed in `.gitignore` and must never be committed or pushed. If they are missing in your checkout, ask the user for them; do not recreate them from memory.
 
 The planning documents are the source of truth for agreed behavior. If code and documents disagree, or a document is silent on something you need, do not quietly pick one. Raise it (see section 4).
 
