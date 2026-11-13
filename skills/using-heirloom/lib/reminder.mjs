@@ -12,6 +12,7 @@ import { readIds, resolveIds } from './ids.mjs';
 import { approvalFiles, taskPaths } from './paths.mjs';
 import { computeSourceState, currentSourceState, hashMaterial } from './state.mjs';
 import { readIndex, tasksForWorktree, updateIndex } from './store.mjs';
+import { specsReadInTranscript } from './transcript.mjs';
 
 /**
  * @typedef {object} StopDecision
@@ -79,10 +80,11 @@ async function approvedTaskChange({ home, taskIds, branch }) {
 }
 
 /**
- * @param {{ cwd: string, home: string, stopHookActive: boolean }} options
+ * @param {{ cwd: string, home: string, stopHookActive: boolean, transcriptPath?: string }} options
+ *   `transcriptPath`: the host's session transcript, when it gives one (Claude Code does)
  * @returns {Promise<StopDecision>}
  */
-export async function evaluateStop({ cwd, home, stopHookActive }) {
+export async function evaluateStop({ cwd, home, stopHookActive, transcriptPath }) {
   if (stopHookActive) return { remind: false, reason: 'stop_hook_active' };
 
   let info;
@@ -123,8 +125,11 @@ export async function evaluateStop({ cwd, home, stopHookActive }) {
     }
   }
 
-  const specs = state.files.filter((f) => f.status !== 'D' && matchesAny(f.path, config.specGlobs)).map((f) => f.path);
-  if (!specs.length) return { remind: false, reason: 'no_spec' };
+  // A spec counts when this branch changed it, or when the session read it (a spec that is
+  // already on the target branch does not appear among the changes).
+  const changedSpecs = state.files.filter((f) => f.status !== 'D' && matchesAny(f.path, config.specGlobs)).map((f) => f.path);
+  const readSpecs = (await specsReadInTranscript({ transcriptPath, root: info.root, globs: config.specGlobs })).filter((p) => !changedSpecs.includes(p));
+  if (!changedSpecs.length && !readSpecs.length) return { remind: false, reason: 'no_spec' };
 
   if (known && index) {
     if (index.reminders[known.worktreeId]?.sourceHash === state.hash) return { remind: false, reason: 'already_reminded' };
@@ -139,5 +144,5 @@ export async function evaluateStop({ cwd, home, stopHookActive }) {
   await updateIndex(home, (index) => {
     index.reminders[worktreeId] = { sourceHash: state.hash, at: new Date().toISOString() };
   });
-  return { remind: true, reason: 'remind', message: reminderMessage(specs) };
+  return { remind: true, reason: 'remind', message: reminderMessage([...changedSpecs, ...readSpecs.map((p) => `${p} (이번 세션에서 읽음)`)]) };
 }

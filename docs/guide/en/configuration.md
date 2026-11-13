@@ -33,7 +33,7 @@ The files are JSON, so they cannot hold comments. Unknown keys and out-of-range 
 | Key | Default | Description |
 | --- | --- | --- |
 | `baseBranch` | none | Target branch of the PR. Without it, `origin/HEAD` is used. If neither exists, or several remotes make it unclear, Heirloom reports an error instead of guessing. |
-| `specGlobs` | `["docs/superpowers/specs/**", "**/specs/**/*.md"]` | Paths that count as spec documents. Used by the stop hook's handoff reminder. |
+| `specGlobs` | `["docs/superpowers/specs/**", "**/specs/**/*.md"]` | Paths that count as spec documents. Used by the stop hook's handoff reminder. When a handed-off spec does not match, the agent offers to add a pattern and, if you agree, creates this file or adds to it. |
 | `recall.maxRecords` | `8` | Maximum number of records returned by context recall |
 | `recall.maxTokens` | `6000` | Token budget for context recall, estimated as UTF-8 bytes ÷ 3 (about one token per Hangul syllable) |
 | `sessionIndex.maxDecisions` | `30` | Number of decisions listed in the session-start index |
@@ -41,6 +41,7 @@ The files are JSON, so they cannot hold comments. Unknown keys and out-of-range 
 | `curation.maxAgeDays` | `30` | … or when this many days passed since the last curation |
 | `curation.minForAge` | `3` | … and at least this many decisions are unreviewed |
 | `curation.batchSize` | `20` | Maximum number of unreviewed decisions one curation reviews |
+| `testCadence.mode` | `"off"` | How often the development workflow (Superpowers and the like) runs tests. `"phase"` adds rules at session start: the plan groups its tasks into phases, each task runs only its own tests, task reviews rely on the implementer's reported runs (a focused test only for a specific doubt), and the full test suite runs only at the end of each phase and at the end (before the final review and the handoff). The test commands are the ones the plan states. |
 
 ## Environment variables
 

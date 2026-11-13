@@ -60,6 +60,9 @@ test('resolveBase: falls back to origin/HEAD and refuses to guess otherwise', as
 
   repo.git('remote', 'add', 'origin', upstream.dir);
   repo.git('fetch', '-q', 'origin');
+  // git 2.48 and later create origin/HEAD on fetch (remote.<name>.followRemoteHEAD); remove it
+  // so the case is the same on every git version.
+  repo.git('remote', 'set-head', 'origin', '--delete');
   await assert.rejects(resolveBase({ cwd: repo.dir }), /origin\/HEAD/, 'origin/HEAD not set');
   repo.git('remote', 'set-head', 'origin', 'main');
   assert.equal((await resolveBase({ cwd: repo.dir })).ref, 'origin/main');

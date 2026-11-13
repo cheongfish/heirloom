@@ -14,7 +14,8 @@ Heirloom does not do the development work. It takes over work finished with an S
 The agent does this.
 
 - **When.** After finishing the implementation and final review of a spec-based task, and before reporting completion, the agent runs the `prepare-handoff` skill.
-- **If the agent forgets.** The stop hook reminds it once. Three conditions must hold: there are code changes linked to a spec, no handoff exists for that state, and no reminder was given for the same state.
+- **If the agent forgets.** The stop hook reminds it once. Three conditions must hold: there are code changes linked to a spec, no handoff exists for that state, and no reminder was given for the same state. A spec counts as linked when this branch changed it, and also when the session read a spec that was already on the target branch (checked in the Claude Code session transcript).
+- **If specs live elsewhere.** When the handed-off spec does not match the spec location setting (`specGlobs`), the agent asks after the handoff whether to add a matching pattern to `.heirloom/config.json`. Only if you agree does it create the file or add the pattern. The file is a project file; commit it.
 - **Work without a spec.** A small fix, for example, is handed off only when the user asks.
 - **Steps.**
   1. Heirloom freezes the current source state and the materials (spec, review documents).
