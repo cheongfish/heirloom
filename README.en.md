@@ -73,13 +73,36 @@ Requires Node 20 or later and git. Opening PRs also needs `gh` (GitHub) or `glab
 # Codex (then trust the Heirloom hooks in /hooks in a Codex session)
 codex plugin marketplace add cheongfish/heirloom@release
 codex plugin add heirloom@heirloom
+```
 
+```sh
 # Antigravity CLI
 git clone -b release https://github.com/cheongfish/heirloom ~/tools/heirloom
 agy plugin install ~/tools/heirloom
 ```
 
-## Let your agent handle the rest
+```sh
+# Cursor CLI (name the plugin folder for each session)
+git clone -b release https://github.com/cheongfish/heirloom ~/tools/heirloom
+agent --plugin-dir ~/tools/heirloom
+```
+
+### What works in Cursor
+
+Cursor is supported through its CLI (`agent`) only, and within it only the features below work.
+
+- Works
+    - Handoff, recording decisions made in the conversation
+    - Dashboard approval, records and PR
+    - Skills, the session-start context and the always-applied rule, recall of decisions in later sessions
+- Does not work
+    - Reminding the agent to hand off when the session ends. Cursor CLI runs no stop hook, so if the agent forgets to hand off spec-based work, nothing reminds it.
+    - Running a context curation with Cursor. A curation runs with Claude Code, Codex or Antigravity.
+- Not checked
+    - The Cursor IDE
+    - Installing other than with `--plugin-dir` (marketplace, `~/.cursor/plugins/local/`)
+
+## Documentation for agents
 
 Installation, settings and troubleshooting can be left to your agent. The detailed documentation is written for agents in [`docs/agent/`](docs/agent/README.md).
 
@@ -96,6 +119,4 @@ Installation, settings and troubleshooting can be left to your agent. The detail
 
 Heirloom is licensed under the [Apache License 2.0](LICENSE).
 
-The dashboard bundles a pinned copy of [SEED Design](https://github.com/daangn/seed-design) CSS (Apache-2.0).
-
-Its `LICENSE` and `NOTICE` are in `skills/using-heirloom/dashboard/vendor/seed-design/`.
+The dashboard bundles a pinned copy of [SEED Design](https://github.com/daangn/seed-design) CSS (Apache-2.0); its `LICENSE` and `NOTICE` are in `skills/using-heirloom/dashboard/vendor/seed-design/`.
