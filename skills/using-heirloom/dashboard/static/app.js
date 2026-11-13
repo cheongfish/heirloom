@@ -871,7 +871,10 @@ function sourcesBlock(sources) {
       h(
         'div',
         { class: 'hl-stack-tight' },
-        h('span', { class: 'hl-small' }, h('code', {}, s.ref), s.lines ? (s.lines[0] === s.lines[1] ? ` ${s.lines[0]}행` : ` ${s.lines[0]}–${s.lines[1]}행`) : ''),
+        // `@conversation` quotes what the person typed in the session, not a file.
+        s.ref === '@conversation'
+          ? h('span', { class: 'hl-small' }, '대화 (사용자 발화)')
+          : h('span', { class: 'hl-small' }, h('code', {}, s.ref), s.lines ? (s.lines[0] === s.lines[1] ? ` ${s.lines[0]}행` : ` ${s.lines[0]}–${s.lines[1]}행`) : ''),
         s.quote ? h('blockquote', { class: 'hl-quote hl-small' }, s.quote) : null,
       ),
     ),

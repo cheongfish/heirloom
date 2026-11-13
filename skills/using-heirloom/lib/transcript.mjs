@@ -8,14 +8,18 @@
 // an Antigravity transcript are read the same way. A path in a command is a
 // strong hint, not proof; it only decides whether to remind about handing off.
 //
+// The messages the person typed are read from the same transcripts: a handoff freezes them so
+// that a decision made in the conversation can quote its source.
+//
 // Transcript formats belong to the hosts and may change: anything unreadable counts as
-// "no spec read", which keeps the reminder as it was without the transcript.
+// "no spec read" (the reminder stays as it was without the transcript) or as "no
+// conversation" (decisions then need a document source, as before).
 
 import { open, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 import { matchesAny } from './glob.mjs';
-import { transcriptCalls } from './hosts/index.mjs';
+import { transcriptCalls, transcriptUtterances } from './hosts/index.mjs';
 
 /** Transcripts are read from the end up to this size; older reads of a long session are skipped. */
 const MAX_BYTES = 32 * 1024 * 1024;
@@ -27,21 +31,8 @@ const MAX_BYTES = 32 * 1024 * 1024;
  */
 export async function specsReadInTranscript({ transcriptPath, root, globs, maxBytes = MAX_BYTES }) {
   if (!transcriptPath) return [];
-  let text;
-  try {
-    const size = (await stat(transcriptPath)).size;
-    const start = Math.max(0, size - maxBytes);
-    const handle = await open(transcriptPath, 'r');
-    try {
-      const buffer = Buffer.alloc(size - start);
-      await handle.read(buffer, 0, buffer.length, start);
-      text = buffer.toString('utf8');
-    } finally {
-      await handle.close();
-    }
-  } catch {
-    return [];
-  }
+  const text = await readTail(transcriptPath, maxBytes);
+  if (text === null) return [];
   const roots = [root];
   try {
     const real = await realpath(root);
@@ -81,6 +72,53 @@ export async function specsReadInTranscript({ transcriptPath, root, globs, maxBy
     }
   }
   return [...found].sort();
+}
+
+/**
+ * The messages the person typed in the session, oldest first, without the text the harness
+ * adds as the user. Null when the transcript cannot be read.
+ * @param {{ transcriptPath: string, maxBytes?: number }} options
+ * @returns {Promise<string[] | null>}
+ */
+export async function utterancesInTranscript({ transcriptPath, maxBytes = MAX_BYTES }) {
+  const text = await readTail(transcriptPath, maxBytes);
+  if (text === null) return null;
+  /** @type {string[]} */
+  const found = [];
+  for (const line of text.split('\n')) {
+    if (!line.includes('"user"') && !line.includes('"UserMessage"') && !line.includes('"USER_INPUT"')) continue;
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    found.push(...transcriptUtterances(entry));
+  }
+  return found;
+}
+
+/**
+ * The last `maxBytes` of a file as text, or null when it cannot be read. A line cut at the
+ * start fails to parse and is skipped by the callers.
+ * @param {string} file
+ * @param {number} maxBytes
+ */
+async function readTail(file, maxBytes) {
+  try {
+    const size = (await stat(file)).size;
+    const start = Math.max(0, size - maxBytes);
+    const handle = await open(file, 'r');
+    try {
+      const buffer = Buffer.alloc(size - start);
+      await handle.read(buffer, 0, buffer.length, start);
+      return buffer.toString('utf8');
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return null;
+  }
 }
 
 /** Characters that separate words in a shell command or the code around it. */

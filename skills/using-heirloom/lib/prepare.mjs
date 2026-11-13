@@ -1,10 +1,12 @@
-// Freeze the handoff input: scope, source state, materials and project rules.
+// Freeze the handoff input: scope, source state, materials and project rules, and the messages
+// the person typed in the session (a source for decisions made in the conversation).
 // One run per source/material state: the same state returns the existing task.
 
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import { loadApprovalBaseline } from './baseline.mjs';
+import { freezeConversation } from './conversation.mjs';
 import { HeirloomError } from './errors.mjs';
 import { loadProjectConfig } from './config.mjs';
 import { appendEvent, countAttempts, deriveState, readEvents } from './events.mjs';
@@ -152,6 +154,10 @@ export async function prepareHandoff(options) {
       });
     }
 
+    // The conversation is not part of the task's state: it grows every turn, and a new
+    // message must not make the same code a new handoff. It is frozen next to the input.
+    const conversation = await freezeConversation({ home, root, file: paths.conversation });
+
     const { records } = await readRecords(root);
     const changed = input.source.files.map((/** @type {any} */ f) => f.path);
     const relatedRecords = records
@@ -175,6 +181,7 @@ export async function prepareHandoff(options) {
       projectRules: input.projectRules,
       recheck: input.recheck ? recheckReport(input.recheck) : null,
       specCoverage: specCoverage(input.materials, config.specGlobs),
+      conversation: { ...conversation, path: paths.conversation },
     };
   });
 }

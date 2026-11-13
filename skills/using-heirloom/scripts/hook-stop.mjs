@@ -2,6 +2,7 @@
 // Never blocks twice in a row, never fails, gives up after the time budget.
 // Usage: hook-stop.mjs [<host>]   (the host's hooks file names it; Claude Code by default)
 
+import { recordSession } from '../lib/conversation.mjs';
 import { evaluateStop } from '../lib/reminder.mjs';
 import { emit, hookHost, logHook, readStdinJson } from '../lib/hook-io.mjs';
 import { heirloomHome } from '../lib/paths.mjs';
@@ -16,6 +17,7 @@ const home = heirloomHome();
 /** @type {unknown} */
 let output = host.emptyOutput;
 try {
+  await recordSession({ home, cwd: input.cwd ?? process.cwd(), transcriptPath: input.transcriptPath });
   const decision = !input.normalStop ? null : await evaluateStop({
     cwd: input.cwd ?? process.cwd(),
     home,

@@ -7,6 +7,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { recordSession } from '../lib/conversation.mjs';
 import { emit, hookHost, logHook, readStdinJson } from '../lib/hook-io.mjs';
 import { heirloomHome } from '../lib/paths.mjs';
 import { buildSessionContext } from '../lib/session-context.mjs';
@@ -40,4 +41,6 @@ if (sessionHost) {
     process.stderr.write(`heirloom session-start: ${err instanceof Error ? err.message : String(err)}\n`);
   }
 }
+// A handoff quotes the messages of the session it runs in; prepare finds the session here.
+await recordSession({ home, cwd, transcriptPath: input.transcriptPath });
 await logHook({ home, hook: 'session-start', host: host.name, input: raw, output });
