@@ -17,13 +17,14 @@ test('plugin manifests, package files and lib/version.mjs carry the same version
   const marketplace = (await json('.claude-plugin/marketplace.json')).plugins.find((/** @type {any} */ p) => p.name === 'heirloom')?.version;
   const codex = (await json('.codex-plugin/plugin.json')).version;
   const antigravity = (await json('.antigravity-plugin/plugin.json')).version;
+  const cursor = (await json('.cursor-plugin/plugin.json')).version;
   const pkg = (await json('package.json')).version;
   const lock = await json('package-lock.json');
   const { VERSION } = await import('../../skills/using-heirloom/lib/version.mjs');
   assert.match(plugin, /^\d+\.\d+\.\d+$/);
   assert.deepEqual(
-    { marketplace, codex, antigravity, pkg, lock: lock.version, lockRoot: lock.packages?.['']?.version, runtime: VERSION },
-    { marketplace: plugin, codex: plugin, antigravity: plugin, pkg: plugin, lock: plugin, lockRoot: plugin, runtime: plugin },
+    { marketplace, codex, antigravity, cursor, pkg, lock: lock.version, lockRoot: lock.packages?.['']?.version, runtime: VERSION },
+    { marketplace: plugin, codex: plugin, antigravity: plugin, cursor: plugin, pkg: plugin, lock: plugin, lockRoot: plugin, runtime: plugin },
   );
 });
 

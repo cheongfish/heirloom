@@ -346,3 +346,24 @@ test('stop finishes within the 2 second budget on a small repository', { skip },
   assert.equal(r.status, 0);
   assert.ok(r.ms < 2000, `took ${r.ms}ms`);
 });
+
+test('cursor: sessionStart runs from the plugin folder and uses workspace_roots; without Node it still injects the notice', { skip }, async () => {
+  const upstream = await makeRepo({ 'README.txt': 'hello\n' });
+  const repo = await cloneRepo(upstream);
+  const home = await tempDir('home');
+  // Cursor runs hooks with the plugin root as working directory and gives no cwd.
+  const input = { conversation_id: 'c', session_id: 'c', hook_event_name: 'sessionStart', workspace_roots: [repo.dir], transcript_path: null };
+  const start = runHook('session-start', { host: 'cursor', cwd: ROOT, input, env: { HEIRLOOM_HOME: home } });
+  assert.equal(start.status, 0, start.stderr);
+  const context = JSON.parse(start.stdout).additional_context;
+  assert.match(context, /prepare-handoff/);
+  assert.match(context, /<heirloom-project>/, 'the project block of the workspace, not of the plugin folder');
+
+  const missing = runHook('session-start', { host: 'cursor', env: { PATH: '', HEIRLOOM_NODE: undefined } });
+  assert.match(JSON.parse(missing.stdout).additional_context, /Node 20 이상이 필요합니다/);
+
+  const cfg = JSON.parse(await readFile(path.join(ROOT, 'hooks', 'hooks-cursor.json'), 'utf8'));
+  assert.equal(cfg.version, 1);
+  assert.deepEqual(Object.keys(cfg.hooks), ['sessionStart'], 'Cursor CLI runs no stop hook; only sessionStart is wired');
+  assert.match(cfg.hooks.sessionStart[0].command, /^"\$\{CURSOR_PLUGIN_ROOT\}\/hooks\/run-hook\.cmd" session-start cursor$/);
+});

@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 /** Top-level paths copied into the release tree. */
-export const RELEASE_PATHS = Object.freeze(['.claude-plugin', '.codex-plugin', '.antigravity-plugin', '.gitattributes', 'hooks', 'hooks.json', 'rules', 'skills', 'examples']);
+export const RELEASE_PATHS = Object.freeze(['.claude-plugin', '.codex-plugin', '.antigravity-plugin', '.cursor-plugin', '.gitattributes', 'hooks', 'hooks.json', 'rules', 'skills', 'examples']);
 
 /**
  * @param {string} cwd

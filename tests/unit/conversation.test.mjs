@@ -129,3 +129,13 @@ test('findQuote: part of one message, whitespace-insensitive; never across messa
   assert.equal(findQuote(u, '보여 준다. 테스트는'), undefined);
   assert.equal(findQuote(u, '  '), undefined);
 });
+
+test('sessions: a transcript the host names in the environment (Cursor) wins over hook records and ambiguity', async () => {
+  const home = await tempDir('home');
+  await touchSession({ home, root: ROOT, transcriptPath: '/t/a.jsonl', now: at('10:00') });
+  await touchSession({ home, root: ROOT, transcriptPath: '/t/b.jsonl', now: at('10:05') });
+  await touchSession({ home, root: ROOT, transcriptPath: '/t/a.jsonl', now: at('10:10') });
+  const env = { CURSOR_CONVERSATION_ID: 'c1', AGENT_TRANSCRIPTS: '/cursor/agent-transcripts' };
+  assert.deepEqual(await currentSession({ home, root: ROOT, now: at('10:11'), env }), { transcriptPath: '/cursor/agent-transcripts/c1/c1.jsonl', reason: null });
+  assert.equal((await currentSession({ home, root: ROOT, now: at('10:11'), env: {} })).reason, 'ambiguous');
+});

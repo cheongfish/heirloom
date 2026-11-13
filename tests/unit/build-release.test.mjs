@@ -14,6 +14,8 @@ const FILES = {
   '.gitattributes': 'hooks/** text eol=lf\n',
   '.codex-plugin/plugin.json': '{}\n',
   '.antigravity-plugin/plugin.json': '{}\n',
+  '.cursor-plugin/plugin.json': '{}\n',
+  '.cursor-plugin/rules/heirloom.mdc': '---\nalwaysApply: true\n---\n',
   'hooks.json': '{}\n',
   'rules/heirloom.md': '---\ntrigger: always_on\n---\n',
   'hooks/hooks.json': '{}\n',
@@ -41,6 +43,7 @@ test('the build branch holds only the plugin directories; the working tree, HEAD
   assert.deepEqual(top, [...RELEASE_PATHS].sort(), 'no CHANGELOG, tests or tools');
   assert.ok(RELEASE_PATHS.includes('.codex-plugin'), 'the Codex manifest is released');
   for (const p of ['.antigravity-plugin', 'hooks.json', 'rules']) assert.ok(RELEASE_PATHS.includes(p), `${p} is released for Antigravity`);
+  assert.ok(RELEASE_PATHS.includes('.cursor-plugin'), 'the Cursor manifest and its rule are released');
   assert.ok(RELEASE_PATHS.includes('.gitattributes'), 'installs cloned on Windows keep LF hooks');
   assert.equal(repo.git('show', 'release-build/20261113:skills/a/scripts/x.mjs'), 'export {};');
   assert.equal(repo.git('rev-parse', 'HEAD'), head);

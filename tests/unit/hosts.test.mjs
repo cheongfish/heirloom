@@ -4,10 +4,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { HOSTS, hostAdapter, transcriptCalls, transcriptUtterances } from '../../skills/using-heirloom/lib/hosts/index.mjs';
+import { HOSTS, hostAdapter, transcriptCalls, transcriptFromEnv, transcriptUtterances } from '../../skills/using-heirloom/lib/hosts/index.mjs';
 
 test('hostAdapter: known hosts, claude-code by default, unknown names rejected', () => {
-  assert.deepEqual([...HOSTS].sort(), ['antigravity', 'claude-code', 'codex']);
+  assert.deepEqual([...HOSTS].sort(), ['antigravity', 'claude-code', 'codex', 'cursor']);
   assert.equal(hostAdapter(undefined).name, 'claude-code');
   assert.equal(hostAdapter('').name, 'claude-code');
   assert.equal(hostAdapter('codex').name, 'codex');
@@ -163,4 +163,49 @@ test('transcriptUtterances (Antigravity): the text inside USER_REQUEST of a USER
   assert.deepEqual(transcriptUtterances(step('<USER_REQUEST>\nx\n</USER_REQUEST>', { source: 'SYSTEM' })), []);
   assert.deepEqual(transcriptUtterances({ step_index: 1, type: 'SYSTEM_MESSAGE', source: 'SYSTEM_SDK', content: 'The following is a <SYSTEM_MESSAGE>' }), []);
   assert.deepEqual(transcriptUtterances({ step_index: 2, type: 'PLANNER_RESPONSE', source: 'MODEL', content: '<USER_REQUEST>x</USER_REQUEST>' }), []);
+});
+
+// Cursor CLI (`agent` 2026.11.11): hook input from sessionStart/sessionEnd, transcript lines from
+// ~/.cursor/projects/<path>/agent-transcripts/<id>/<id>.jsonl.
+
+test('readHookInput (Cursor): no cwd, the workspace from workspace_roots; transcript path; stop fields', () => {
+  const host = hostAdapter('cursor');
+  const start = { conversation_id: 'c', session_id: 'c', hook_event_name: 'sessionStart', workspace_roots: ['/w', '/x'], transcript_path: null, cursor_version: '2026.11.11' };
+  assert.deepEqual(host.readHookInput(start), { cwd: '/w', workspaces: ['/w', '/x'], transcriptPath: undefined, continuation: false, normalStop: true });
+  assert.equal(host.readHookInput({ ...start, transcript_path: '/t/c.jsonl' }).transcriptPath, '/t/c.jsonl');
+  assert.equal(host.readHookInput({ ...start, hook_event_name: 'stop', status: 'completed', loop_count: 1 }).continuation, true, 'a follow-up turn');
+  for (const status of ['aborted', 'error']) assert.equal(host.readHookInput({ ...start, status }).normalStop, false, status);
+  assert.deepEqual(host.readHookInput({}), { cwd: undefined, workspaces: [], transcriptPath: undefined, continuation: false, normalStop: true });
+});
+
+test('outputs (Cursor): sessionStart additional_context, stop followup_message, {} when there is nothing to say', () => {
+  const host = hostAdapter('cursor');
+  assert.deepEqual(host.sessionStartOutput('규약'), { additional_context: '규약' });
+  assert.deepEqual(host.stopOutput('상기'), { followup_message: '상기' });
+  assert.deepEqual(host.emptyOutput, {});
+});
+
+test('transcriptCalls / transcriptUtterances (Cursor): Read paths and shell commands; the text inside user_query', () => {
+  const user = (/** @type {string} */ text) => ({ role: 'user', message: { content: [{ type: 'text', text }] } });
+  const typed = '<timestamp>Friday, Nov 13, 2026, 3:11 PM (UTC+9)</timestamp>\n<user_query>\n반올림하지 말자.\n</user_query>';
+  assert.deepEqual(transcriptUtterances(user(typed)), ['반올림하지 말자.']);
+  assert.deepEqual(transcriptUtterances(user('<timestamp>x</timestamp>\n<user_query>\n   \n</user_query>')), []);
+  assert.deepEqual(transcriptUtterances(user('no query tag')), [], 'only text inside user_query counts');
+  assert.deepEqual(transcriptUtterances({ role: 'assistant', message: { content: [{ type: 'text', text: '<user_query>x</user_query>' }] } }), []);
+  assert.deepEqual(transcriptUtterances({ role: 'user' }), [], 'lines without a message');
+
+  const assistant = { role: 'assistant', message: { content: [
+    { type: 'text', text: '읽겠습니다' },
+    { type: 'tool_use', name: 'Read', input: { path: '/w/docs/specs/a.md' } },
+    { type: 'tool_use', name: 'Glob', input: { glob_pattern: '**/a.txt' } },
+    { type: 'tool_use', name: 'Shell', input: { command: 'cat docs/specs/b.md', working_directory: '/w' } },
+  ] } };
+  assert.deepEqual(transcriptCalls(assistant), [{ read: '/w/docs/specs/a.md' }, { text: 'cat docs/specs/b.md workdir:"/w"' }]);
+});
+
+test('transcriptFromEnv: the Cursor agent shell names its own transcript; other environments give none', () => {
+  assert.equal(transcriptFromEnv({ CURSOR_CONVERSATION_ID: 'abc', AGENT_TRANSCRIPTS: '/p/agent-transcripts' }), '/p/agent-transcripts/abc/abc.jsonl');
+  assert.equal(transcriptFromEnv({ CURSOR_CONVERSATION_ID: 'abc' }), null);
+  assert.equal(transcriptFromEnv({ CURSOR_CONVERSATION_ID: '../x', AGENT_TRANSCRIPTS: '/p' }), null, 'an id is one path segment');
+  assert.equal(transcriptFromEnv({}), null);
 });
