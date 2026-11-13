@@ -11,6 +11,7 @@ import { RELEASE_PATHS, buildRelease } from '../../tools/build-release.mjs';
 const FILES = {
   '.claude-plugin/plugin.json': '{}\n',
   '.claude-plugin/marketplace.json': '{}\n',
+  '.gitattributes': 'hooks/** text eol=lf\n',
   '.codex-plugin/plugin.json': '{}\n',
   '.antigravity-plugin/plugin.json': '{}\n',
   'hooks.json': '{}\n',
@@ -40,6 +41,7 @@ test('the build branch holds only the plugin directories; the working tree, HEAD
   assert.deepEqual(top, [...RELEASE_PATHS].sort(), 'no CHANGELOG, tests or tools');
   assert.ok(RELEASE_PATHS.includes('.codex-plugin'), 'the Codex manifest is released');
   for (const p of ['.antigravity-plugin', 'hooks.json', 'rules']) assert.ok(RELEASE_PATHS.includes(p), `${p} is released for Antigravity`);
+  assert.ok(RELEASE_PATHS.includes('.gitattributes'), 'installs cloned on Windows keep LF hooks');
   assert.equal(repo.git('show', 'release-build/20261113:skills/a/scripts/x.mjs'), 'export {};');
   assert.equal(repo.git('rev-parse', 'HEAD'), head);
   assert.equal(repo.git('branch', '--show-current'), 'main');
