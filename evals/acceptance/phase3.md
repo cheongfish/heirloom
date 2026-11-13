@@ -42,7 +42,7 @@ cd $F/work && claude -p "<프롬프트>" "${COMMON[@]}" > $F/s1.jsonl
 ```sh
 URL=$(node $H/skills/using-heirloom/scripts/open-dashboard.mjs --task <taskId> --no-browser | node -pe 'JSON.parse(require("fs").readFileSync(0)).data.url')
 node $H/evals/acceptance/dashboard.mjs "$URL" --text --shot $F/shots/x.png \
-  --steps '[{"tab":"decision"},{"click":"decision 모두 승인"},{"click":"승인 저장"},{"wait":2000}]'
+  --steps '[{"tab":"결정"},{"click":"남은 결정 모두 승인"},{"click":"승인 저장"},{"wait":2000}]'
 ```
 
 ## 실행 묶음
@@ -80,7 +80,7 @@ node $H/evals/acceptance/dashboard.mjs "$URL" --text --shot $F/shots/x.png \
 4. B3 확인: `개요`에 '대상 브랜치가 갱신됨'이 있고, 바뀐 파일은 `src/temperature.mjs`의 '기준 브랜치 갱신으로 인한 변경' 하나여야 한다. `src/other.mjs`는 없어야 한다.
 5. B4: 같은 화면에서 결정을 고른 뒤, 화면을 연 채로 파일을 바꾸고 승인한다.
    ```sh
-   node $H/evals/acceptance/dashboard.mjs "$URL" --text --steps '[{"tab":"decision"},{"decide":"decision 항목 1","value":"승인"},
+   node $H/evals/acceptance/dashboard.mjs "$URL" --text --steps '[{"tab":"결정"},{"decide":"결정 항목 1","value":"승인"},
      {"exec":"cd '$F'/work && printf \"\\n// 표시 함수는 이 파일에 둔다.\\n\" >> src/format.mjs"},{"click":"승인 저장"},{"wait":2000}]'
    ```
    '승인할 수 없음 … 인계 이후 소스가 바뀌어 승인할 수 없음'이 보여야 한다. 기다리던 세션은 끝낸다.

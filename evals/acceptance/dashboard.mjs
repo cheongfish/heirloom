@@ -8,8 +8,8 @@
 //   CHROMIUM         Chromium 실행 파일 (예: ~/.cache/ms-playwright/chromium-1187/chrome-linux/chrome)
 //
 // 단계(steps)의 종류:
-//   { "tab": "decision" }                          탭 이름(화면 표시)으로 탭 열기
-//   { "decide": "decision 항목 1", "value": "승인" }  카드(aria-label 앞부분)의 승인/거절/보류
+//   { "tab": "결정" }                              탭 이름(화면 표시)으로 탭 열기
+//   { "decide": "결정 항목 1", "value": "승인" }      카드(aria-label 앞부분)의 승인/거절/보류
 //   { "fill": "<입력 aria-label>", "value": "…", "nth": 0 }  입력 채우기
 //   { "click": "<단추 이름>", "nth": 0 }            단추 누르기 (확인창은 자동 수락)
 //   { "wait": 1000 }                               ms 기다리기
