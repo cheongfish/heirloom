@@ -1,6 +1,6 @@
 {
   "name": "heirloom",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "private": true,
   "description": "Development manifest for the Heirloom plugin. Not published to npm.",
   "license": "Apache-2.0",
