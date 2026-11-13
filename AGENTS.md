@@ -89,19 +89,19 @@ Run both `npm test` and `npm run typecheck` before you report a task as done. Re
 Work flows **develop → main → release**. `develop` is where work is committed. `main` holds the released source, the `CHANGELOG.md` and the version tags. `release` holds only the plugin files users install (`/plugin marketplace add cheongfish/heirloom#release`).
 
 - **Only pull requests change `main` and `release`.** Never push, fast-forward or merge into them directly. Merge every PR with a merge commit (`gh pr merge <n> --merge`), only after the user agrees to the merge, and after CI passes when CI runs.
-- **Plugin files decide.** The files the plugin runs from are `skills/`, `examples/` and `hooks/`. CI runs on a PR into `main` (and on `main`) only when the PR changes them. A new version, a CHANGELOG entry, a tag and a release PR happen only when the PR into `main` changes them. A PR into `main` that changes nothing there (documents, tests, tools) gets no version, no tag and no release.
+- **Plugin files decide.** The files the plugin runs from are `skills/`, `examples/`, `hooks/`, and Antigravity's `hooks.json` and `rules/` at the repository root. CI runs on a PR into `main` (and on `main`) only when the PR changes them. A new version, a CHANGELOG entry, a tag and a release PR happen only when the PR into `main` changes them. A PR into `main` that changes nothing there (documents, tests, tools) gets no version, no tag and no release.
 - **PR body:** follow `.github/pull_request_template.md`.
 - **PR title:** `[YYYYMMDD] (<source> -> <target>) [<type>, …] : <short title>`, with the date in KST, the target `main` or `release`, and the commit types of `.gitmessage` that the PR contains. For example `[20261113] (develop -> main) [feat, chore] : 테스트 주기 설정과 릴리스 절차 추가`.
 - **Version:** the user gives it; never pick one. It changes only in the PR into `main`, in all of these at once (`tests/layout/version.test.mjs` checks them):
   - `.claude-plugin/plugin.json` and the `heirloom` entry of `.claude-plugin/marketplace.json`,
-  - `.codex-plugin/plugin.json`,
+  - `.codex-plugin/plugin.json` and `.antigravity-plugin/plugin.json`,
   - `skills/using-heirloom/lib/version.mjs`,
   - `package.json` and `package-lock.json` (`npm version <x.y.z> --no-git-tag-version` updates both).
 - **CHANGELOG:** `CHANGELOG.md` on `main`, in Korean, in the Keep a Changelog form: `## [x.y.z] - YYYY-MM-DD` with `### 추가`, `### 변경`, `### 수정`, `### 삭제` as needed. It changes only in the PR into `main`. It is never part of `release`.
 
 ### Release steps
 
-1. **Prepare on `develop`.** Check that the PR will change `skills/`, `examples/` or `hooks/` (`git diff --stat origin/main...develop -- skills examples hooks`). If not, open the PR into `main` without steps 1, 3 and 5. Otherwise, with the version from the user, bump the version files and add the CHANGELOG entry in one commit (`chore: x.y.z 릴리스 준비`). Run `npm test` and `npm run typecheck`, then push `develop`.
+1. **Prepare on `develop`.** Check that the PR will change `skills/`, `examples/` or `hooks/` (`git diff --stat origin/main...develop -- skills examples hooks hooks.json rules`). If not, open the PR into `main` without steps 1, 3 and 5. Otherwise, with the version from the user, bump the version files and add the CHANGELOG entry in one commit (`chore: x.y.z 릴리스 준비`). Run `npm test` and `npm run typecheck`, then push `develop`.
 2. **PR `develop` → `main`.** Open it with `gh pr create --base main --head develop`, the title format above and the template body. Wait for CI when it runs. Merge with a merge commit once the user agrees.
 3. **Tag.** Fetch, then tag the merge commit on `main` with the bare version (`0.2.0`, no `v`) and push the tag. Tags go on `main` commits only.
 4. **Sync `develop`.** Merge `origin/main` into `develop` with a merge commit and push, so `develop` carries the new version and CHANGELOG.
