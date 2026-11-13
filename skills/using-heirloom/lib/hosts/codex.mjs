@@ -14,6 +14,7 @@ export const name = 'codex';
 export const readHookInput = claude.readHookInput;
 export const sessionStartOutput = claude.sessionStartOutput;
 export const stopOutput = claude.stopOutput;
+export const emptyOutput = claude.emptyOutput;
 
 /** Tools that run shell commands. Messages, subagent and wait tools are not reads. */
 const SHELL_TOOLS = new Set(['exec', 'exec_command', 'shell', 'shell_command', 'container.exec']);

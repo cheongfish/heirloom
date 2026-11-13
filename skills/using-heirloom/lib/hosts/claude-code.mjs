@@ -14,8 +14,13 @@ export function readHookInput(raw) {
     cwd: typeof raw.cwd === 'string' ? raw.cwd : undefined,
     transcriptPath: typeof raw.transcript_path === 'string' ? raw.transcript_path : undefined,
     continuation: raw.stop_hook_active === true,
+    // Claude Code runs Stop only when the agent finishes a turn, not after an interrupt.
+    normalStop: true,
   };
 }
+
+/** Nothing to say: print nothing. */
+export const emptyOutput = null;
 
 /** @param {string} text */
 export function sessionStartOutput(text) {

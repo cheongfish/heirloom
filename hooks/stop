@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stop hook: remind about handing off once per source state.
-# Without Node 20+ it does nothing.
+# Without Node 20+ it does nothing (Antigravity: prints {}).
 
 case "$0" in
   */* | *\\*) HOOK_DIR="${0%[/\\]*}" ;;
@@ -12,6 +12,8 @@ esac
 heirloom_find_node
 
 if [ -z "$NODE_BIN" ]; then
+  # Antigravity expects a JSON object from every command hook.
+  [ "${1:-}" = antigravity ] && printf '{}\n'
   exit 0
 fi
 

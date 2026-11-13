@@ -3,9 +3,11 @@
 //
 // A host's hooks file names the host after the hook name (`run-hook.cmd stop <host>`). Codex
 // shares the Claude Code hooks file, so its hooks run without a name; that works because the
-// two take the same input and output. Transcript lines are recognized by their shape, so a
-// transcript is read the same way whichever hooks file ran.
+// two take the same input and output. Antigravity has its own hooks file and names itself.
+// Transcript lines are recognized by their shape, so a transcript is read the same way
+// whichever hooks file ran.
 
+import * as antigravity from './antigravity.mjs';
 import * as claudeCode from './claude-code.mjs';
 import * as codex from './codex.mjs';
 
@@ -14,6 +16,8 @@ import * as codex from './codex.mjs';
  * @property {string | undefined} cwd
  * @property {string | undefined} transcriptPath the host's session transcript, when it gives one
  * @property {boolean} continuation true while the agent is already continuing because a Stop hook asked
+ * @property {boolean} normalStop false when the host says the turn ended by an interrupt, an error,
+ *   a limit or with work still running; then the Stop hook does not remind
  */
 
 /**
@@ -28,11 +32,12 @@ import * as codex from './codex.mjs';
  * @property {(raw: Record<string, unknown>) => HookInput} readHookInput
  * @property {(text: string) => unknown} sessionStartOutput
  * @property {(message: string) => unknown} stopOutput
+ * @property {unknown} emptyOutput what to print when there is nothing to say (null: print nothing)
  * @property {(entry: unknown) => TranscriptCall[]} transcriptCalls
  */
 
 /** @type {Record<string, HostAdapter>} */
-const ADAPTERS = { 'claude-code': claudeCode, codex };
+const ADAPTERS = { 'claude-code': claudeCode, codex, antigravity };
 
 export const HOSTS = Object.freeze(Object.keys(ADAPTERS));
 

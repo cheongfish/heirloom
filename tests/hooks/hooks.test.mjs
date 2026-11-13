@@ -169,6 +169,64 @@ test('host argument: codex is accepted; an unknown host falls back to Claude Cod
   assert.match(unknown.stderr, /vim/);
 });
 
+test('antigravity: SessionStart injects a system message; Stop continues once, and only after a normal stop', { skip }, async () => {
+  const upstream = await makeRepo({ 'README.txt': 'hello\n' });
+  const repo = await cloneRepo(upstream);
+  repo.git('checkout', '-q', '-b', 'feat');
+  await repo.write('docs/superpowers/specs/units.md', '# 단위\n');
+  await repo.write('src/a.mjs', 'export const a = 1;\n');
+  const env = { HEIRLOOM_HOME: await tempDir('home') };
+  // Antigravity hook input: camelCase, the workspace in workspacePaths and cwd.
+  const common = { conversationId: 'c', workspacePaths: [repo.dir], cwd: repo.dir, transcriptPath: '/nowhere/transcript.jsonl', modelName: 'auto' };
+
+  const start = runHook('session-start', { host: 'antigravity', input: { ...common, hookEventName: 'SessionStart' }, env });
+  assert.equal(start.status, 0, start.stderr);
+  const steps = JSON.parse(start.stdout).injectSteps;
+  assert.equal(steps.length, 1);
+  assert.match(steps[0].systemMessage.systemMessage, /prepare-handoff/);
+
+  const stop = (/** @type {object} */ extra) => runHook('stop', { host: 'antigravity', input: { ...common, hookEventName: 'Stop', executionNum: 0, fullyIdle: true, continuationActive: false, ...extra }, env });
+  for (const reason of ['USER_CANCELED', 'ERROR']) {
+    const r = stop({ terminationReason: reason });
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout), {}, `${reason}: no reminder, and an empty object rather than nothing`);
+  }
+  assert.deepEqual(JSON.parse(stop({ terminationReason: 'NO_TOOL_CALL', continuationActive: true }).stdout), {});
+
+  const first = stop({ terminationReason: 'NO_TOOL_CALL' });
+  const out = JSON.parse(first.stdout);
+  assert.equal(out.decision, 'continue');
+  assert.match(out.reason, /prepare-handoff/);
+  assert.deepEqual(JSON.parse(stop({ terminationReason: 'NO_TOOL_CALL' }).stdout), {}, 'once per state');
+});
+
+test('antigravity without Node: SessionStart injects the notice as a system message, Stop prints {}', { skip }, () => {
+  const env = { PATH: '', HEIRLOOM_NODE: undefined };
+  const start = runHook('session-start', { host: 'antigravity', env });
+  assert.equal(start.status, 0);
+  assert.match(JSON.parse(start.stdout).injectSteps[0].systemMessage.systemMessage, /Node 20 이상이 필요합니다/);
+  const stop = runHook('stop', { host: 'antigravity', env });
+  assert.equal(stop.status, 0);
+  assert.deepEqual(JSON.parse(stop.stdout), {});
+});
+
+test('antigravity: hooks.json at the plugin root runs run-hook.cmd from the plugin folder with the host name', { skip }, async () => {
+  const config = JSON.parse(await readFile(path.join(ROOT, 'hooks.json'), 'utf8'));
+  assert.deepEqual(Object.keys(config), ['heirloom']);
+  const { SessionStart, Stop, ...rest } = config.heirloom;
+  assert.deepEqual(rest, {}, 'only the two events');
+  assert.deepEqual(SessionStart.map((/** @type {any} */ h) => h.command), ['./hooks/run-hook.cmd session-start antigravity']);
+  assert.deepEqual(Stop.map((/** @type {any} */ h) => h.command), ['./hooks/run-hook.cmd stop antigravity']);
+  for (const h of [...SessionStart, ...Stop]) assert.equal(h.timeout, 10);
+
+  // As Antigravity runs it: sh -c in the folder that holds hooks.json.
+  const upstream = await makeRepo();
+  const repo = await cloneRepo(upstream);
+  const r = spawnSync('sh', ['-c', SessionStart[0].command], { cwd: ROOT, input: JSON.stringify({ cwd: repo.dir, workspacePaths: [repo.dir] }), encoding: 'utf8', env: { ...process.env, HEIRLOOM_HOME: await tempDir('home') } });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(JSON.parse(r.stdout).injectSteps[0].systemMessage.systemMessage);
+});
+
 test('HEIRLOOM_HOOK_LOG=1 records each hook input and output in HEIRLOOM_HOME/hook-log.jsonl', { skip }, async () => {
   const upstream = await makeRepo();
   const repo = await cloneRepo(upstream);

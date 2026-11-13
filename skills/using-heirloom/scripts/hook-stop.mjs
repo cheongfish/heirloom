@@ -14,21 +14,19 @@ const raw = await readStdinJson();
 const input = host.readHookInput(raw);
 const home = heirloomHome();
 /** @type {unknown} */
-let output = null;
+let output = host.emptyOutput;
 try {
-  const decision = await evaluateStop({
+  const decision = !input.normalStop ? null : await evaluateStop({
     cwd: input.cwd ?? process.cwd(),
     home,
     stopHookActive: input.continuation,
     transcriptPath: input.transcriptPath,
   });
-  if (decision.remind) {
-    output = host.stopOutput(String(decision.message));
-    emit(output);
-  }
+  if (decision?.remind) output = host.stopOutput(String(decision.message));
 } catch (err) {
   process.stderr.write(`heirloom stop hook: ${err instanceof Error ? err.message : String(err)}\n`);
 } finally {
+  if (output !== null) emit(output);
   await logHook({ home, hook: 'stop', host: host.name, input: raw, output });
   clearTimeout(timer);
 }

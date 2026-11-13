@@ -186,6 +186,19 @@ test('stop (Codex): a spec already on the target branch counts once a shell comm
   assert.match(String(decision.message), /docs\/superpowers\/specs\/units\.md \(이번 세션에서 읽음\)/);
 });
 
+test('transcript (Antigravity): read_file paths and run_command lines, as transcript_full.jsonl records them', async () => {
+  const { repo } = await workRepo({ 'docs/superpowers/specs/units.md': '# 단위\n', 'docs/superpowers/specs/ran.md': '# 실행\n', 'docs/superpowers/specs/told.md': '# 말함\n' });
+  const file = path.join(await tempDir('transcript'), 'transcript_full.jsonl');
+  const steps = [
+    { step_index: 0, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', content: 'docs/superpowers/specs/told.md를 구현해 줘' },
+    { step_index: 2, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', tool_calls: [{ name: 'run_command', args: { CommandLine: 'ls -la docs/superpowers/specs && cat docs/superpowers/specs/ran.md', WaitMsBeforeAsync: 5000 } }] },
+    { step_index: 4, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', tool_calls: [{ name: 'read_file', args: { Path: path.join(repo.dir, 'docs/superpowers/specs/units.md') } }, { name: 'read_file', args: { Path: path.join(repo.dir, 'src/a.mjs') } }] },
+    { step_index: 5, source: 'MODEL', type: 'GENERIC', status: 'DONE', content: 'Showing lines 1-1 of 1' },
+  ];
+  await writeFile(file, `${steps.map((s) => JSON.stringify(s)).join('\n')}\n`);
+  assert.deepEqual(await specsReadInTranscript({ transcriptPath: file, root: repo.dir, globs: DEFAULTS }), ['docs/superpowers/specs/ran.md', 'docs/superpowers/specs/units.md']);
+});
+
 test('stop: a spec already on the target branch counts once the session read it', async () => {
   const { repo, home } = await workRepo({ 'docs/superpowers/specs/units.md': '# 단위\n' });
   await repo.write('src/a.mjs', 'export const a = 2;\n');

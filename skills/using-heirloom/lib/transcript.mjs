@@ -2,9 +2,10 @@
 // A spec that is already on the target branch does not show up in the branch's changes, so
 // this is the only trace that the work followed it.
 //
-// Claude Code records file reads as Read tool calls with a path. Codex has no read tool: a
-// spec counts as read when a shell command names it (absolute, or relative to the command's
-// working directory or the repository root) and the file exists. A path in a command is a
+// Claude Code and Antigravity record file reads as read tool calls with a path. Codex has no
+// read tool: a spec counts as read when a shell command names it (absolute, or relative to the
+// command's working directory or the repository root) and the file exists. Shell commands in
+// an Antigravity transcript are read the same way. A path in a command is a
 // strong hint, not proof; it only decides whether to remind about handing off.
 //
 // Transcript formats belong to the hosts and may change: anything unreadable counts as
@@ -61,7 +62,7 @@ export async function specsReadInTranscript({ transcriptPath, root, globs, maxBy
     return result;
   };
   for (const line of text.split('\n')) {
-    if (!line.includes('"tool_use"') && !line.includes('"response_item"')) continue;
+    if (!line.includes('"tool_use"') && !line.includes('"response_item"') && !line.includes('"tool_calls"')) continue;
     let entry;
     try {
       entry = JSON.parse(line);
