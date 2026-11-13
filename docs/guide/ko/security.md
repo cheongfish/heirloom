@@ -31,6 +31,11 @@ Heirloom이 에이전트를 직접 실행하는 경우는 [맥락 정리](curati
 - 실행 명령은 사용자 설정 `curation.agent`에서 읽습니다. 대시보드 요청으로는 고르거나 바꿀 수 없습니다. 실행 요청의 본문은 비어 있어야 하고, 승인처럼 세션 토큰이 필요합니다.
 - 프롬프트는 작업 ID, worktree 경로, 따를 스킬만 담은 고정 문장입니다. 요청 내용이나 기록 본문을 명령줄에 넣지 않습니다.
 - 에이전트는 전용 worktree에서, 단계마다 제한된 도구만 쓰고 실행됩니다. 초안 단계: 읽기 도구, 자신의 `draft.json` 쓰기, 정리·제출 스크립트. 반영 단계: 읽기 도구, PR 본문 파일 쓰기, 반영 스크립트, `git add .heirloom*`, `git commit`, `git push`, `gh pr create`, GitHub API로 PR 본문 수정(`gh api -X PATCH repos/…/pulls/…`). GitLab MR은 반영 스크립트 `open-mr.mjs`로 만들므로 `glab` 명령은 직접 허용하지 않습니다.
+- 프로필별로 목록을 지키는 방법:
+  - Claude Code: `--allowedTools`.
+  - Codex: 사용자의 Codex 설정 없이(다른 훅·플러그인·MCP 서버 없음) `codex exec`을 실행하고, 그 실행에만 쓰는 훅이 목록 밖의 셸 명령과 파일 패치를 거부합니다. 명령은 하나씩이어야 하며 `;`, `&&`, `|`, `$(…)`, 리다이렉트는 거부합니다. 초안 단계는 Codex의 `workspace-write` 샌드박스에서 실행합니다. 반영 단계는 커밋해야 하는데 샌드박스가 `.git`을 읽기 전용으로 두므로 샌드박스 없이 실행하고, 그때는 Claude Code의 `--allowedTools`처럼 훅이 유일한 제한입니다.
+  - Antigravity: 기본 에이전트 모드(Auto가 아님)의 `agy -p`에 그 실행에만 쓰는 권한 규칙을 주고, worktree 안의 파일 쓰기는 거부합니다.
+  - Codex와 Antigravity에는 모든 파일을 읽는 도구가 없어 `ls`, `pwd`, `cat`, `head`, `tail`, `wc`, `grep`, `git status`, `git rev-parse`도 허용합니다.
 - 사용자 권한과 사용자의 `gh`·`glab` 로그인으로 실행됩니다. 대시보드 세션 토큰을 얻을 수 있는 프로그램은 정리도 시작할 수 있습니다. 아래 승인 한계와 같은 수준입니다.
 
 ## 알려진 한계

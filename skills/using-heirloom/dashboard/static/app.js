@@ -735,7 +735,11 @@ function curationCard(task) {
 }
 
 /** @type {Record<string, string>} */
-const AGENT_ERROR = { command_missing: '실행 파일을 찾지 못함', interrupted: '실행이 중간에 끊김(대시보드 서버 종료 등)' };
+const AGENT_ERROR = {
+  command_missing: '실행 파일을 찾지 못함',
+  interrupted: '실행이 중간에 끊김(대시보드 서버 종료 등)',
+  permission_denied: '허용 목록 밖의 도구가 필요해 멈춤(Antigravity)',
+};
 
 /** @param {any} task */
 function agentCard(task) {

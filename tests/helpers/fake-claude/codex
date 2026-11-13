@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+// Fake `codex` for tests (the Codex headless profile). Appends { args, cwd } to
+// $FAKE_CLAUDE_LOG and plays the phase named by the prompt (`codex exec <prompt> …`) with
+// scenario.mjs, like the fake `claude`.
+import { appendFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const args = process.argv.slice(2);
+if (process.env.FAKE_CLAUDE_LOG) appendFileSync(process.env.FAKE_CLAUDE_LOG, `${JSON.stringify({ args, cwd: process.cwd() })}\n`);
+const prompt = args[0] === 'exec' ? args[1] ?? '' : '';
+const phase = prompt.includes('curate-decisions') ? 'curate' : prompt.includes('apply-approval') ? 'apply' : null;
+const taskId = /task (t-\d{8}-[0-9a-z]{8})/.exec(prompt)?.[1];
+if (!phase || !taskId) {
+  process.stderr.write('fake codex: unknown prompt\n');
+  process.exit(2);
+}
+const scenario = path.join(path.dirname(fileURLToPath(import.meta.url)), 'scenario.mjs');
+process.exit(spawnSync(process.execPath, [scenario, phase, taskId], { stdio: 'inherit' }).status ?? 1);

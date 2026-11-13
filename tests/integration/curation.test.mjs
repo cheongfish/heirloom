@@ -269,6 +269,49 @@ test('curation: a missing command and a failed run stay put, show why, and run a
   assert.equal((await f.post(`/api/tasks/${taskId}/retry-agent`, {})).status, 409, 'nothing to run while waiting for the human');
 });
 
+test('curation: Codex and Antigravity profiles run the same flow; an Antigravity permission stop is reported', async (t) => {
+  const f = await fixture();
+  t.after(() => f.server.close());
+
+  // Codex: the policy file the per-run hook reads is written before the run.
+  await writeFile(path.join(f.home, 'config.json'), JSON.stringify({ schemaVersion: 1, curation: { agent: { host: 'codex' } } }));
+  const started = await f.post(`/api/repos/${f.repoId}/curate`, {});
+  assert.equal(started.status, 200, JSON.stringify(started.body));
+  const { taskId, worktree } = started.body;
+  const { done } = await agentFinished(f.home, taskId, 'curate');
+  assert.equal(done.exitCode, 0);
+  const [codexCall] = await calls(f.log);
+  assert.equal(codexCall.cwd, worktree);
+  assert.equal(codexCall.args[0], 'exec');
+  assert.ok(codexCall.args.includes('--ignore-user-config'));
+  const policy = JSON.parse(await readFile(path.join(f.home, 'tasks', taskId, 'agent-curate.policy.json'), 'utf8'));
+  assert.deepEqual(policy.writes, [path.join(f.home, 'tasks', taskId, 'draft.json')]);
+  assert.equal(deriveState(await readEvents(taskPaths(f.home, taskId).events)), 'awaiting_approval');
+
+  // Antigravity: a run stopped by a missing permission exits with 0 but is a failure.
+  const g = await fixture();
+  t.after(() => g.server.close());
+  await writeFile(path.join(g.home, 'config.json'), JSON.stringify({ schemaVersion: 1, curation: { agent: { host: 'antigravity' } } }));
+  process.env.FAKE_AGY_DENY = '1';
+  t.after(() => delete process.env.FAKE_AGY_DENY);
+  const denied = await g.post(`/api/repos/${g.repoId}/curate`, {});
+  assert.equal(denied.status, 200, JSON.stringify(denied.body));
+  const first = await agentFinished(g.home, denied.body.taskId, 'curate');
+  assert.equal(first.done.exitCode, 0);
+  assert.equal(first.done.error, 'permission_denied');
+  assert.equal((await g.call(`/api/tasks/${denied.body.taskId}`)).body.agent.last.error, 'permission_denied');
+  const [agyCall] = await calls(g.log);
+  assert.equal(agyCall.args[0], '-p');
+  assert.equal(JSON.parse(agyCall.args[agyCall.args.indexOf('--settings') + 1]).agentMode, '');
+
+  // Run again with the permission: it goes through, and the earlier notice in the same log is not taken for this run.
+  delete process.env.FAKE_AGY_DENY;
+  assert.equal((await g.post(`/api/tasks/${denied.body.taskId}/retry-agent`, {})).status, 200);
+  const second = await agentFinished(g.home, denied.body.taskId, 'curate', 2);
+  assert.equal(second.done.error, undefined);
+  assert.equal(deriveState(second.events), 'awaiting_approval');
+});
+
 test('curation: an unclear target branch refuses to start and creates nothing', async (t) => {
   const f = await fixture();
   t.after(() => f.server.close());

@@ -432,7 +432,7 @@ export const userConfigSchema = object(
   {
     optional: {
       dashboard: object({}, { optional: { idleMinutes: int({ min: 1 }), openBrowser: bool, staleDays: int({ min: 1 }), port: int({ min: 1024, max: 65535 }) } }),
-      curation: object({}, { optional: { agent: object({}, { optional: { host: oneOf('claude-code'), command: nonEmpty, model: nullable(nonEmpty) } }) } }),
+      curation: object({}, { optional: { agent: object({}, { optional: { host: oneOf('claude-code', 'codex', 'antigravity'), command: nonEmpty, model: nullable(nonEmpty) } }) } }),
     },
   },
 );

@@ -24,9 +24,9 @@ The files are JSON, so they cannot hold comments. Unknown keys and out-of-range 
 | `dashboard.idleMinutes` | `30` | Minutes without an open screen or a request before the server stops |
 | `dashboard.openBrowser` | `true` | Whether to open the browser automatically after a handoff. Explicit requests to open the dashboard are not affected. |
 | `dashboard.staleDays` | `7` | Days after which an unfinished task is listed as stale in the overview |
-| `curation.agent.host` | `"claude-code"` | Headless agent profile used by [context curation](curation.md). Only `claude-code` exists so far. |
-| `curation.agent.command` | `"claude"` | Command the dashboard runs for a curation. A name on `PATH` or an absolute path. Requests to the dashboard can never change it. |
-| `curation.agent.model` | `null` | Model passed to the headless agent (`--model`). `null` uses the command's default. |
+| `curation.agent.host` | `"claude-code"` | Headless agent profile used by [context curation](curation.md): `claude-code`, `codex` or `antigravity`. |
+| `curation.agent.command` | by profile: `"claude"`, `"codex"`, `"agy"` | Command the dashboard runs for a curation. A name on `PATH` or an absolute path. Requests to the dashboard can never change it. |
+| `curation.agent.model` | `null` | Model passed to the headless agent (`--model`, or `-m` for Codex). `null` uses the command's default. |
 
 ## Project settings
 

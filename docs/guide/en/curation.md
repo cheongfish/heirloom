@@ -24,7 +24,7 @@ The suggestion appears as a card in the dashboard overview (맥락 정리) and a
 
 1. In the dashboard overview, choose **정리 실행** (run curation) on the repository's card and confirm.
 2. The dashboard server fetches the target branch, then creates a dedicated worktree under `~/.heirloom/worktrees/<repoId>/<taskId>/` on a new branch `heirloom/curate-<date>-<suffix>` started from the target branch. Your own working trees are never touched.
-3. It runs a headless agent there (`claude -p` by default) with the `curate-decisions` skill. The agent reads up to 20 unreviewed decisions (oldest first), the active records related to them, every active axiom and the earlier review history, then submits a draft.
+3. It runs a headless agent there (`claude -p` by default, or `codex exec`, `agy -p`) with the `curate-decisions` skill. The agent reads up to 20 unreviewed decisions (oldest first), the active records related to them, every active axiom and the earlier review history, then submits a draft.
 4. You review the proposals on the task screen, like a handoff. Axiom candidates show their evidence decisions. **Holding or rejecting a candidate needs a reason**, which is kept in the repository.
 5. When you save the approval, the dashboard runs the headless agent again with the `apply-approval` skill. It writes the records and the review history, commits them, pushes the branch and opens the PR.
 6. When the PR is merged, the batch counts as reviewed and the dedicated worktree and its local branch are removed. They are also removed when the task is discarded or its PR is closed without merge. A worktree with uncommitted changes is kept, and the task screen says why.
@@ -48,4 +48,6 @@ A run that fails, times out (30 minutes) or cannot start (the command is missing
 
 - The headless agent runs with your user's permissions and uses your `gh` or `glab` login. Its tools are limited per step (see [Security](security.md#headless-curation-runs)).
 - Only github.com and GitLab remotes get a PR (an MR on GitLab). With another remote, the records are committed in the curation worktree; push and merge the branch yourself.
-- The command comes from the user setting `curation.agent` ([Configuration](configuration.md#user-settings)). Only the Claude Code profile exists so far.
+- The command comes from the user setting `curation.agent` ([Configuration](configuration.md#user-settings)): Claude Code, Codex or Antigravity profile.
+- Antigravity: a run that needs a command outside its allowed list stops without output; the dashboard shows it as failed with `permission_denied`. Run it again, or run the step by hand.
+- Codex: the drafting step runs in Codex's sandbox, where the dashboard cannot be reached; the draft is still submitted and the dashboard screen updates.

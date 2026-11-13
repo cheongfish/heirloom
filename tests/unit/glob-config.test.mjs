@@ -71,7 +71,11 @@ test('loadUserConfig: dashboard and curation agent defaults', async () => {
   assert.deepEqual((await loadUserConfig(home)).dashboard, { idleMinutes: 5, openBrowser: true, staleDays: 3, port: 17380 });
   await writeFile(path.join(home, 'config.json'), JSON.stringify({ schemaVersion: 1, curation: { agent: { command: '/opt/claude', model: 'sonnet' } } }));
   assert.deepEqual((await loadUserConfig(home)).curation.agent, { host: 'claude-code', command: '/opt/claude', model: 'sonnet' });
-  await writeFile(path.join(home, 'config.json'), JSON.stringify({ schemaVersion: 1, curation: { agent: { host: 'codex' } } }));
+  for (const [host, command] of [['codex', 'codex'], ['antigravity', 'agy']]) {
+    await writeFile(path.join(home, 'config.json'), JSON.stringify({ schemaVersion: 1, curation: { agent: { host } } }));
+    assert.deepEqual((await loadUserConfig(home)).curation.agent, { host, command, model: null }, 'each profile has its own default command');
+  }
+  await writeFile(path.join(home, 'config.json'), JSON.stringify({ schemaVersion: 1, curation: { agent: { host: 'vim' } } }));
   await assert.rejects(loadUserConfig(home), /host/);
 });
 

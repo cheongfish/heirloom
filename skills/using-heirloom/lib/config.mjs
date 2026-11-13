@@ -45,11 +45,14 @@ export async function loadProjectConfig(root) {
   };
 }
 
+/** The command each headless profile runs when `curation.agent.command` is not set. */
+const AGENT_COMMANDS = /** @type {Record<string, string>} */ ({ 'claude-code': 'claude', codex: 'codex', antigravity: 'agy' });
+
 /**
  * @typedef {object} UserConfig
  * @property {1} schemaVersion
  * @property {{ idleMinutes: number, openBrowser: boolean, staleDays: number, port: number }} dashboard
- * @property {{ agent: { host: 'claude-code', command: string, model: string | null } }} curation
+ * @property {{ agent: import('./agent-runner.mjs').AgentConfig }} curation
  */
 
 /**
@@ -65,7 +68,7 @@ export async function loadUserConfig(home) {
   return {
     schemaVersion: 1,
     dashboard: { idleMinutes: d.idleMinutes ?? 30, openBrowser: d.openBrowser ?? true, staleDays: d.staleDays ?? 7, port: d.port ?? 17380 },
-    curation: { agent: { host: agent.host ?? 'claude-code', command: agent.command ?? 'claude', model: agent.model ?? null } },
+    curation: { agent: { host: agent.host ?? 'claude-code', command: agent.command ?? AGENT_COMMANDS[agent.host ?? 'claude-code'], model: agent.model ?? null } },
   };
 }
 
