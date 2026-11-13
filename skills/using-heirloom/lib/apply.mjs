@@ -49,7 +49,7 @@ const lastOf = (events, type) => events.filter((e) => e.type === type).at(-1);
  * @param {{ home: string, cwd: string }} options
  */
 export async function listPendingApprovals({ home, cwd }) {
-  const ids = await readIds(await repoInfo(cwd));
+  const ids = await readIds(await repoInfo(cwd), home);
   if (!ids) return [];
   const index = await readIndex(home);
   const pending = [];

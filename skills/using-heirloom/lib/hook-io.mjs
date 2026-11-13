@@ -1,5 +1,10 @@
 // Hook stdin/stdout helpers.
 
+import { appendFile, mkdir } from 'node:fs/promises';
+import path from 'node:path';
+
+import { hostAdapter } from './hosts/index.mjs';
+
 /**
  * Read the hook input JSON from stdin. Returns {} for a TTY, empty or invalid input,
  * or when nothing arrives within `timeoutMs`.
@@ -35,4 +40,34 @@ export async function readStdinJson({ timeoutMs = 1000 } = {}) {
 /** @param {unknown} value */
 export function emit(value) {
   process.stdout.write(`${JSON.stringify(value)}\n`);
+}
+
+/**
+ * Development aid: with HEIRLOOM_HOOK_LOG=1, append what a hook received and printed to
+ * `<home>/hook-log.jsonl`. It shows the input each host really sends. Never throws.
+ * @param {{ home: string, hook: string, host: string, input: unknown, output: unknown }} entry
+ */
+export async function logHook({ home, hook, host, input, output }) {
+  if (process.env.HEIRLOOM_HOOK_LOG !== '1') return;
+  try {
+    await mkdir(home, { recursive: true });
+    const line = JSON.stringify({ at: new Date().toISOString(), hook, host, input, output: output ?? null });
+    await appendFile(path.join(home, 'hook-log.jsonl'), `${line}\n`);
+  } catch (err) {
+    process.stderr.write(`heirloom hook log: ${err instanceof Error ? err.message : String(err)}\n`);
+  }
+}
+
+/**
+ * The host named on the hook's command line; Claude Code when missing or unknown (with a note
+ * on stderr, since an unknown name is a packaging mistake and the hook must still not fail).
+ * @param {string | undefined} name
+ */
+export function hookHost(name) {
+  try {
+    return hostAdapter(name);
+  } catch (err) {
+    process.stderr.write(`heirloom hook: ${err instanceof Error ? err.message : String(err)}, Claude Code 형식으로 처리\n`);
+    return hostAdapter(undefined);
+  }
 }

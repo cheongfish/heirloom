@@ -16,6 +16,7 @@ import { globToRegExp } from './glob.mjs';
 import { derivedBase32 } from './ids.mjs';
 import { parseRecord } from './records.mjs';
 import { PATTERNS, curationReviewSchema, recordMetaSchema, validate } from './schema.mjs';
+import { curationAgent } from './session-host.mjs';
 import { taskPaths } from './paths.mjs';
 
 export { CURATION_DEFAULTS };
@@ -352,7 +353,9 @@ export async function curationStatus({ home, repoId, now = Date.now() }) {
     if (task.meta.repoId !== repoId || (await curationFinished(task))) continue;
     inProgress.push({ taskId: task.taskId, state: task.state, branch: task.meta.branch, worktree: task.meta.worktree, createdAt: task.meta.createdAt });
   }
-  const empty = { repoId, root: null, base: null, notify: false, unreviewed: 0, lastReviewedAt: null, since: null, inProgress, unreadable: 0 };
+  // The host a new curation of this repository would run with.
+  const { host, source } = await curationAgent({ home, repoId });
+  const empty = { repoId, root: null, base: null, notify: false, unreviewed: 0, lastReviewedAt: null, since: null, inProgress, unreadable: 0, agent: { host, source } };
   let base;
   try {
     base = await curationBase({ home, repoId });
