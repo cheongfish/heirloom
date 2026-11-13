@@ -6,7 +6,7 @@ It is not the convention a development session follows. Inside a session, Heirlo
 
 ## What Heirloom is
 
-A plugin for Claude Code, Codex and Antigravity. After an SDLC tool (for example Superpowers) finishes spec-based work, the agent hands it off; Heirloom freezes the state, checks the agent's drafts against their sources, and a human approves the PR summary and the decisions in a local dashboard. The agent then writes the approved records to `.heirloom/` in the repository and opens the PR. Later sessions get the active decisions and axioms.
+A plugin for Claude Code, Codex and Antigravity. After an SDLC tool (for example Superpowers) finishes spec-based work, or when the user asks to hand off other work (for example work asked for in the chat), the agent hands it off; Heirloom freezes the state, checks the agent's drafts against their sources (documents, or the user's messages in the session), and a human approves the PR summary and the decisions in a local dashboard. The agent then writes the approved records to `.heirloom/` in the repository and opens the PR. Later sessions get the active decisions and axioms.
 
 ## Rules for agents using this folder
 

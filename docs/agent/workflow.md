@@ -14,12 +14,15 @@ The agent does this.
 - **When.** After finishing the implementation and final review of a spec-based task, and before reporting completion, the agent runs the `prepare-handoff` skill.
 - **If the agent forgets.** The stop hook reminds it once. Three conditions must hold: there are code changes linked to a spec, no handoff exists for that state, and no reminder was given for the same state. A spec counts as linked when this branch changed it, and also when the session read a spec that was already on the target branch (checked in the session transcript; how each host records reads is in [Hosts](hosts.md#differences)).
 - **If specs live elsewhere.** When the handed-off spec does not match the spec location setting (`specGlobs`), the agent asks after the handoff whether to add a matching pattern to `.heirloom/config.json`. Only if you agree does it create the file or add the pattern. The file is a project file; commit it.
-- **Work without a spec.** A small fix, for example, is handed off only when the user asks.
+- **Work without a spec.** A small fix, a refactor or work asked for in the chat is handed off only when the user asks (`prepare-handoff --manual`). So that a chat-only user learns this, the stop hook tells the agent once per session when there are code changes without a linked spec, and the agent mentions it in one sentence when it reports the work as finished.
+- **Decisions made in the chat.** A decision the user typed in the session can be recorded, quoting the user's message as its source. The agent's own replies, tool output and text the host adds as the user (environment details, hook messages, slash commands) are never a source.
 - **Steps.**
-  1. Heirloom freezes the current source state and the materials (spec, review documents).
+  1. Heirloom freezes the current source state and the materials (spec, review documents), and the messages the user typed in the session.
   2. The agent writes the PR summary and the decision and axiom drafts.
-  3. Heirloom checks the drafts' source quotes mechanically. If a quote is not in the source, the draft is not shown for approval.
+  3. Heirloom checks the drafts' source quotes mechanically. A quote must be in its document, or in one of the user's messages. If it is not, the draft is not shown for approval.
 - **Result.** When the check passes, the dashboard opens, once per task. A readable handoff file (`handoff.md`) is also written.
+
+Which session's messages are frozen: the session start and stop hooks record each session's transcript per worktree, and a handoff takes the session that was active last. When another session of the same worktree ran at the same time within the last two hours, Heirloom does not guess: the handoff goes ahead without the conversation, and decisions need a document source. A quoted message is written into the record file in the repository once approved, so check quotes in the dashboard as you would check a document quote.
 
 A handoff only means the agent reports the work is ready. It is not proof that the work is correct, and it is not an approval.
 
