@@ -227,6 +227,22 @@ test('antigravity: hooks.json at the plugin root runs run-hook.cmd from the plug
   assert.ok(JSON.parse(r.stdout).injectSteps[0].systemMessage.systemMessage);
 });
 
+test('HEIRLOOM_DISABLE_CONVENTION=1 (evaluation only) injects nothing at session start; Stop still reminds', { skip }, async () => {
+  const upstream = await makeRepo({ 'README.txt': 'hello\n' });
+  const repo = await cloneRepo(upstream);
+  repo.git('checkout', '-q', '-b', 'feat');
+  await repo.write('docs/superpowers/specs/units.md', '# 단위\n');
+  await repo.write('src/a.mjs', 'export const a = 1;\n');
+  const env = { HEIRLOOM_HOME: await tempDir('home'), HEIRLOOM_DISABLE_CONVENTION: '1' };
+  const claude = runHook('session-start', { input: { cwd: repo.dir }, env });
+  assert.equal(claude.status, 0, claude.stderr);
+  assert.equal(claude.stdout, '');
+  const antigravity = runHook('session-start', { host: 'antigravity', input: { cwd: repo.dir }, env });
+  assert.deepEqual(JSON.parse(antigravity.stdout), {});
+  const stop = runHook('stop', { input: { cwd: repo.dir, stop_hook_active: false }, env });
+  assert.equal(JSON.parse(stop.stdout).decision, 'block');
+});
+
 test('HEIRLOOM_HOOK_LOG=1 records each hook input and output in HEIRLOOM_HOME/hook-log.jsonl', { skip }, async () => {
   const upstream = await makeRepo();
   const repo = await cloneRepo(upstream);
