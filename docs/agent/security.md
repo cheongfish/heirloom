@@ -1,7 +1,5 @@
 # Security model and limits
 
-[한국어](../ko/security.md)
-
 The development agent has shell and file write access. Heirloom therefore does not try to make forged approvals impossible. It aims to make them **detectable and auditable**.
 
 ## Approval signatures

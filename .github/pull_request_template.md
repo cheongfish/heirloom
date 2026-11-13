@@ -67,6 +67,6 @@
 ## 체크리스트
 
 - [ ] `npm test`와 `npm run typecheck`가 통과한다.
-- [ ] 사용자가 보는 동작이 바뀌었으면 사용자 문서 한국어·영어(`README.md`·`README.en.md`, `docs/guide/{ko,en}/`)를 함께 고쳤다.
+- [ ] 사용자가 보는 동작이 바뀌었으면 에이전트용 문서(`docs/agent/`, 영어)를 고쳤고, README에 보이는 내용이면 `README.md`·`README.en.md`를 함께 고쳤다.
 - [ ] `skills/` 아래 JS 주석에 계획 문서 참조가 없다.
 - [ ] 계획 문서(`docs/HEIRLOOM-*.md`)가 커밋에 포함되지 않았다.

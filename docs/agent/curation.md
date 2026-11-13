@@ -1,7 +1,5 @@
 # Context curation
 
-[한국어](../ko/curation.md)
-
 Each handoff records the decisions of one piece of work. Over time decisions repeat, overlap, or turn out to keep the same rule. A context curation reviews a batch of decisions that were never reviewed together, and proposes:
 
 - clean-up of duplicates (supersede or deprecate),

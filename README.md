@@ -2,79 +2,49 @@
 
 [English](README.en.md)
 
-Heirloom은 Superpowers 같은 SDLC 도구로 끝낸 작업을 마무리하는 Claude Code·Codex·Antigravity용 플러그인입니다. 인계를 준비하고, 사람이 로컬 대시보드에서 PR 요약과 결정(decision)을 승인하게 합니다. 승인된 기록은 저장소에 쓰고 PR을 엽니다. 이후 작업에는 활성 decision과 axiom을 제공합니다.
+Superpowers 같은 SDLC 도구로 끝낸 작업을 마무리하는 Claude Code·Codex·Antigravity용 플러그인입니다. 에이전트가 인계를 준비하면, 사람이 로컬 대시보드에서 PR 요약과 결정(decision)을 승인합니다. 승인된 기록은 저장소에 남고 PR이 열리며, 다음 작업은 그 결정을 이어받습니다.
 
-Heirloom은 개발 작업을 대신하지 않으며, 인계는 승인이 아닙니다. 승인은 사람만, 대시보드에서만 합니다.
+## 하는 일
 
-> 상태: 0.1(MVP). 일부 기능은 준비 중입니다. [지원 예정](docs/guide/ko/roadmap.md)을 참고하세요.
+1. **인계.** spec 기반 작업이 끝나면 에이전트가 인계합니다. 초안이 인용한 출처는 기계적으로 검사합니다.
+2. **승인.** 대시보드(`http://127.0.0.1:17380/`)에서 요약과 결정을 항목마다 승인합니다. 승인에는 서명이 붙습니다.
+3. **기록과 PR.** 에이전트가 `.heirloom/`에 기록을 쓰고 승인된 요약으로 PR(GitLab은 MR)을 엽니다. 승인 뒤 코드가 바뀌면 바뀐 부분과 관련된 항목만 다시 확인받습니다.
+4. **이어받기.** 다음 세션은 활성 결정과 규칙(axiom)을 받고 시작합니다.
+
+결정이 쌓이면 대시보드가 **맥락 정리**를 제안합니다. 중복을 정리하고 오래 지킬 규칙 후보를 뽑는 작업입니다.
 
 ## 설치
 
-Node 20 이상, git, 그리고 호스트(Claude Code, Codex, Antigravity CLI 중 하나)가 필요합니다. PR을 만들 때만 github.com 원격이면 `gh`, GitLab 원격(gitlab.com 또는 자체 호스팅)이면 `glab`이 필요합니다. 따로 설치할 런타임 의존성은 없습니다.
-
-플러그인 파일만 담은 `release` 브랜치에서 설치합니다. Claude Code에서는:
+Node 20 이상과 git이 필요합니다. PR을 만들려면 `gh`(GitHub)나 `glab`(GitLab)도 필요합니다.
 
 ```text
+# Claude Code
 /plugin marketplace add cheongfish/heirloom#release
 /plugin install heirloom@heirloom
 ```
 
-설치하지 않고 내려받은 저장소를 한 세션에서만 쓰려면 `claude --plugin-dir /path/to/heirloom`으로 실행합니다.
+```sh
+# Codex (설치 뒤 Codex 세션의 /hooks에서 Heirloom 훅을 신뢰)
+codex plugin marketplace add cheongfish/heirloom@release
+codex plugin add heirloom@heirloom
 
-Codex와 Antigravity는 설치 절차가 따로 있습니다(Codex는 `/hooks`에서 훅 신뢰도 필요). 호스트별 지원 등급과 차이: [호스트](docs/guide/ko/hosts.md).
+# Antigravity CLI
+git clone -b release https://github.com/cheongfish/heirloom ~/tools/heirloom
+agy plugin install ~/tools/heirloom
+```
 
-→ [설치 가이드](docs/guide/ko/installation.md)
+## 에이전트에게 맡기기
 
-## 작업 흐름
+설치, 설정, 문제 해결은 에이전트에게 맡기면 됩니다. 자세한 문서는 에이전트가 읽도록 [`docs/agent/`](docs/agent/README.md)에 영어로 정리해 두었습니다.
 
-1. **인계.** 에이전트가 끝낸 spec 기반 작업을 인계합니다. 초안의 출처 인용은 기계적으로 검사합니다.
-2. **승인.** 대시보드에서 요약과 decision·axiom을 항목별로 검토합니다. 승인에는 서명이 붙습니다.
-3. **반영과 PR.** 에이전트가 승인을 검증하고 `.heirloom/` 기록을 쓴 뒤, 승인된 요약을 그대로 넣어 PR(GitLab은 MR)을 엽니다. 승인을 기다리던 세션은 승인하는 즉시 이 단계를 진행합니다.
-   - 승인 뒤에 코드가 바뀌면(PR을 연 뒤라도) 바뀐 부분과 연결된 항목만 다시 확인받습니다. 나머지는 승인을 유지합니다.
-4. **맥락 조회.** 이후 세션은 활성 axiom과 decision 색인을 받고 시작하고, 에이전트가 관련 기록의 원문을 가져옵니다. 기록은 대상 브랜치에 머지되면 활성이 됩니다.
+> https://github.com/cheongfish/heirloom/blob/main/docs/agent/README.md 를 읽고 이 머신에 Heirloom을 설치하고 확인해 줘.
 
-→ [작업 흐름 가이드](docs/guide/ko/workflow.md)
+## 알아 둘 점
 
-## 맥락 정리
-
-decision이 쌓이면 대시보드가 정리를 제안합니다. 실행을 고르면 헤드리스 에이전트가 전용 worktree에서 decision 묶음을 검토하고 중복 정리, 관계, axiom 후보를 제안합니다. 제안을 항목마다 승인하고(보류·거절한 후보에는 이유를 적습니다), 결과는 PR(GitLab은 MR)로 올라옵니다.
-
-→ [맥락 정리](docs/guide/ko/curation.md)
-
-## 대시보드
-
-`http://127.0.0.1:17380/`에 뜨는 로컬 화면입니다. 전체 목록과 작업별 탭 화면이 있습니다. 인계마다 한 번 자동으로 열리고, 언제든 에이전트에게 다시 열어 달라고 할 수 있습니다. 쓰지 않으면 서버가 스스로 종료됩니다.
-
-→ [대시보드 가이드](docs/guide/ko/dashboard.md)
-
-## 데이터 위치
-
-- `<저장소>/.heirloom/`: decision·axiom 기록과 정리 검토 이력. 커밋 대상입니다.
-- `~/.heirloom/`(또는 `HEIRLOOM_HOME`): 작업, 승인, 키, 서버 상태. 로컬에만 둡니다.
-
-→ [데이터 위치](docs/guide/ko/data.md)
-
-## 설정
-
-설정은 선택입니다. [`examples/`](examples/)의 예시를 복사해 필요한 값만 바꾸세요. 포트, 유휴 시간, 브라우저 자동 열기, 대상 브랜치, spec 경로 등을 바꿀 수 있습니다.
-
-→ [설정 가이드](docs/guide/ko/configuration.md)
-
-## 보안
-
-승인에는 사용자별 ed25519 키로 서명합니다. 대시보드는 `127.0.0.1`에서만 열리고 Host, Origin, 세션 토큰을 검사합니다. 그래도 같은 OS 사용자 권한의 에이전트가 의도적으로 우회하는 것은 막지 못합니다. Heirloom의 목표는 차단이 아니라 탐지와 감사입니다.
-
-→ [보안 모델과 한계](docs/guide/ko/security.md)
-
-## 지원 예정
-
-다음 기능을 지원할 예정입니다.
-
-- Windows 키체인
-
-피드백: [이슈 열기](https://github.com/cheongfish/heirloom/issues/new?template=feedback.yml).
-
-→ [지원 예정](docs/guide/ko/roadmap.md)
+- 인계는 승인이 아닙니다. 승인은 사람만, 대시보드에서만 합니다.
+- 승인은 사용자별 키로 서명하고, 대시보드는 `127.0.0.1`에서만 열립니다. 다만 같은 OS 사용자 권한으로 도는 프로그램이 마음먹고 우회하는 것까지 막지는 못합니다. 목표는 차단이 아니라 탐지와 감사입니다.
+- 맥락 정리는 사용자가 고를 때만 헤드리스 에이전트로 실행되며, 단계마다 쓸 수 있는 명령을 제한합니다.
+- Codex와 Antigravity 지원은 잠정 등급입니다. 겪은 일을 [피드백 양식](https://github.com/cheongfish/heirloom/issues/new?template=feedback.yml)으로 알려 주세요.
 
 ## 라이선스
 

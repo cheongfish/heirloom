@@ -1,7 +1,5 @@
 # Data locations
 
-[한국어](../ko/data.md)
-
 Heirloom keeps data in two places. The repository holds only the records a team shares. Task state, approvals and keys stay on your computer.
 
 ## In the project: `<repository>/.heirloom/`

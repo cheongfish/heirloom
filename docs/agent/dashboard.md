@@ -1,7 +1,5 @@
 # Dashboard
 
-[한국어](../ko/dashboard.md)
-
 The dashboard is a local web page where a human reviews and approves handoffs. One server per user runs on `127.0.0.1`.
 
 ## Opening it

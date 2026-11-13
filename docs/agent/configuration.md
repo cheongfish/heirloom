@@ -1,17 +1,17 @@
 # Configuration
 
-[한국어](../ko/configuration.md)
-
 All settings files are optional; without them the defaults apply. Copy an example file, which lists every setting at its default, and change only what you need.
 
 | Settings | Location | Example |
 | --- | --- | --- |
-| User settings | `~/.heirloom/config.json` | [`examples/user-config.example.json`](../../../examples/user-config.example.json) |
-| Project settings | `<repository>/.heirloom/config.json` (committed) | [`examples/project-config.example.json`](../../../examples/project-config.example.json) |
+| User settings | `~/.heirloom/config.json` | [`examples/user-config.example.json`](../../examples/user-config.example.json) |
+| Project settings | `<repository>/.heirloom/config.json` (committed) | [`examples/project-config.example.json`](../../examples/project-config.example.json) |
+
+The `examples/` folder is in the plugin's install folder ([Install](install.md#install-locations)) and in the repository.
 
 ```sh
-cp examples/user-config.example.json ~/.heirloom/config.json
-cp examples/project-config.example.json <repository>/.heirloom/config.json
+cp <plugin folder>/examples/user-config.example.json ~/.heirloom/config.json
+cp <plugin folder>/examples/project-config.example.json <repository>/.heirloom/config.json
 ```
 
 The files are JSON, so they cannot hold comments. Unknown keys and out-of-range values are reported as errors. Both files need `"schemaVersion": 1`.

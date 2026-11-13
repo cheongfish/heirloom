@@ -1,7 +1,5 @@
 # Workflow
 
-[한국어](../ko/workflow.md)
-
 Heirloom does not do the development work. It takes over work finished with an SDLC tool such as Superpowers, and keeps the PR summary, decisions and axioms (project rules) that a human approved.
 
 ```

@@ -22,7 +22,7 @@ const FILES = {
   'tests/unit/a.test.mjs': '',
   'evals/README.md': '',
   'tools/t.mjs': '',
-  'docs/guide/en/x.md': '',
+  'docs/agent/x.md': '',
   'package.json': '{}\n',
   'CHANGELOG.md': '# 변경 이력\n',
   'AGENTS.md': '',

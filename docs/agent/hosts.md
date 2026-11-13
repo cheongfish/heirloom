@@ -1,7 +1,5 @@
 # Hosts
 
-[한국어](../ko/hosts.md)
-
 Heirloom runs in Claude Code, Codex and Antigravity. The handoff, the dashboard, the approval and the records work the same in all three. What differs is how each host loads the plugin, injects the convention at session start and reminds the agent at stop.
 
 ## Support level
@@ -16,38 +14,7 @@ The levels say which parts of the connection work: **A** the convention is injec
 
 "Provisional": the levels come from a short set of headless runs (normal completion, progress report, question, interruption, resume). Error-exit and long runs with another SDLC tool were not repeated enough to give miss or false-call rates. Please report what you see with the [feedback form](https://github.com/cheongfish/heirloom/issues/new?template=feedback.yml).
 
-## Install
-
-Install from the `release` branch, which holds only the plugin files.
-
-### Claude Code
-
-```text
-/plugin marketplace add cheongfish/heirloom#release
-/plugin install heirloom@heirloom
-```
-
-Update: `/plugin marketplace update heirloom`.
-
-### Codex
-
-```sh
-codex plugin marketplace add cheongfish/heirloom@release
-codex plugin add heirloom@heirloom
-```
-
-Then, in a Codex session, open `/hooks` and trust the two Heirloom hooks (SessionStart and Stop). Until then Heirloom works only through a manual handoff. Update: `codex plugin marketplace upgrade heirloom`. If the reminder or the injection stops after an update, check `/hooks` again.
-
-### Antigravity
-
-Clone the `release` branch and install the plugin from that folder:
-
-```sh
-git clone -b release https://github.com/cheongfish/heirloom ~/tools/heirloom
-agy plugin install ~/tools/heirloom
-```
-
-Update: `git -C ~/tools/heirloom pull` and run `agy plugin install ~/tools/heirloom` again. Do not also bring in a Claude Code install with `agy plugin import claude`: the converted hooks would run next to Heirloom's own.
+Install, update and removal per host: [Install](install.md).
 
 ## Using the skills
 
