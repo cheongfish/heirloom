@@ -28,7 +28,8 @@ Of the dashed lines, phase tests work only when you turn on the [optional featur
 
 ### Handoff
 - When spec-based work is done, the agent hands it off.
-- Work asked for in the chat without a spec is handed off when the user asks. A decision the user made in the conversation can be recorded, quoting the user's message.
+- Work asked for in the chat without a spec is handed off when the user asks.
+    - A decision the user made in the conversation can be recorded, quoting the user's message.
 - Source quotes in its drafts (documents, the user's messages) are checked mechanically.
 ### Approval
 - In the dashboard (`http://127.0.0.1:17380/`) you approve the summary and each decision.
