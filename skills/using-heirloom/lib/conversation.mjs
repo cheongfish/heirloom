@@ -3,16 +3,18 @@
 // them (`ref: "@conversation"`). Only the person's own messages count: the agent's replies and
 // the text the harness adds as the user are left out, so the agent cannot cite itself.
 //
-// prepare runs as a command of the agent and does not know its session. The SessionStart and
-// Stop hooks do: they record each session's transcript per worktree, and prepare takes the
-// session that was active last. When two sessions of the same worktree overlapped recently it
-// cannot tell which one asks, and leaves the conversation out instead of guessing.
+// prepare runs as a command of the agent. When the host names the session's transcript in the
+// agent's environment (Cursor), prepare uses it. Otherwise the SessionStart and Stop hooks
+// record each session's transcript per worktree, and prepare takes the session that was active
+// last. When two sessions of the same worktree overlapped recently it cannot tell which one
+// asks, and leaves the conversation out instead of guessing.
 
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 import { readJson, withLock, writeJsonAtomic } from './fsx.mjs';
 import { repoInfo } from './git.mjs';
+import { transcriptFromEnv } from './hosts/index.mjs';
 import { homePaths } from './paths.mjs';
 import { utterancesInTranscript } from './transcript.mjs';
 
@@ -103,10 +105,14 @@ export async function recordSession({ home, cwd, transcriptPath }) {
 /**
  * The session prepare runs in: the one active last. Null with a reason when no session was
  * recorded, or when another session of the worktree ran at the same time recently.
- * @param {{ home: string, root: string, now?: Date }} options
+ * A transcript the host names in the agent's environment (Cursor) is the session itself and
+ * comes first.
+ * @param {{ home: string, root: string, now?: Date, env?: Record<string, string | undefined> }} options
  * @returns {Promise<{ transcriptPath: string, reason: null } | { transcriptPath: null, reason: 'no_session' | 'ambiguous' }>}
  */
-export async function currentSession({ home, root, now = new Date() }) {
+export async function currentSession({ home, root, now = new Date(), env = process.env }) {
+  const named = transcriptFromEnv(env);
+  if (named) return { transcriptPath: named, reason: null };
   const sessions = await readSessions(home, root);
   if (!sessions.length) return { transcriptPath: null, reason: 'no_session' };
   const latest = sessions.reduce((a, b) => (b.lastAt > a.lastAt ? b : a));

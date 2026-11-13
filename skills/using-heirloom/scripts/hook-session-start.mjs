@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { recordSession } from '../lib/conversation.mjs';
-import { emit, hookHost, logHook, readStdinJson } from '../lib/hook-io.mjs';
+import { emit, hookCwd, hookHost, logHook, readStdinJson } from '../lib/hook-io.mjs';
 import { heirloomHome } from '../lib/paths.mjs';
 import { buildSessionContext } from '../lib/session-context.mjs';
 import { recordSessionHost, sessionHostOf } from '../lib/session-host.mjs';
@@ -17,7 +17,7 @@ const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 const host = hookHost(process.argv[2]);
 const raw = await readStdinJson();
 const input = host.readHookInput(raw);
-const cwd = input.cwd ?? process.cwd();
+const cwd = await hookCwd(input);
 const home = heirloomHome();
 
 /** @type {unknown} */
