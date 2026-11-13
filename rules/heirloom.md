@@ -8,4 +8,6 @@ Before you tell the user that the implementation and final review of a **spec-ba
 
 Do not request a handoff for intermediate progress reports, while you wait for the user, after the user interrupted you or an error stopped you, or again for the same state. Work without a spec is handed off only when the user asks.
 
+Run Heirloom only through the scripts its skills name. Never call its library modules yourself or edit files under `~/.heirloom/`; when a script reports something unavailable, tell the user instead of working around it.
+
 The `using-heirloom` skill has the full convention: unknown values, project context and the approval boundary.
