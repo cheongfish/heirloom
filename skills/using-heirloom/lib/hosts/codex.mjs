@@ -36,3 +36,18 @@ export function transcriptCalls(entry) {
   }
   return [];
 }
+
+/**
+ * A rollout line that records what the person typed: the `UserMessage` item of an
+ * `item_completed` event. The `response_item` user messages are not used: they also carry the
+ * environment context and hook prompts the harness adds as the user (`provenance.type` is
+ * `harness` there); the item event has those as separate item types.
+ * @param {any} entry
+ * @returns {string[]}
+ */
+export function transcriptUtterances(entry) {
+  if (entry?.type !== 'event_msg' || entry.payload?.type !== 'item_completed') return [];
+  const item = entry.payload.item;
+  if (item?.type !== 'UserMessage' || !Array.isArray(item.content)) return [];
+  return item.content.filter((/** @type {any} */ p) => p?.type === 'text' && typeof p.text === 'string' && p.text.trim()).map((/** @type {any} */ p) => p.text);
+}

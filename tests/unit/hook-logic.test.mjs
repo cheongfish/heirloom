@@ -56,6 +56,36 @@ test('stop: changes without a linked spec do not remind', async () => {
   assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: false })).reason, 'no_spec');
 });
 
+test('stop: code changes without a spec get one notice per session that they can be handed off', async () => {
+  const { repo, home } = await workRepo();
+  await repo.write('src/a.mjs', 'export const a = 2;\n');
+  assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: false })).reason, 'no_spec', 'no transcript: the session is unknown');
+
+  const first = await evaluateStop({ cwd: repo.dir, home, stopHookActive: false, transcriptPath: '/t/a.jsonl' });
+  assert.equal(first.reason, 'notice');
+  assert.equal(first.remind, true);
+  assert.match(String(first.message), /prepare-handoff/);
+  assert.match(String(first.message), /--manual/);
+  assert.match(String(first.message), /사용자가 요청할 때만/);
+  assert.match(String(first.message), /이 세션에서 다시 나오지 않는다/);
+
+  await repo.write('src/a.mjs', 'export const a = 3;\n');
+  assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: false, transcriptPath: '/t/a.jsonl' })).reason, 'already_noticed', 'not again after more changes');
+  assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: false, transcriptPath: '/t/b.jsonl' })).reason, 'notice', 'a new session is told');
+  assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: true, transcriptPath: '/t/c.jsonl' })).reason, 'stop_hook_active');
+});
+
+test('stop: no notice once the user handed this state off', async () => {
+  const { repo, home } = await workRepo();
+  await repo.write('src/a.mjs', 'export const a = 2;\n');
+  const info = await repoInfo(repo.dir);
+  const { worktreeId } = await resolveIds(home, info);
+  const taskId = /** @type {string} */ (await taskIdFor(home, { worktreeId, branch: 'feat', specRef: null }));
+  const state = await computeSourceState({ root: repo.dir, mergeBase: repo.git('merge-base', 'origin/main', 'HEAD') });
+  await appendEvent(taskPaths(home, taskId).events, { type: 'prepared', sourceHash: state.hash, attempt: 1 });
+  assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: false, transcriptPath: '/t/a.jsonl' })).reason, 'no_spec');
+});
+
 test('stop: reminds once per source state, again after the state changes', async () => {
   const { repo, home } = await workRepo();
   await repo.write('docs/superpowers/specs/2026-11-12-x.md', 'spec\n');

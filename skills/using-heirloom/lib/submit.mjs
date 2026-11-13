@@ -2,6 +2,7 @@
 
 import { access } from 'node:fs/promises';
 
+import { readConversation } from './conversation.mjs';
 import { openDashboard } from './dashboard-open.mjs';
 import { checkDraft } from './draft-check.mjs';
 import { HeirloomError, classifyError } from './errors.mjs';
@@ -71,7 +72,8 @@ export async function submitDraft({ home, taskId }) {
 
     const { records } = await readRecords(root);
     const repoFiles = (await git(['ls-files', '-co', '--exclude-standard', '-z'], { cwd: root })).split('\0').filter(Boolean);
-    const result = await checkDraft({ root, input, draft, records, repoFiles });
+    const conversation = await readConversation(paths.conversation);
+    const result = await checkDraft({ root, input, draft, records, repoFiles, conversation });
     const ok = result.errors.length === 0;
     await writeJsonAtomic(paths.check, {
       schemaVersion: 1,

@@ -205,7 +205,8 @@ test('stop: a spec already on the target branch counts once the session read it'
   assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: false })).reason, 'no_spec', 'unchanged spec, no transcript');
 
   const other = await transcript([{ name: 'Read', input: { file_path: path.join(repo.dir, 'README.txt') } }]);
-  assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: false, transcriptPath: other })).reason, 'no_spec');
+  // Without a spec this session gets the once-per-session notice that it can hand off.
+  assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: false, transcriptPath: other })).reason, 'notice');
 
   const read = await transcript([{ name: 'Read', input: { file_path: path.join(repo.dir, 'docs/superpowers/specs/units.md') } }]);
   const decision = await evaluateStop({ cwd: repo.dir, home, stopHookActive: false, transcriptPath: read });

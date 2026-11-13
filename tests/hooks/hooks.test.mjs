@@ -262,6 +262,28 @@ test('session-start records the session host for the worktree Heirloom knows (cu
   assert.equal((await index()).host, 'claude-code', 'an unknown host leaves the record as it was');
 });
 
+test('session-start and stop record the session transcript per worktree, for the conversation of a handoff', { skip }, async () => {
+  const upstream = await makeRepo({ 'src/a.mjs': 'export const a = 1;\n' });
+  const repo = await cloneRepo(upstream);
+  repo.git('checkout', '-q', '-b', 'feat');
+  const home = await tempDir('home');
+  const { currentSession } = await import('../../skills/using-heirloom/lib/conversation.mjs');
+  const { repoInfo } = await import('../../skills/using-heirloom/lib/git.mjs');
+  const { root } = await repoInfo(repo.dir);
+
+  runHook('session-start', { input: { cwd: repo.dir, source: 'startup' }, env: { HEIRLOOM_HOME: home } });
+  assert.equal((await currentSession({ home, root })).reason, 'no_session', 'no transcript, nothing recorded');
+  runHook('session-start', { input: { cwd: repo.dir, source: 'startup', transcript_path: '/t/a.jsonl' }, env: { HEIRLOOM_HOME: home } });
+  assert.equal((await currentSession({ home, root })).transcriptPath, '/t/a.jsonl');
+
+  // Codex may start without a transcript path; the Stop hook records it.
+  await repo.write('src/a.mjs', 'export const a = 2;\n');
+  const stop = runHook('stop', { host: 'antigravity', input: { cwd: repo.dir, transcriptPath: '/t/b.jsonl', terminationReason: 'NO_TOOL_CALL', fullyIdle: true }, env: { HEIRLOOM_HOME: home } });
+  assert.equal(stop.status, 0);
+  assert.equal((await currentSession({ home, root })).transcriptPath, '/t/b.jsonl');
+  assert.match(JSON.parse(stop.stdout).reason ?? '', /Heirloom 안내/, 'the notice for work without a spec');
+});
+
 test('HEIRLOOM_HOOK_LOG=1 records each hook input and output in HEIRLOOM_HOME/hook-log.jsonl', { skip }, async () => {
   const upstream = await makeRepo();
   const repo = await cloneRepo(upstream);
