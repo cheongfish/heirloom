@@ -2,16 +2,36 @@
 
 [한국어](README.md)
 
-A plugin for Claude Code, Codex and Antigravity that wraps up work finished with an SDLC tool such as Superpowers. When the agent hands the work off, a human approves the PR summary and the decisions in a local dashboard. The approved records stay in the repository, the PR is opened, and later work picks the decisions up.
+* A plugin that wraps up work finished with an SDLC tool such as Superpowers.
+* When the agent prepares a handoff, a human approves the PR summary and the decisions in a local dashboard.
+* The approved records stay in the repository, the PR is opened, and later work picks the decisions up.
 
 ## What it does
+### Handoff
+- When spec-based work is done, the agent hands it off. Source quotes in its drafts are checked mechanically.
+### Approval
+- In the dashboard (`http://127.0.0.1:17380/`) you approve the summary and each decision. Approvals are signed.
+### Records & PR
+- The agent writes the records to `.heirloom/` and opens the PR (an MR on GitLab) with the approved summary.
+- If the code changes after approval, only the items the change touches come back to you.
+### Carrying context over
+- Later sessions start with the active decisions and rules (axioms).
 
-1. **Handoff.** When spec-based work is done, the agent hands it off. Source quotes in its drafts are checked mechanically.
-2. **Approval.** In the dashboard (`http://127.0.0.1:17380/`) you approve the summary and each decision. Approvals are signed.
-3. **Records and PR.** The agent writes the records to `.heirloom/` and opens the PR (an MR on GitLab) with the approved summary. If the code changes after approval, only the items the change touches come back to you.
-4. **Carry over.** Later sessions start with the active decisions and rules (axioms).
 
 When decisions pile up, the dashboard suggests a **context curation**: cleaning up duplicates and proposing rules worth keeping.
+
+## Optional: tests per phase
+
+In spec-based implementation, tools such as Superpowers run the full test suite after every task, which takes long on a large plan. Turning this option on adds test rules at session start:
+
+- The implementation plan groups its tasks into phases by their nature (same module or contract) and order.
+- Each task runs only its own tests, and the full test suite runs at the end of every phase. It also runs before the final review and the handoff.
+
+Add this to `<repository>/.heirloom/config.json` to turn it on. The default is `off`.
+
+```json
+{ "schemaVersion": 1, "testCadence": { "mode": "phase" } }
+```
 
 ## Install
 
