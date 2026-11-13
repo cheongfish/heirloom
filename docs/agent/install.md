@@ -1,6 +1,6 @@
 # Install
 
-Install from the `release` branch: it holds only the plugin files (host manifests, `hooks/`, `hooks.json`, `rules/`, `skills/`, `examples/`). Ask the user before installing; trust prompts are theirs to answer.
+Install from the `release` branch: it holds only the plugin files (host manifests, `.gitattributes`, `hooks/`, `hooks.json`, `rules/`, `skills/`, `examples/`). Ask the user before installing; trust prompts are theirs to answer.
 
 ## Claude Code
 

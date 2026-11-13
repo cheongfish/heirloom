@@ -2,6 +2,12 @@
 
 이 문서는 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 형식을 따릅니다. 버전은 `main`의 태그와 같습니다.
 
+## [0.3.1] - 2026-11-13
+
+### 수정
+
+- 훅 진입점(`hooks/`의 bash 스크립트와 `run-hook.cmd`)을 `.gitattributes`로 LF에 고정했습니다. Windows에서 `core.autocrlf=true`로 설치본을 clone하면 CRLF 때문에 훅이 `$'\r': command not found`로 조용히 실패할 수 있었습니다. `.gitattributes`는 릴리스 트리에도 들어갑니다.
+
 ## [0.3.0] - 2026-11-13
 
 ### 추가

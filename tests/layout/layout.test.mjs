@@ -82,6 +82,13 @@ test('repository: the Antigravity manifest has only schema fields, and its alway
   assert.ok(core && rule.includes(core), 'the rule repeats the convention sentence word for word');
 });
 
+test('repository: hook entry points keep LF line endings on every checkout (.gitattributes)', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const files = ['hooks/run-hook.cmd', 'hooks/session-start', 'hooks/stop', 'hooks/node-env'];
+  const out = execFileSync('git', ['check-attr', 'eol', '--', ...files], { cwd: ROOT, encoding: 'utf8' });
+  for (const file of files) assert.match(out, new RegExp(`^${file}: eol: lf$`, 'm'), file);
+});
+
 test('repository: the marketplace lists this plugin with the manifest name and version', async () => {
   const manifest = JSON.parse(await readFile(path.join(ROOT, '.claude-plugin', 'plugin.json'), 'utf8'));
   const market = JSON.parse(await readFile(path.join(ROOT, '.claude-plugin', 'marketplace.json'), 'utf8'));
