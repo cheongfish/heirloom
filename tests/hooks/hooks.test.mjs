@@ -210,6 +210,29 @@ test('antigravity without Node: SessionStart injects the notice as a system mess
   assert.deepEqual(JSON.parse(stop.stdout), {});
 });
 
+test('antigravity: when cwd is not the repository (a folder added with --add-dir comes first), the hooks use the workspace that is', { skip }, async () => {
+  const upstream = await makeRepo({ 'README.txt': 'hello\n' });
+  const repo = await cloneRepo(upstream);
+  repo.git('checkout', '-q', '-b', 'feat');
+  await repo.write('docs/superpowers/specs/units.md', '# 단위\n');
+  await repo.write('src/a.mjs', 'export const a = 1;\n');
+  const home = await tempDir('home');
+  const env = { HEIRLOOM_HOME: home };
+  // Seen with agy 1.5.7 and `--add-dir <HEIRLOOM_HOME>`: cwd and the first workspace are the added folder.
+  const common = { conversationId: 'c', workspacePaths: [home, repo.dir], cwd: home, transcriptPath: '/b/c/transcript_full.jsonl', modelName: 'auto' };
+
+  const start = runHook('session-start', { host: 'antigravity', input: { ...common, hookEventName: 'SessionStart' }, env });
+  assert.equal(start.status, 0, start.stderr);
+  assert.match(JSON.parse(start.stdout).injectSteps[0].systemMessage.systemMessage, /<heirloom-project/, 'the project block of the repository');
+
+  const stop = runHook('stop', { host: 'antigravity', input: { ...common, hookEventName: 'Stop', terminationReason: 'NO_TOOL_CALL', fullyIdle: true, continuationActive: false }, env });
+  assert.equal(JSON.parse(stop.stdout).decision, 'continue', 'reminded for the spec in the repository');
+
+  const { currentSession } = await import('../../skills/using-heirloom/lib/conversation.mjs');
+  const { repoInfo } = await import('../../skills/using-heirloom/lib/git.mjs');
+  assert.equal((await currentSession({ home, root: (await repoInfo(repo.dir)).root })).transcriptPath, '/b/c/transcript_full.jsonl');
+});
+
 test('antigravity: hooks.json at the plugin root runs run-hook.cmd from the plugin folder with the host name', { skip }, async () => {
   const config = JSON.parse(await readFile(path.join(ROOT, 'hooks.json'), 'utf8'));
   assert.deepEqual(Object.keys(config), ['heirloom']);

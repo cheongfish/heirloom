@@ -20,12 +20,14 @@ test('readHookInput: cwd, transcript path and the continuation flag; wrong types
     const host = hostAdapter(name);
     assert.deepEqual(host.readHookInput({ cwd: '/w', transcript_path: '/t.jsonl', stop_hook_active: true, hook_event_name: 'Stop' }), {
       cwd: '/w',
+      workspaces: [],
       transcriptPath: '/t.jsonl',
       continuation: true,
       normalStop: true,
     });
     assert.deepEqual(host.readHookInput({ cwd: 3, transcript_path: null, stop_hook_active: 'yes' }), {
       cwd: undefined,
+      workspaces: [],
       transcriptPath: undefined,
       continuation: false,
       normalStop: true,
@@ -38,6 +40,7 @@ test('readHookInput (Antigravity): camelCase fields, the first workspace path wi
   const common = { conversationId: 'c', workspacePaths: ['/w', '/x'], transcriptPath: '/b/transcript.jsonl', modelName: 'auto', hookEventName: 'Stop' };
   assert.deepEqual(host.readHookInput({ ...common, cwd: '/w/sub', continuationActive: true, terminationReason: 'NO_TOOL_CALL', fullyIdle: true }), {
     cwd: '/w/sub',
+    workspaces: ['/w', '/x'],
     transcriptPath: '/b/transcript.jsonl',
     continuation: true,
     normalStop: true,

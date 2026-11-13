@@ -4,7 +4,7 @@
 
 import { recordSession } from '../lib/conversation.mjs';
 import { evaluateStop } from '../lib/reminder.mjs';
-import { emit, hookHost, logHook, readStdinJson } from '../lib/hook-io.mjs';
+import { emit, hookCwd, hookHost, logHook, readStdinJson } from '../lib/hook-io.mjs';
 import { heirloomHome } from '../lib/paths.mjs';
 
 const budgetMs = Number(process.env.HEIRLOOM_HOOK_TIMEOUT_MS) || 2000;
@@ -17,9 +17,10 @@ const home = heirloomHome();
 /** @type {unknown} */
 let output = host.emptyOutput;
 try {
-  await recordSession({ home, cwd: input.cwd ?? process.cwd(), transcriptPath: input.transcriptPath });
+  const cwd = await hookCwd(input);
+  await recordSession({ home, cwd, transcriptPath: input.transcriptPath });
   const decision = !input.normalStop ? null : await evaluateStop({
-    cwd: input.cwd ?? process.cwd(),
+    cwd,
     home,
     stopHookActive: input.continuation,
     transcriptPath: input.transcriptPath,

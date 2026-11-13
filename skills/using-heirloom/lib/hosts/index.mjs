@@ -15,6 +15,9 @@ import * as codex from './codex.mjs';
 /**
  * @typedef {object} HookInput
  * @property {string | undefined} cwd
+ * @property {string[]} workspaces the other folders of the session, in the host's order. A host
+ *   may report a folder that is not the repository as cwd (Antigravity puts a folder added with
+ *   `--add-dir` first); the hooks then use the first of these that is a git repository.
  * @property {string | undefined} transcriptPath the host's session transcript, when it gives one
  * @property {boolean} continuation true while the agent is already continuing because a Stop hook asked
  * @property {boolean} normalStop false when the host says the turn ended by an interrupt, an error,
