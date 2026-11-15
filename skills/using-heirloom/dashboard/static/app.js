@@ -31,6 +31,8 @@ const BUTTON = {
     'seed-action-button seed-action-button--variant_neutralOutline seed-action-button--size_medium seed-action-button--layout_withText seed-action-button--size_medium-layout_withText',
   smallWeak:
     'seed-action-button seed-action-button--variant_neutralWeak seed-action-button--size_small seed-action-button--layout_withText seed-action-button--size_small-layout_withText',
+  smallOutline:
+    'seed-action-button seed-action-button--variant_neutralOutline seed-action-button--size_small seed-action-button--layout_withText seed-action-button--size_small-layout_withText',
   smallGhost:
     'seed-action-button seed-action-button--variant_ghost seed-action-button--size_small seed-action-button--layout_withText seed-action-button--size_small-layout_withText',
 };
@@ -594,7 +596,13 @@ function titleBlock(task) {
     'section',
     { class: 'hl-stack-tight' },
     h('div', { class: 'hl-spread' }, h('h1', { class: 'hl-title' }, task.curation ? '맥락 정리 검토' : '인계 검토'), h('div', { class: 'hl-row' }, stateBadge(task.state), h('code', { class: 'hl-muted' }, task.taskId))),
-    input ? h('p', {}, h('code', {}, input.branch ?? '(분리된 HEAD)'), ' → ', h('code', {}, input.base.ref)) : null,
+    h(
+      'div',
+      { class: 'hl-spread' },
+      input ? h('p', {}, h('code', {}, input.branch ?? '(분리된 HEAD)'), ' → ', h('code', {}, input.base.ref)) : h('span'),
+      // Discard is rare and cannot be undone: it sits by the title, not in the sticky approval bar.
+      form?.task.taskId === task.taskId ? discardButton : null,
+    ),
   );
 }
 
@@ -1347,7 +1355,7 @@ const actionsStatus = h('div', { class: 'hl-stack' });
 const progress = h('span', { class: 'hl-muted' });
 const approveButton = h('button', { type: 'button', class: BUTTON.primary }, '승인 저장');
 approveButton.addEventListener('click', () => void submitApproval());
-const discardButton = button(BUTTON.outline, '작업 폐기', () => void discardTask());
+const discardButton = button(BUTTON.smallOutline, '작업 폐기', () => void discardTask());
 /** Why the approval cannot be saved yet, next to the disabled button. */
 const blocked = h('span', { class: 'hl-small hl-blocked', id: 'approve-blocked', 'aria-live': 'polite' });
 approveButton.setAttribute('aria-describedby', 'approve-blocked');
@@ -1365,7 +1373,7 @@ const jumpButton = button(BUTTON.smallWeak, '다음 미처리 항목으로', () 
 });
 append(actionsBar, [
   actionsStatus,
-  h('div', { class: 'hl-spread' }, h('div', { class: 'hl-stack-tight' }, progress, blocked), h('div', { class: 'hl-row' }, jumpButton, discardButton, approveButton)),
+  h('div', { class: 'hl-spread' }, h('div', { class: 'hl-stack-tight' }, progress, blocked), h('div', { class: 'hl-row hl-actions-buttons' }, jumpButton, approveButton)),
 ]);
 
 function refreshActions() {
@@ -1697,7 +1705,7 @@ function drawForm(task) {
 async function loadTask(taskId, { force = false } = {}) {
   const task = await api(`/api/tasks/${encodeURIComponent(taskId)}`);
   latest = task;
-  if (!main.contains(tabsRoot)) replace(main, h('p', {}, h('a', { href: '/' }, '← 전체 목록')), titleSlot, tabsRoot);
+  if (!main.contains(tabsRoot)) replace(main, h('p', {}, h('a', { href: '/', class: 'hl-back' }, '← 전체 목록')), titleSlot, tabsRoot);
   const shown = form?.task;
   const changed = !shown || shown.draftSha256 !== task.draftSha256 || shown.state !== task.state;
   if (force || !form || !form.dirty) {
@@ -1721,7 +1729,7 @@ async function loadTask(taskId, { force = false } = {}) {
 
 /** @param {unknown} err */
 function showError(err) {
-  replace(main, h('p', {}, h('a', { href: '/' }, '← 전체 목록')), callout('critical', '불러오지 못함', /** @type {Error} */ (err).message));
+  replace(main, h('p', {}, h('a', { href: '/', class: 'hl-back' }, '← 전체 목록')), callout('critical', '불러오지 못함', /** @type {Error} */ (err).message));
 }
 
 const route = /^\/r\/[^/]+\/w\/[^/]+\/t\/([^/]+)$/.exec(window.location.pathname);
