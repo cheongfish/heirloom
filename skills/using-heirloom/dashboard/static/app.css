@@ -23,7 +23,7 @@ h1, h2, h3, p { margin: 0; }
   background: var(--seed-color-bg-layer-default);
   border-bottom: 1px solid var(--seed-color-stroke-neutral-muted);
 }
-.hl-home { font-weight: var(--seed-font-weight-bold); font-size: var(--seed-font-size-t6); text-decoration: none; }
+.hl-home { padding-block: var(--seed-dimension-x0_5); font-weight: var(--seed-font-weight-bold); font-size: var(--seed-font-size-t6); text-decoration: none; }
 .hl-banner-slot:empty { display: none; }
 .hl-banner-slot { position: sticky; top: var(--hl-topbar-h, 48px); z-index: 1; }
 
@@ -123,8 +123,18 @@ textarea.seed-text-input__value.hl-one-line { min-height: 0; resize: none; }
   margin: 0 calc(-1 * var(--seed-dimension-x4));
   padding: var(--seed-dimension-x3) var(--seed-dimension-x4);
 }
+.hl-actions-buttons { margin-left: auto; }
+/* Narrow windows: keep the bar short. Status text is small, the two buttons share one row. */
+@media (max-width: 560px) {
+  .hl-actions { gap: var(--seed-dimension-x2); padding-block: var(--seed-dimension-x2_5); }
+  .hl-actions .hl-stack-tight { font-size: var(--seed-font-size-t3); line-height: var(--seed-line-height-t3); }
+  .hl-actions-buttons { width: 100%; flex-wrap: nowrap; }
+  .hl-actions-buttons > button:last-child { flex: 1; }
+}
 
-details > summary { cursor: pointer; color: var(--seed-color-fg-neutral-subtle); }
+/* Small text links and fold rows still get a 24px target. */
+.hl-back { display: inline-block; padding-block: var(--seed-dimension-x0_5); }
+details > summary { padding-block: var(--seed-dimension-x0_5); cursor: pointer; color: var(--seed-color-fg-neutral-subtle); }
 details[open] > summary { margin-bottom: var(--seed-dimension-x2); }
 .hl-files { margin: 0; padding-left: var(--seed-dimension-x5); }
 
