@@ -1,19 +1,13 @@
 ---
 name: prepare-handoff
-description: "Use before reporting that spec-based implementation and final review are finished, or when the user asks to hand off the current work. Freezes the work scope, drafts the PR summary and decisions, and registers them for human approval."
+description: "Use before reporting spec-based implementation and final review complete, or when the user requests a handoff."
 ---
 
 # Prepare Handoff
 
-Hand off finished work for human approval. The flow has three steps:
+Freeze finished work, draft from frozen inputs, and submit for human dashboard approval. Mechanical checks establish neither approval nor correctness.
 
-1. Heirloom freezes the inputs.
-2. You write a draft from those frozen inputs.
-3. Heirloom checks the draft mechanically.
-
-A human then approves it in the dashboard. A handoff is not an approval, and it is not proof that the work is correct.
-
-The scripts are in this skill's `scripts/` directory. Run them from inside the repository. Each prints exactly one JSON object (see the `using-heirloom` convention).
+Run scripts from inside the repository; output follows the `using-heirloom` JSON convention.
 
 ## 1. Freeze the inputs
 
@@ -22,28 +16,18 @@ node <this skill>/scripts/prepare.mjs --spec <spec path> [--review <review path>
   [--material design:<path>] [--material plan:<path>] [--sdlc-ref <id>] [--base <branch>]
 ```
 
-- Pass the spec you worked from. If the final review is a file, pass it as `--review`. Pass the commit the final review covered as `--reviewed-commit`.
-- Only pass values you know. Never guess the target branch, the task identifier or the review commit. Unknown values are recorded as unknown.
-- For a handoff the user asked for on work without a spec, use `--manual` instead of `--spec`.
+Pass the actual spec, final review file (`--review`) if available, and reviewed commit. Never guess the branch, task id or review commit; unknowns stay unknown. For user-requested work without a spec, replace `--spec` with `--manual`.
 
 Read the result:
 
-- `alreadyPrepared: true` with `state` `awaiting_approval` or later: this state was already handed off. Tell the user and stop. Do not write a new draft.
-- `ok: false`: report `error.message` and `error.hint` to the user and stop.
-  - `E_INPUT` (exit 2): for example, the target branch is unclear. Ask the user. Do not pick a branch yourself.
-  - `E_CONFLICT` (exit 3): the same work is being processed.
-  - `E_TRANSIENT` (exit 75): the script already retried. Do not run it again.
-- Otherwise continue with `taskId`, `draftPath`, `source.files`, `materials`, `unknowns`, `relatedRecords` and `reviewMatchesSource`.
-- `recheck` is not null: this task was approved before and the code or materials changed since. Write an incremental draft (section 2.1) instead of a new one.
-- `specCoverage` is not null: the project's spec location patterns (`specGlobs`) do not match `specCoverage.uncovered`. The handoff itself is not affected; continue. After the report (step 5), ask the user whether to add the pattern (section 6).
-- `conversation`: the messages the user typed in this session, frozen at `conversation.path` for quoting (section 2, "Conversation sources"). `available: false` means there is nothing to quote, and `reason` says why:
-  - `no_session`: no session of this worktree was recorded (the host gave no transcript).
-  - `ambiguous`: another session of this worktree ran at the same time, so Heirloom did not guess which one is yours.
-  - `unreadable` or `empty`: the transcript could not be read, or has no typed messages.
+- `alreadyPrepared: true`, `state` `awaiting_approval` or later: report the existing handoff and stop without drafting.
+- `ok: false`: report `error.message` and `error.hint`; stop. `E_INPUT` (exit 2) requires clarification, not guessing; `E_CONFLICT` (3) means concurrent processing; `E_TRANSIENT` (75) already retried, so do not rerun.
+- Otherwise use `taskId`, `draftPath`, `source.files`, `materials`, `unknowns`, `relatedRecords`, and `reviewMatchesSource`.
+- Non-null `recheck`: use section 2.1 for previously approved work changed since approval.
+- Non-null `specCoverage`: continue the handoff; after reporting, handle the unmatched spec in section 6.
+- `conversation.path` freezes the user's typed messages. If `available: false`, continue with document sources and report `reason`: `no_session` (no recorded session), `ambiguous` (concurrent sessions), `unreadable`, or `empty`.
 
-  The handoff still goes ahead. Decisions then need a document source. Mention the reason in the report.
-
-  Never try to make the conversation available yourself: do not record a session, do not write files under `~/.heirloom/`, and do not call Heirloom's library modules (for example `node -e` importing `lib/`). Only the hooks record sessions. If the user wants the conversation as a source, they start a new session or end the other one, and you run `prepare` again.
+Only hooks record sessions. Never manufacture conversation input, write `~/.heirloom/` files or call library modules directly. If conversation evidence is needed, the user starts a new session or ends the competing one; then rerun `prepare`.
 
 ## 2. Write the draft
 
@@ -54,70 +38,52 @@ Write JSON to `draftPath`:
   "schemaVersion": 1,
   "taskId": "<taskId>",
   "inputSourceHash": "<source.hash>",
-  "summary": [{ "text": "<one change, in the project's language>", "codePaths": ["src/changed-file.mjs"] }],
+  "summary": [{ "text": "<change in the project's language>", "codePaths": ["src/changed-file.mjs"] }],
   "records": [
     {
       "op": "add",
       "kind": "decision",
-      "title": "<the choice, as a sentence>",
+      "title": "<choice as a sentence>",
       "body": { "problem": "...", "choice": "<choice and reason>", "alternatives": "<rejected options>", "scope": "..." },
       "codePaths": ["src/**/*.mjs"],
       "topics": ["..."],
       "sources": [{ "ref": "docs/specs/x.md", "lines": [12, 14], "quote": "<exact text from those lines>" }]
     }
   ],
-  "missing": ["<material that should exist but does not>"],
-  "conflicts": [{ "refs": ["a.md", "b.md"], "note": "<what disagrees>" }],
+  "missing": ["<expected missing material>"],
+  "conflicts": [{ "refs": ["a.md", "b.md"], "note": "<disagreement>" }],
   "notes": ""
 }
 ```
 
-### Summary
+### Summary and records
 
-- Write about three bullets, each describing a real change in this work.
-- `codePaths` lists the changed **code** files that each bullet is based on, taken from `source.files`.
-
-### Records
-
-- Add a decision only when a source document, or a message the user typed, explicitly states both the choice and its reason.
-  - Quote that text exactly in `quote`, and give the line range it appears in.
-  - Do not infer reasons. Do not record agreements that are not written down or typed by the user.
-  - Do not turn formatting rules, your own preferences or improvement ideas into decisions.
-- A draft with no records is normal. It gets a one-step quick approval.
-- `codePaths` on a record are the code paths the decision applies to.
-  - Never put Markdown documents (`.md`, `.mdx`, `.markdown`) in any `codePaths`.
-  - Documents belong in `sources` only.
-- **Conversation sources.** To quote the user's message, use `{"ref": "@conversation", "quote": "<exact text from one message>"}` with no `lines`.
-  - Read the messages in `conversation.path`. Quote only text from them: it holds what the user typed, not your replies or tool output.
-  - A quote must come from one message. Quote the sentence that states the choice and its reason, not a short "yes" to your proposal. If the user only agreed to your proposal, there is no source; leave the decision out and mention it in `notes`.
-  - When a document also states the decision, cite the document as well.
-- To replace an existing record from `relatedRecords`, use `{"op": "supersede", "target": "<old id>", "reason": "...", "with": <index of the add>}`.
-- To retire a record without a replacement, use `{"op": "deprecate", "target": "<id>", "reason": "...", "sources": [...]}`.
-- Never deactivate an axiom as a side effect of a decision. Propose axiom changes as their own records.
-
-### Gaps and conflicts
-
-- When sources disagree, record the disagreement in `conflicts`. Do not pick a winner.
-- When expected material is missing, list it in `missing`. The handoff still goes ahead.
-- When `reviewMatchesSource` is false, the code changed after the final review. State that as a fact. Do not judge it as an error.
+- Write about three summary bullets describing actual changes; link each to changed code files in `source.files`.
+- Add decisions only when a document or typed user message explicitly states both choice and reason. Quote exactly, with line ranges for documents. Do not infer reasons or record unwritten agreements, formatting rules, agent preferences or improvement ideas.
+- Empty `records` is normal and gets quick approval.
+- Record `codePaths` describe applicable code; no `.md`, `.mdx` or `.markdown` in any `codePaths`. Documents belong in `sources`.
+- Conversation citations use `{"ref": "@conversation", "quote": "<exact text from one message>"}`, without `lines`. Read `conversation.path`; cite only user text, never agent/tool output. A bare agreement to your proposal is insufficient: omit the decision and explain in `notes`. Cite documents too when they state the same decision.
+- Replace a `relatedRecords` entry with `{"op": "supersede", "target": "<old id>", "reason": "...", "with": <index of the add>}`.
+- Retire without replacement with `{"op": "deprecate", "target": "<id>", "reason": "...", "sources": [...]}`.
+- Propose axiom changes separately; never deactivate one as a decision's side effect.
+- List disagreements in `conflicts` without choosing a winner, and expected missing material in `missing`; continue the handoff.
+- If `reviewMatchesSource` is false, report that code changed after review without judging it an error.
 
 ### 2.1 Incremental recheck draft
 
-When `recheck` is not null, the human already approved this task once. Only the approved items that the change touches go back to the human. Read `recheck` in the output and `recheck.baseline` in `inputPath` (the approved summary and records, with the human's edits).
+Read output `recheck` and `inputPath`'s `recheck.baseline` (approved items including human edits).
 
-- `recheck.changes` lists the files changed since the approval. `base_updated` means the target branch was rebased or merged in and also changed that file, so the task file's content differs from the approved one partly because of the target branch. `edited` is a change made in this branch.
-- `recheck.affected.summary` and `recheck.affected.records` are the baseline items up for recheck, with reasons. `unlinked` lists changed files linked to no item; then the whole summary is up for recheck.
-- Start from the baseline. Copy every baseline bullet and record into the draft and give each one `"baseIndex": <its position in the baseline>`.
-- **Copy items that are not up for recheck exactly as they are.** The check refuses a draft that changes or drops them. They keep their approval.
-- Rewrite, keep, or remove the items that are up for recheck, so that they describe the current code. New bullets and new records have no `baseIndex`.
-- Read the surrounding code and the related records, not only the changed lines. If you think a change touches an item that is not listed, add it with a reason. You can add items but not remove listed ones:
+- `recheck.changes`: `edited` means branch edits; `base_updated` means a target-branch rebase/merge also changed the file.
+- `recheck.affected.summary` / `.records` list items for recheck with reasons. `unlinked` changes make the whole summary subject to recheck.
+- Start with every baseline item, each tagged `"baseIndex": <baseline position>`. Preserve unaffected items exactly; they retain approval and cannot be changed or dropped.
+- Rewrite, keep or remove affected items to fit current code. New items have no `baseIndex`.
+- Read surrounding code and related records. Add overlooked items to the affected set with reasons (including uncertainty); never remove items from that set:
 
 ```json
-"recheck": { "extra": [{ "kind": "record", "baseIndex": 2, "reason": "<why the change may touch it; say if you are unsure>" }] }
+"recheck": { "extra": [{ "kind": "record", "baseIndex": 2, "reason": "<why this change may affect it>" }] }
 ```
 
-- A supersede's `with` is the index in the new draft. Keep it pointing at the same replacement.
-- This is not a second review of the implementation. Check only whether the approved description and decisions still fit the code.
+Keep supersede `with` indexes pointing to the same replacement in the new draft. Check whether approved descriptions/decisions still fit; do not re-review implementation.
 
 ## 3. Submit
 
@@ -125,57 +91,53 @@ When `recheck` is not null, the human already approved this task once. Only the 
 node <this skill>/scripts/submit-draft.mjs --task <taskId>
 ```
 
-- `E_VERIFY` (exit 4): the message lists each error with its JSON path. Fix them in `draftPath` and submit again. Stop after two rounds of fixes, and report the remaining errors to the user.
-- `E_CONFLICT` "소스가 바뀜": the code changed after step 1. Run step 1 again and rewrite the draft from the new result.
-- On success the state is `awaiting_approval`. The script also starts the dashboard and opens the browser the first time for this task.
-  - `dashboardUrl`: the task screen. `browserOpened` is false when the browser was already opened for this task, automatic opening is turned off, or no browser command worked (`browserNote` says which).
-  - `dashboardError` is set when the dashboard could not start, for example because another program uses its port. The handoff is still saved and waiting. Pass the message and the hint to the user.
+- `E_VERIFY` (exit 4): fix errors at the reported JSON paths and resubmit; stop after two fix rounds and report remaining errors.
+- `E_CONFLICT` "소스가 바뀜": repeat step 1 and rewrite from the new inputs.
+- Success: `awaiting_approval`; starts the dashboard and attempts browser opening once per task. Use `dashboardUrl`; `browserOpened: false` and `browserNote` explain skipped/failed opening.
+- `dashboardError`: handoff is saved and awaiting approval despite startup failure. Report its message and hint.
 
 ## 4. Wait for the approval in the background
 
-If your host can run a command in the background and wake you when it ends (in Claude Code: the Bash tool with `run_in_background`), start this right after a successful submit, once per handoff:
+If the host supports background commands that wake you on completion (Claude Code: Bash `run_in_background`), start once per handoff immediately after submit:
 
 ```sh
 node <this skill>/scripts/wait-approval.mjs --task <taskId>
 ```
 
-Do not wait in the foreground. If your host has no background commands, skip this step. The next session start lists the approval instead.
+Never wait in the foreground. Without this host capability, skip; the next session start lists approvals. Default timeout is 60 minutes (`--timeout-minutes` overrides).
 
-It ends when the human answers or after 60 minutes (`--timeout-minutes` changes this). When it ends, read `data.state`:
+On completion, handle `data.state`:
 
-- `approved`: the human's approval is the request to apply it. Run the `apply-approval` skill now. Do not ask first.
-- `applied` or `pr_created`: it was already applied elsewhere. Tell the user.
-- `discarded` or `expired`: tell the user. Do not apply.
-- `stale`: the code changed while the human was reviewing. Tell the user. When the change is finished, run this skill again: it starts an incremental recheck.
-- `timedOut: true` (still `awaiting_approval`): tell the user that no approval came yet. It can be applied later, because the next session start lists it.
+| Result | Action |
+| --- | --- |
+| `approved` | Run `apply-approval` immediately; approval authorizes it, so do not ask again. |
+| `applied`, `pr_created` | Report already applied elsewhere. |
+| `discarded`, `expired` | Report; do not apply. |
+| `stale` | Report code changed during review. After changes finish, rerun this skill for incremental recheck. |
+| `timedOut: true`, still `awaiting_approval` | Report no approval yet; it remains applicable later. |
 
 ## 5. Report
 
-Report right after step 4 starts the wait. Do not wait for it to end first.
+Report immediately after starting the wait (or skipping it):
 
-Tell the user three things:
+- Ready, awaiting approval; never claim approved.
+- Approval location: `dashboardUrl` or `dashboardError` hint; readable copy: `handoffPath`.
+- Warnings, unknowns, and `conversation.reason` if unavailable conversation excluded a decision.
 
-- The handoff is ready and waiting for their approval.
-- Where to approve it: `dashboardUrl`, or the `dashboardError` hint when the dashboard did not start. Mention `handoffPath` as the readable copy.
-- Any warnings and unknown values, and why the conversation was not available (`conversation.reason`) when that kept a decision out.
-
-Do not say the work is approved. The approval may come hours later. You can end the session, because `apply-approval` continues from the saved approval. If you started the wait, say that you will apply the approval when it comes.
+You may end the session; saved approval can be applied later. If a wait was started, say you will apply approval when it arrives.
 
 ## 6. Add a spec location (ask first, then add)
 
-Heirloom recognizes spec-based work at session end by the project's spec location patterns. When `specCoverage` is set, the spec of this handoff is outside them.
+Non-null `specCoverage` means the spec is outside project `specGlobs` used for session-end detection.
 
-1. **Ask.** After the report, ask the user one question and wait for the answer. Say which spec is outside the patterns (`specCoverage.uncovered`), which pattern you would add (`specCoverage.suggested`), and that the setting goes into `.heirloom/config.json` in the repository. For example: "`design/rfc/units.md`는 Heirloom의 spec 위치 설정 밖에 있습니다. `.heirloom/config.json`에 `design/rfc/**/*.md`를 추가할까요?"
-2. **Add only on a yes.** If the user agrees, run:
+After reporting, ask once whether to add `specCoverage.suggested` for `specCoverage.uncovered` to repository `.heirloom/config.json`. Wait for explicit agreement; use the suggested or user-provided repository-relative patterns:
 
-   ```sh
-   node <this skill>/scripts/add-spec-globs.mjs --glob <pattern> [--glob <pattern> ...]
-   ```
+```sh
+node <this skill>/scripts/add-spec-globs.mjs --glob <pattern> [--glob <pattern> ...]
+```
 
-   Use `specCoverage.suggested`, or the pattern the user gives instead. Patterns are relative to the repository root.
-3. **Report.** Tell the user whether the file was created (`data.created`) and which patterns were added (`data.added`). The file is a project file: they commit it. It is not part of the handoff state, so no new handoff or approval is needed.
+Report `data.created` and `data.added`. The user commits this project setting; it is outside handoff state and needs no new handoff/approval.
 
-- If the user declines or does not answer, do nothing and do not ask again in this session.
-- When nobody can answer (a non-interactive run), do not ask and do not add: mention it in the report instead.
-- Never run the script without the user's yes, and never edit `.heirloom/config.json` yourself.
-- The approval wait (step 4) keeps running while you ask. If the approval arrives first, apply it as step 4 says, then ask.
+If declined or unanswered, do nothing and do not ask again this session. In non-interactive runs, report instead of asking or adding. Never hand-edit config or run the script without agreement.
+
+The approval wait continues. If approval arrives first, apply as step 4 requires, then ask.
