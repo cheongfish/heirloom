@@ -14,7 +14,7 @@ cp <plugin folder>/examples/user-config.example.json ~/.heirloom/config.json
 cp <plugin folder>/examples/project-config.example.json <repository>/.heirloom/config.json
 ```
 
-The files are JSON, so they cannot hold comments. Unknown keys and out-of-range values are reported as errors. Both files need `"schemaVersion": 1`.
+The files are JSON, so they cannot hold comments. Unknown keys and out-of-range values are reported as errors. Both files need `"schemaVersion": 1`. Keys from before 0.4 (`sessionIndex`, `curation`) are accepted and ignored.
 
 ## User settings
 
@@ -24,24 +24,21 @@ The files are JSON, so they cannot hold comments. Unknown keys and out-of-range 
 | `dashboard.idleMinutes` | `30` | Minutes without an open screen or a request before the server stops |
 | `dashboard.openBrowser` | `true` | Whether to open the browser automatically after a handoff. Explicit requests to open the dashboard are not affected. |
 | `dashboard.staleDays` | `7` | Days after which an unfinished task is listed as stale in the overview |
-| `curation.agent.host` | `"claude-code"` | Headless agent profile used by [context curation](curation.md) when no session of the repository has been recorded: `claude-code`, `codex` or `antigravity`. A curation normally runs with the host of the repository's last session. |
-| `curation.agent.command` | by profile: `"claude"`, `"codex"`, `"agy"` | Command the dashboard runs for a curation. A name on `PATH` or an absolute path. Requests to the dashboard can never change it. |
-| `curation.agent.model` | `null` | Model passed to the headless agent (`--model`, or `-m` for Codex). `null` uses the command's default. |
 
 ## Project settings
 
 | Key | Default | Description |
 | --- | --- | --- |
 | `baseBranch` | none | Target branch of the PR. Without it, `origin/HEAD` is used. If neither exists, or several remotes make it unclear, Heirloom reports an error instead of guessing. |
-| `specGlobs` | `["docs/superpowers/specs/**", "**/specs/**/*.md"]` | Paths that count as spec documents. Used by the stop hook's handoff reminder. When a handed-off spec does not match, the agent offers to add a pattern and, if you agree, creates this file or adds to it. |
-| `recall.maxRecords` | `8` | Maximum number of records returned by context recall |
+| `specGlobs` | `["docs/superpowers/specs/**", "**/specs/**/*.md"]` | Paths that count as spec documents. Used by the stop hook's handoff reminder. If your specs live elsewhere, add a pattern here yourself. |
+| `recall.maxRecords` | `8` | Maximum number of decision records returned by context recall |
 | `recall.maxTokens` | `6000` | Token budget for context recall, estimated as UTF-8 bytes ÷ 3 (about one token per Hangul syllable) |
-| `sessionIndex.maxDecisions` | `30` | Number of decisions listed in the session-start index |
-| `curation.minUnreviewed` | `10` | Suggest a [context curation](curation.md) when this many decisions are unreviewed |
-| `curation.maxAgeDays` | `30` | … or when this many days passed since the last curation |
-| `curation.minForAge` | `3` | … and at least this many decisions are unreviewed |
-| `curation.batchSize` | `20` | Maximum number of unreviewed decisions one curation reviews |
 | `testCadence.mode` | `"off"` | How often the development workflow (Superpowers and the like) runs tests. `"phase"` adds rules at session start: the plan groups its tasks into phases, each task runs only its own tests, task reviews rely on the implementer's reported runs (a focused test only for a specific doubt), and the full test suite runs only at the end of each phase and at the end (before the final review and the handoff). The test commands are the ones the plan states. |
+| `probe.setup` | `[]` | Commands (argument lists, no shell) run once in each temporary probe worktree before the probes, for example `[["npm", "ci"]]`. The worktrees have no ignored files such as `node_modules`. A probes file with its own `setup` replaces this. |
+| `probe.maxProbes` | `10` | Maximum number of probes in one probe run |
+| `probe.setupTimeoutSeconds` | `600` | Time limit of each setup command |
+| `probe.testTimeoutSeconds` | `600` | Time limit of the test command when the probes file gives none |
+| `spec.afterMerge` | `"delete"` | The spec lifetime the judgment screen offers first when everything is accepted: `"delete"` (removed in the PR; kept in git history), `"archive"` (moved to `docs/specs/archive/`) or `"keep"` (stays; the person names an owner). The person can choose another one each time. |
 
 ## Environment variables
 

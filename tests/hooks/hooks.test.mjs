@@ -80,7 +80,7 @@ test('session-start with Node injects the convention and project index', { skip 
   assert.equal(r.status, 0, r.stderr);
   const context = JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
   assert.match(context, /<heirloom-convention>[\s\S]*prepare-handoff[\s\S]*<\/heirloom-convention>/);
-  assert.match(context, /<heirloom-project>[\s\S]*활성 axiom/);
+  assert.match(context, /<heirloom-project>[\s\S]*## 규칙/);
 });
 
 test('session-start tolerates invalid stdin', { skip }, async () => {
@@ -266,7 +266,7 @@ test('HEIRLOOM_DISABLE_CONVENTION=1 (evaluation only) injects nothing at session
   assert.equal(JSON.parse(stop.stdout).decision, 'block');
 });
 
-test('session-start records the session host for the worktree Heirloom knows (curation follows it)', { skip }, async () => {
+test('session-start records the session host for the worktree Heirloom knows', { skip }, async () => {
   const upstream = await makeRepo();
   const repo = await cloneRepo(upstream);
   const home = await tempDir('home');

@@ -1,32 +1,34 @@
-// Apply a signed approval: verify it, check the current state, write the approved records
-// into the consumer repository and gather what the agent needs to open the PR.
+// Apply a signed judgment: verify it, check the current state, write the decision records the
+// person kept into the consumer repository, carry out the spec lifetime and gather what the
+// agent needs to open the PR.
 //
 // The approval record is the source of truth; events only tell what was already done, so
 // running apply again never writes twice and never needs a second approval.
 
-import { access, rm, writeFile } from 'node:fs/promises';
+import { access } from 'node:fs/promises';
 import path from 'node:path';
 
 import { draftDigest } from './canonical.mjs';
 import { HeirloomError, classifyError } from './errors.mjs';
 import { appendEvent, deriveState, readEvents } from './events.mjs';
-import { readJson, writeFileAtomic } from './fsx.mjs';
-import { buildCurationReview, curationReviewPath } from './curation.mjs';
+import { readJson } from './fsx.mjs';
 import { verifiedApprovalRecord } from './baseline.mjs';
-import { git, readTreeTexts, repoInfo } from './git.mjs';
+import { git, repoInfo } from './git.mjs';
 import { findOpenPr, ghReady } from './github.mjs';
 import { findOpenMr, glabReady, parseMrUrl } from './gitlab.mjs';
 import { readIds } from './ids.mjs';
-import { taskPaths } from './paths.mjs';
+import { approvalFiles, taskPaths } from './paths.mjs';
 import { checkPrExpiry } from './pr-expiry.mjs';
 import { findMrTemplates, findProjectRules } from './project-rules.mjs';
-import { planRecordChanges } from './record-changes.mjs';
 import { remoteProvider, taskRemote } from './remote.mjs';
 import { appliedTaskMerged } from './record-status.mjs';
-import { parseRecord, readRecords, recordPath, writeRecord } from './records.mjs';
-import { currentSourceState, hashMaterial } from './state.mjs';
 import { readIndex, tasksForWorktree } from './store.mjs';
 import { withTaskLock } from './task-lock.mjs';
+import { STATUS_CONTEXT, codeMatches, statusCommit } from './judgment-pr.mjs';
+import { applySpecLifecycle } from './spec-handling.mjs';
+import { writeDecisions } from './decisions.mjs';
+import { postCommitStatus as postGithubStatus } from './github.mjs';
+import { postCommitStatus as postGitlabStatus } from './gitlab.mjs';
 
 /** @typedef {import('./events.mjs').TaskEvent} TaskEvent */
 
@@ -81,8 +83,9 @@ export async function prTemplateChoice(root, provider = 'github') {
 }
 
 /**
- * Load the latest approval of a task and check it end to end. Throws E_VERIFY when the
- * approval is unsigned, forged, or does not match the current draft.
+ * Load the latest judgment of a task and check it end to end. Throws E_VERIFY when the
+ * judgment is unsigned, forged, an item approval from before 0.4, or does not match the
+ * current draft.
  * @param {string} home
  * @param {string} taskId
  * @param {TaskEvent[]} events
@@ -96,27 +99,6 @@ async function verifiedApproval(home, taskId, events) {
     });
   }
   return { approval: record, draft };
-}
-
-/**
- * Whether the worktree is still in the state the human approved (sources and materials).
- * @param {any} input
- * @param {any} approval
- */
-async function stateMatches(input, approval) {
-  const current = await currentSourceState({ root: input.repo.root, base: input.base });
-  if (current.hash !== approval.target.sourceHash) return { ok: false, why: '승인 이후 소스가 바뀜' };
-  for (const [ref, sha] of Object.entries(approval.target.materials)) {
-    if (!sha) continue;
-    let now = null;
-    try {
-      now = await hashMaterial(input.repo.root, ref);
-    } catch {
-      // deleted
-    }
-    if (now !== sha) return { ok: false, why: `승인 이후 자료가 바뀜: ${ref}` };
-  }
-  return { ok: true, why: null };
 }
 
 /**
@@ -213,11 +195,11 @@ export async function applyApproval({ home, taskId }) {
       });
     }
     if (info.branch === input.branch) {
-      const match = await stateMatches(input, approval);
+      const match = await judgedCodeMatches(input);
       if (!match.ok) {
         await appendEvent(paths.events, { type: 'stale', approvalId: approval.id, reason: match.why });
         throw new HeirloomError('E_CONFLICT', `${match.why}. 승인은 보존되고, 바뀐 부분만 다시 확인받으면 된다`, {
-          hint: '사용자에게 알리고 prepare-handoff를 다시 실행해 증분 재확인을 시작한다. 지금 상태로는 기록 파일과 PR을 만들거나 고치지 않는다.',
+          hint: '사용자에게 알리고 prepare-handoff를 다시 실행해 재확인을 시작한다. 지금 상태로는 기록 파일과 PR을 만들거나 고치지 않는다.',
         });
       }
     }
@@ -227,30 +209,40 @@ export async function applyApproval({ home, taskId }) {
     if (already) {
       files = /** @type {string[]} */ (lastOf(events, 'records_written')?.files ?? []);
     } else {
-      const { written, removed } = await writeApprovedRecords({ root, input, draft, approval, events });
+      // Decision records the person kept. Earlier rounds' files go back first.
+      const prior = [...new Set(events.filter((e) => e.type === 'records_written' && e.approvalId !== approval.id).flatMap((e) => [...(/** @type {string[]} */ (e.files ?? [])), ...(/** @type {string[]} */ (e.removed ?? []))]))];
+      const { written, removed } = await writeDecisions({ root, mergeBase: input.base.mergeBase, judgment: approval, draft, prior });
       files = written;
       await appendEvent(paths.events, { type: 'records_written', approvalId: approval.id, files, ...(removed.length ? { removed } : {}) });
     }
-    return { input, draft, approval, files, already };
+    // The spec lifetime the person chose, on every run until it is done.
+    const spec = info.branch === input.branch ? await applySpecLifecycle({ root, afterMerge: approval.specAfterMerge }) : null;
+    return { input, approval, files, already, spec };
   });
 
-  const { input, draft, approval, files, already } = written;
-  const records = approval.items.map((/** @type {any} */ item) => {
-    const op = draft.records[item.index];
-    const target = op.op === 'add' ? op.id : op.target;
-    return {
-      index: item.index,
-      op: op.op,
-      kind: op.op === 'add' ? op.kind : String(target).startsWith('a-') ? 'axiom' : 'decision',
-      id: target,
-      title: item.edited?.title ?? op.title ?? null,
-      decision: item.decision,
-    };
-  });
+  const { input, approval, files, already, spec } = written;
+  return judgmentResult({ home, taskId, input, approval, files, already, spec });
+}
+
+/**
+ * Whether the working tree still holds the judged code. Markdown changes do not count.
+ * @param {any} input the frozen input the judgment was made on
+ */
+async function judgedCodeMatches(input) {
+  const match = await codeMatches({ input, judgedFiles: input.source.files });
+  return match.ok ? { ok: true, why: null } : { ok: false, why: '판정 이후 코드가 바뀜' };
+}
+
+/**
+ * The apply result of a judgment: what the PR needs (the paragraph comes from pr-body.mjs)
+ * and the commit the status will go on.
+ * @param {{ home: string, taskId: string, input: any, approval: any, files: string[], already: boolean, spec: Awaited<ReturnType<typeof applySpecLifecycle>> }} options
+ */
+async function judgmentResult({ home, taskId, input, approval, files, already, spec }) {
+  const paths = taskPaths(home, taskId);
   const after = await readEvents(paths.events);
   const state = deriveState(after);
   const prEvent = lastOf(after, 'pr_created');
-  // A PR from before an incremental recheck: its body is updated, not a new PR opened.
   const previousPr = state === 'pr_created' ? undefined : prEvent;
   /** @type {Awaited<ReturnType<typeof prMaterial>> | null} */
   let pr = null;
@@ -262,75 +254,20 @@ export async function applyApproval({ home, taskId }) {
   return {
     taskId,
     approvalId: approval.id,
+    kind: 'judgment',
+    outcome: approval.outcome,
     state,
     alreadyApplied: already,
     root: input.repo.root,
-    files,
-    removed: /** @type {string[]} */ (after.filter((e) => e.type === 'records_written' && e.approvalId === approval.id).at(-1)?.removed ?? []),
-    summary: approval.summary.final,
-    records: records.filter((/** @type {any} */ r) => r.decision === 'approved'),
-    pendingItems: records.filter((/** @type {any} */ r) => r.decision === 'pending').map((/** @type {any} */ r) => r.index),
+    files: [...files, ...(spec?.files ?? [])],
+    removed: [...(/** @type {string[]} */ (after.filter((e) => e.type === 'records_written' && e.approvalId === approval.id).at(-1)?.removed ?? [])), ...(spec?.removed ?? [])],
+    spec: spec ? { action: spec.action, ...(spec.owner ? { owner: spec.owner } : {}), specs: spec.specs, pending: spec.pending } : null,
+    status: await statusCommit({ input, judgedFiles: input.source.files }),
     prUrl: state === 'pr_created' && typeof prEvent?.url === 'string' ? prEvent.url : null,
     previousPrUrl: typeof previousPr?.url === 'string' ? previousPr.url : null,
     pr,
     commitGuides: (await findProjectRules(input.repo.root)).commitGuides,
   };
-}
-
-/**
- * Write the records of an approval into the consumer repository. Files written for an earlier approval of this task are not merged yet, so they are
- * first taken back to their merge-base version and the combined approval is applied again:
- * the same approval always yields the same files. Earlier files the new approval no longer
- * produces are restored from the merge-base, or removed when they did not exist there.
- * @param {{ root: string, input: any, draft: any, approval: any, events: TaskEvent[] }} options
- */
-async function writeApprovedRecords({ root, input, draft, approval, events }) {
-  const prior = [...new Set(events.filter((e) => e.type === 'records_written' && e.approvalId !== approval.id).flatMap((e) => /** @type {string[]} */ (e.files ?? [])))];
-  const { records } = await readRecords(root);
-  const existing = new Map(records.map((r) => [r.meta.id, { meta: r.meta, body: r.body }]));
-
-  /** @type {Map<string, string>} */
-  let baseTexts = new Map();
-  if (prior.length) {
-    const { mergeBase } = await currentSourceState({ root, base: input.base });
-    baseTexts = await readTreeTexts({ cwd: root, ref: mergeBase, dirs: ['.heirloom'] });
-    for (const file of prior) {
-      if (!RECORD_FILE.test(file)) continue;
-      const id = path.basename(file, '.md');
-      const text = baseTexts.get(file);
-      if (text === undefined) existing.delete(id);
-      else {
-        const doc = parseRecord(text, file);
-        existing.set(id, { meta: doc.meta, body: doc.body });
-      }
-    }
-  }
-
-  const { writes } = planRecordChanges({ draft, approval, existing });
-  /** @type {string[]} */
-  const written = [];
-  for (const doc of writes) {
-    await writeRecord(root, doc);
-    written.push(path.relative(root, recordPath(root, doc.meta)).split(path.sep).join('/'));
-  }
-  // A curation also leaves its review history, so the batch counts as reviewed once merged
-  // and held or rejected candidates are not proposed again without new evidence.
-  if (input.trigger === 'curation') {
-    const review = buildCurationReview({ input, draft, approval });
-    const file = curationReviewPath(review.id);
-    await writeFileAtomic(path.join(root, file), `${JSON.stringify(review, null, 2)}\n`, { mode: 0o644, dirMode: 0o755 });
-    written.push(file);
-  }
-  /** @type {string[]} */
-  const removed = [];
-  for (const file of prior) {
-    if (written.includes(file)) continue;
-    const text = baseTexts.get(file);
-    if (text === undefined) await rm(path.join(root, file), { force: true });
-    else await writeFile(path.join(root, file), text);
-    removed.push(file);
-  }
-  return { written: written.sort(), removed: removed.sort() };
 }
 
 /**
@@ -348,8 +285,6 @@ function recordsKept(err, files) {
   });
 }
 
-const RECORD_FILE = /^\.heirloom\/(decisions|axioms)\/[^/]+\.md$/;
-
 const PR_URL = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/;
 
 /**
@@ -366,6 +301,28 @@ async function reviewUrlProvider(url, cwd) {
   throw new HeirloomError('E_INPUT', `GitHub PR URL이나 GitLab MR URL이 아님: ${url}`, {
     hint: 'https://github.com/<owner>/<repo>/pull/<번호> 또는 https://<GitLab 호스트>/<그룹>/<프로젝트>/-/merge_requests/<번호> 형식으로 준다. 자체 호스팅 GitLab은 glab이 그 호스트에 로그인되어 있어야 한다.',
   });
+}
+
+/**
+ * Post the `heirloom/understood` status. A failure is reported, never thrown: the PR is
+ * already open and the status can be posted again by running complete.mjs again.
+ * @param {{ input: any, prUrl: string, provider: string, sha: string, description: string }} options
+ * @returns {Promise<{ posted: boolean, error: string | null }>}
+ */
+async function postStatus({ input, prUrl, provider, sha, description }) {
+  const cwd = input.repo.root;
+  try {
+    if (provider === 'gitlab') {
+      const mr = /** @type {{ host: string, repo: string }} */ (parseMrUrl(prUrl));
+      await postGitlabStatus({ cwd, host: mr.host, repo: mr.repo, sha, context: STATUS_CONTEXT, description });
+    } else {
+      const repo = /** @type {RegExpExecArray} */ (/^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\//.exec(prUrl))[1];
+      await postGithubStatus({ cwd, repo, sha, context: STATUS_CONTEXT, description });
+    }
+    return { posted: true, error: null };
+  } catch (err) {
+    return { posted: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /**
@@ -388,8 +345,22 @@ export async function completePr({ home, taskId, prUrl }) {
     }
     if (state !== 'applied') throw new HeirloomError('E_CONFLICT', `기록 반영 전에는 PR 완료를 기록할 수 없음 (현재 상태: ${state ?? '없음'})`, { hint: 'apply.mjs를 먼저 실행한다.' });
     const approvalId = lastOf(events, 'records_written')?.approvalId;
-    const next = await appendEvent(paths.events, { type: 'pr_created', approvalId, url: prUrl, provider });
-    return { taskId, state: next, prUrl, provider };
+    const approval = /** @type {any} */ (typeof approvalId === 'string' ? await readJson(approvalFiles(paths.approvals, approvalId).record) : null);
+    if (approval?.kind !== 'judgment') {
+      throw new HeirloomError('E_CONFLICT', '이전 형식(항목별 승인)의 작업은 더 이상 PR 완료를 기록하지 않음', {
+        hint: '사용자에게 알리고 prepare-handoff로 다시 인계해 판정을 받는다.',
+      });
+    }
+    // The judged commit gets the status; a later commit has none, which shows on the PR.
+    const target = await statusCommit({ input, judgedFiles: input.source.files });
+    if (!target.sha) {
+      throw new HeirloomError('E_CONFLICT', target.reason === 'uncommitted' ? '판정한 코드가 아직 커밋되지 않음' : '판정 이후 코드가 바뀜', {
+        hint: target.reason === 'uncommitted' ? '판정한 변경을 커밋하고 push한 뒤 다시 실행한다.' : 'prepare-handoff로 다시 인계해 재확인한다.',
+      });
+    }
+    const status = await postStatus({ input, prUrl, provider, sha: target.sha, description: `Heirloom 판정 ${approval.id}` });
+    const next = await appendEvent(paths.events, { type: 'pr_created', approvalId, url: prUrl, provider, statusSha: target.sha });
+    return { taskId, state: next, prUrl, provider, status: { sha: target.sha, context: STATUS_CONTEXT, ...status } };
   });
 }
 

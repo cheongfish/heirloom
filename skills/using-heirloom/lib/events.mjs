@@ -9,7 +9,7 @@ import { assertValid, eventSchema } from './schema.mjs';
 /** @typedef {{ at: string, type: EventType, [key: string]: unknown }} TaskEvent */
 /**
  * @typedef {'prepared' | 'drafted' | 'awaiting_approval' | 'approved' | 'applied' | 'pr_created'
- *   | 'failed' | 'stale' | 'discarded' | 'expired'} TaskState
+ *   | 'failed' | 'stale' | 'returned' | 'discarded' | 'expired'} TaskState
  */
 
 const TERMINAL = new Set(['discarded', 'expired']);
@@ -51,6 +51,10 @@ export function nextState(state, event) {
     case 'approved':
       require(state, event, ['awaiting_approval']);
       return 'approved';
+    case 'returned':
+      // The human judged and sent the work back: the agent changes the code and prepares again.
+      require(state, event, ['awaiting_approval']);
+      return 'returned';
     case 'approval_received':
       require(state, event, ['approved', 'applied', 'pr_created']);
       return /** @type {TaskState} */ (state);
@@ -68,8 +72,8 @@ export function nextState(state, event) {
       return 'stale';
     case 'agent_started':
     case 'agent_finished':
-      // Notices about a headless run the dashboard started: they never move the task, and a
-      // run may finish after the task was discarded.
+      // Notices about a headless run of the context curation removed in 0.4: older task logs
+      // still have them, and they never moved the task.
       return /** @type {TaskState} */ (state);
     case 'discarded':
     case 'expired':

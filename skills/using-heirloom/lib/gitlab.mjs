@@ -136,3 +136,24 @@ export async function createMr({ cwd, host, repo, head, base, title, body }) {
 export async function updateMrBody({ cwd, host, repo, iid, body }) {
   await glab(['mr', 'update', String(iid), '--repo', `https://${host}/${repo}`, '--description', body], { cwd, timeoutMs: 60_000 });
 }
+
+/**
+ * Set a commit status (`POST /projects/:id/statuses/:sha`).
+ * @param {{ cwd: string, host: string, repo: string, sha: string, context: string, description: string }} options
+ */
+export async function postCommitStatus({ cwd, host, repo, sha, context, description }) {
+  await withRetry(() =>
+    glab(['api', '--hostname', host, '-X', 'POST', `${projectRef(repo)}/statuses/${sha}`, '-f', 'state=success', '-f', `name=${context}`, '-f', `description=${description}`], { cwd }),
+  );
+}
+
+/**
+ * GET a REST API path under a project (`/notes/1`, `/merge_requests/5`) and parse the JSON.
+ * Network errors are retried once.
+ * @param {{ cwd: string, host: string, repo: string, path: string }} options
+ * @returns {Promise<any>}
+ */
+export async function glabApiGet({ cwd, host, repo, path }) {
+  const text = await withRetry(() => glab(['api', '--hostname', host, `${projectRef(repo)}${path}`], { cwd }));
+  return parseJson(text, `glab api ${path}`);
+}

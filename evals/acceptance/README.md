@@ -1,6 +1,6 @@
 # MVP 수용 점검
 
-3차 기능(증분 재확인, GitLab MR, 맥락 정리)의 점검 B1~B6은 [phase3.md](phase3.md)에 있다.
+3차 기능(증분 재확인, GitLab MR)의 점검 B1~B5는 [phase3.md](phase3.md)에 있다.
 
 회수 활용 점검 R1~R7은 [recall.md](recall.md)에 있다.
 

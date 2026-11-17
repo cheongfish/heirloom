@@ -1,19 +1,19 @@
-// In-process dashboard server: security checks, task API, approval, SSE, idle shutdown.
+// In-process dashboard server: security checks, task API, SSE, idle shutdown. Prediction and
+// judgment are covered in judge.test.mjs.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { submittedTask } from '../helpers/handoff-fixture.mjs';
+import { judge } from '../helpers/judge-fixture.mjs';
 import { tempDir } from '../helpers/git-fixture.mjs';
 import { createDashboardServer } from '../../skills/using-heirloom/dashboard/server.mjs';
-import { verify } from '../../skills/using-heirloom/lib/sign.mjs';
 import { readEvents, deriveState, appendEvent } from '../../skills/using-heirloom/lib/events.mjs';
 import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
-import { validate, approvalSchema } from '../../skills/using-heirloom/lib/schema.mjs';
 
 /**
  * @param {number} port
@@ -65,18 +65,6 @@ const post = (s, p, body, headers = {}) =>
     headers: { 'content-type': 'application/json', 'x-heirloom-token': s.token, origin: `http://127.0.0.1:${s.port}`, ...headers },
     body,
   });
-
-/** @param {any} task */
-function approvalBody(task, overrides = {}) {
-  return {
-    kind: 'full',
-    draftSha256: task.draftSha256,
-    sourceHash: task.input.source.hash,
-    summary: ['a를 2로 바꿨다 (사람이 고침)', 'spec을 추가했다'],
-    items: [{ index: 0, decision: 'approved' }],
-    ...overrides,
-  };
-}
 
 test('health identifies the server; no CORS headers; security headers present', async (t) => {
   const s = await start(await tempDir('home'));
@@ -136,76 +124,22 @@ test('task list and detail', async (t) => {
   assert.equal(detail.status, 200);
   assert.equal(detail.body.state, 'awaiting_approval');
   assert.match(detail.body.draftSha256, /^[0-9a-f]{64}$/);
-  assert.equal(detail.body.draft.records.length, 1);
-  assert.equal(detail.body.draftInitial.summary.length, 2);
+  assert.equal(detail.body.judge.revealed, false);
+  assert.equal(detail.body.draft.questions.length, 4);
+  assert.equal(detail.body.latestApproval, null);
 
   assert.equal((await request(s.port, { path: '/api/tasks/t-20261112-zzzzzzzz' })).status, 404);
   assert.equal((await request(s.port, { path: '/api/tasks/..%2F..%2Fetc' })).status, 400);
 });
 
-test('approve: signed record saved before the approved event; summary initial vs final kept', async (t) => {
+test('item approval (before the pivot) is gone: /approve is not a route', async (t) => {
   const { home, taskId } = await submittedTask();
   const s = await start(home);
   t.after(() => s.close());
   const task = (await request(s.port, { path: `/api/tasks/${taskId}` })).body;
-
-  const r = await post(s, `/api/tasks/${taskId}/approve`, approvalBody(task));
-  assert.equal(r.status, 200, r.text);
-  const approvalId = r.body.approval.id;
-
-  const files = (await readdir(taskPaths(home, taskId).approvals)).sort();
-  assert.deepEqual(files, [`${approvalId}.draft.json`, `${approvalId}.input.json`, `${approvalId}.json`], 'the record and the baseline it approved');
-  const record = JSON.parse(await readFile(path.join(taskPaths(home, taskId).approvals, `${approvalId}.json`), 'utf8'));
-  assert.deepEqual(validate(approvalSchema, record), []);
-  assert.deepEqual(await verify(home, record), { ok: true });
-  assert.deepEqual(record.summary.initial, ['a를 2로 바꿨다', 'spec을 추가했다']);
-  assert.equal(record.summary.final[0], 'a를 2로 바꿨다 (사람이 고침)');
-  assert.equal(record.target.sourceHash, task.input.source.hash);
-  assert.equal(record.approver.gitUser, 'Test <test@example.invalid>');
-
-  const events = await readEvents(taskPaths(home, taskId).events);
-  assert.equal(events.at(-1)?.type, 'approved');
-  assert.equal(events.at(-1)?.approvalId, approvalId);
-  assert.equal((await post(s, `/api/tasks/${taskId}/approve`, approvalBody(task))).status, 409, 'already approved');
-});
-
-test('approve: stale screen (draft changed) and changed source are 409', async (t) => {
-  const { repo, home, taskId } = await submittedTask();
-  const s = await start(home);
-  t.after(() => s.close());
-  const task = (await request(s.port, { path: `/api/tasks/${taskId}` })).body;
-
-  assert.equal((await post(s, `/api/tasks/${taskId}/approve`, approvalBody(task, { draftSha256: 'f'.repeat(64) }))).status, 409);
-  assert.equal((await post(s, `/api/tasks/${taskId}/approve`, approvalBody(task, { sourceHash: `sha256:${'f'.repeat(64)}` }))).status, 409);
-
-  await repo.write('src/a.mjs', 'export const a = 99;\n');
-  const changed = await post(s, `/api/tasks/${taskId}/approve`, approvalBody(task));
-  assert.equal(changed.status, 409);
-  assert.match(changed.body.error.message, /소스/);
+  const r = await post(s, `/api/tasks/${taskId}/approve`, { kind: 'full', draftSha256: task.draftSha256, sourceHash: task.input.source.hash, summary: ['x'], items: [] });
+  assert.equal(r.status, 404);
   assert.equal(deriveState(await readEvents(taskPaths(home, taskId).events)), 'awaiting_approval');
-});
-
-test('approve: items must cover every record; quick approval only without records', async (t) => {
-  const { home, taskId } = await submittedTask();
-  const s = await start(home);
-  t.after(() => s.close());
-  const task = (await request(s.port, { path: `/api/tasks/${taskId}` })).body;
-  const p = `/api/tasks/${taskId}/approve`;
-  assert.equal((await post(s, p, approvalBody(task, { items: [] }))).status, 400);
-  assert.equal((await post(s, p, approvalBody(task, { items: [{ index: 0, decision: 'maybe' }] }))).status, 400);
-  assert.equal((await post(s, p, approvalBody(task, { items: [{ index: 0, decision: 'approved' }, { index: 0, decision: 'rejected' }] }))).status, 400);
-  assert.equal((await post(s, p, approvalBody(task, { kind: 'quick', items: [] }))).status, 400);
-  assert.equal((await post(s, p, approvalBody(task, { summary: [] }))).status, 400);
-});
-
-test('quick approval for a draft without records', async (t) => {
-  const { home, taskId } = await submittedTask({ records: false });
-  const s = await start(home);
-  t.after(() => s.close());
-  const task = (await request(s.port, { path: `/api/tasks/${taskId}` })).body;
-  const r = await post(s, `/api/tasks/${taskId}/approve`, approvalBody(task, { kind: 'quick', items: [] }));
-  assert.equal(r.status, 200, r.text);
-  assert.equal(r.body.approval.kind, 'quick');
 });
 
 test('discard moves the task to discarded', async (t) => {
@@ -295,17 +229,15 @@ test('task list: stale flag and the overview sections', async (t) => {
   assert.deepEqual(list.body.unchecked, []);
 });
 
-test('task detail: targets of supersede/deprecate/update ops and the latest approval', async (t) => {
-  const { home, taskId } = await submittedTask();
+test('task detail: the latest judgment', async (t) => {
+  const { home, taskId, sourceHash } = await submittedTask();
   const s = await start(home);
   t.after(() => s.close());
-  const task = (await request(s.port, { path: `/api/tasks/${taskId}` })).body;
-  assert.deepEqual(task.targets, {});
-  assert.equal(task.latestApproval, null);
-  await post(s, `/api/tasks/${taskId}/approve`, approvalBody(task));
+  const judgment = await judge({ home, taskId, sourceHash });
   const after = (await request(s.port, { path: `/api/tasks/${taskId}` })).body;
   assert.equal(after.state, 'approved');
-  assert.equal(after.latestApproval.summary.final[0], 'a를 2로 바꿨다 (사람이 고침)');
+  assert.deepEqual([after.latestApproval.id, after.latestApproval.kind, after.latestApproval.outcome], [judgment.id, 'judgment', 'accepted']);
+  assert.deepEqual(after.approvals, [judgment.id]);
   assert.ok(!JSON.stringify(after).includes(s.token));
 });
 

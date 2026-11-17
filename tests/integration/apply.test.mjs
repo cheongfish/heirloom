@@ -1,23 +1,24 @@
-// handoff → approval → apply → PR, against temporary repositories and a fake `gh` (MVP-PLAN M5).
+// handoff → judgment → apply → PR, against temporary repositories and a fake `gh` (MVP-PLAN M5).
+// What a judgment adds on top (the PR paragraph, the commit status) is in judgment-apply.test.mjs.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdir, readdir, readFile, stat, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { submittedTask } from '../helpers/handoff-fixture.mjs';
+import { SPEC, approvedTask as judgedAndAccepted, submittedTask } from '../helpers/handoff-fixture.mjs';
+import { CART_HEAD } from '../helpers/judge-fixture.mjs';
 import { tempDir } from '../helpers/git-fixture.mjs';
-import { approveTask } from '../../skills/using-heirloom/dashboard/approve.mjs';
 import { applyApproval, completePr, listPendingApprovals, prTemplateChoice } from '../../skills/using-heirloom/lib/apply.mjs';
-import { draftDigest } from '../../skills/using-heirloom/lib/canonical.mjs';
 import { HeirloomError } from '../../skills/using-heirloom/lib/errors.mjs';
 import { deriveState, readEvents } from '../../skills/using-heirloom/lib/events.mjs';
 import { readJson } from '../../skills/using-heirloom/lib/fsx.mjs';
 import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
-import { readRecords } from '../../skills/using-heirloom/lib/records.mjs';
+import { prepareHandoff } from '../../skills/using-heirloom/lib/prepare.mjs';
 import { buildSessionContext } from '../../skills/using-heirloom/lib/session-context.mjs';
+import { sign } from '../../skills/using-heirloom/lib/sign.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const FAKE_GH_DIR = path.join(ROOT, 'tests', 'helpers', 'fake-gh');
@@ -29,11 +30,14 @@ process.env.GIT_SSH_COMMAND = 'false';
 process.env.GIT_TERMINAL_PROMPT = '0';
 
 /**
- * A submitted task whose origin looks like GitHub, approved in the dashboard, with a fake gh.
- * @param {{ records?: boolean, github?: boolean, gh?: { authed?: boolean, prs?: any[], fail?: string } | null }} [options]
+ * A task whose origin looks like GitHub, judged in the dashboard with every question accepted,
+ * with a fake gh.
+ * @param {{ github?: boolean, gh?: { authed?: boolean, prs?: any[], fail?: string } | null }} [options]
  */
-async function approvedTask({ records = true, github = true, gh = {} } = {}) {
-  const t = await submittedTask({ records });
+async function approvedTask({ github = true, gh = {} } = {}) {
+  // The probes run node: the PATH of an earlier task in the same test may lack it.
+  process.env.PATH = PATH0;
+  const t = await judgedAndAccepted();
   if (github) t.repo.git('remote', 'set-url', 'origin', 'git@github.com:acme/widgets.git');
   const ghDir = await tempDir('gh');
   const log = path.join(ghDir, 'log.jsonl');
@@ -44,23 +48,12 @@ async function approvedTask({ records = true, github = true, gh = {} } = {}) {
   // gh: null means "gh is not installed". The PATH then holds git alone, so the real gh
   // on this machine (if any) can never be reached.
   process.env.PATH = gh === null ? await gitOnlyPath() : `${FAKE_GH_DIR}${path.delimiter}${PATH0}`;
-
   const paths = taskPaths(t.home, t.taskId);
-  const draft = /** @type {any} */ (await readJson(paths.draft));
-  const approval = await approveTask({
-    home: t.home,
-    taskId: t.taskId,
-    keystore: 'file',
-    request: {
-      kind: records ? 'full' : 'quick',
-      draftSha256: draftDigest(draft),
-      sourceHash: t.sourceHash,
-      summary: ['a를 2로 바꿨다 (사람이 고침)', 'spec을 추가했다'],
-      items: records ? [{ index: 0, decision: 'approved', edited: { title: '반올림하지 않는다' } }] : [],
-    },
-  });
-  return { ...t, approval, paths, draft, log, ghState };
+  return { ...t, approval: t.judgment, paths, draft: /** @type {any} */ (await readJson(paths.draft)), log, ghState };
 }
+
+/** Whether the judged spec is still in the working tree (apply deletes it by default). @param {{ repo: { dir: string } }} t */
+const specKept = (t) => access(path.join(t.repo.dir, SPEC)).then(() => true, () => false);
 
 async function gitOnlyPath() {
   const dir = await tempDir('nogh');
@@ -95,24 +88,18 @@ test.afterEach(() => {
   process.env.PATH = PATH0;
 });
 
-test('apply: verifies, writes the approved record, reports PR material; complete records the PR', async () => {
+test('apply: verifies, carries out the spec lifetime, reports PR material; complete records the PR', async () => {
   const t = await approvedTask();
   const out = await applyAny({ home: t.home, taskId: t.taskId });
 
   assert.equal(out.state, 'applied');
+  assert.equal(out.kind, 'judgment');
+  assert.equal(out.outcome, 'accepted');
   assert.equal(out.approvalId, t.approval.id);
   assert.equal(out.alreadyApplied, false);
-  assert.deepEqual(out.summary, ['a를 2로 바꿨다 (사람이 고침)', 'spec을 추가했다']);
-  const id = t.draft.records[0].id;
-  assert.deepEqual(out.files, [`.heirloom/decisions/${id}.md`]);
-  assert.deepEqual(out.records, [{ index: 0, op: 'add', kind: 'decision', id, title: '반올림하지 않는다', decision: 'approved' }]);
-
-  const { records, errors } = await readRecords(t.repo.dir);
-  assert.deepEqual(errors, []);
-  assert.equal(records.length, 1);
-  assert.equal(records[0].meta.title, '반올림하지 않는다', 'the human edit is written');
-  assert.equal(records[0].meta.approval.id, t.approval.id);
-  assert.equal(records[0].meta.approval.signer, t.approval.approver.fingerprint);
+  assert.deepEqual(out.files, [], 'no decision record was kept');
+  assert.deepEqual(out.removed, [SPEC]);
+  assert.equal(await specKept(t), false);
 
   assert.equal(out.pr.available, true);
   assert.equal(out.pr.reason, null);
@@ -133,16 +120,12 @@ test('apply: verifies, writes the approved record, reports PR material; complete
   await rejectsWith(completePr({ home: t.home, taskId: t.taskId, prUrl: 'https://github.com/acme/widgets/pull/8' }), 'E_CONFLICT');
 });
 
-test('apply twice: records are written once; the second run reports the same files', async () => {
+test('apply twice: the judgment is applied once; the second run reports the same files', async () => {
   const t = await approvedTask();
   const first = await applyAny({ home: t.home, taskId: t.taskId });
-  const file = path.join(t.repo.dir, first.files[0]);
-  const before = (await stat(file)).mtimeMs;
-  await new Promise((r) => setTimeout(r, 20));
   const second = await applyAny({ home: t.home, taskId: t.taskId });
   assert.equal(second.alreadyApplied, true);
-  assert.deepEqual(second.files, first.files);
-  assert.equal((await stat(file)).mtimeMs, before, 'not rewritten');
+  assert.deepEqual([second.files, second.removed], [first.files, first.removed]);
   const events = await readEvents(t.paths.events);
   assert.equal(events.filter((e) => e.type === 'records_written').length, 1);
   assert.equal(events.filter((e) => e.type === 'approval_received').length, 1);
@@ -163,42 +146,75 @@ test('a missed approval event is recovered: the pending list and the session sta
   assert.deepEqual(await listPendingApprovals({ home: t.home, cwd: t.repo.dir }), []);
 });
 
-test('a forged or altered approval is rejected (E_VERIFY) and nothing is written', async () => {
+test('a forged or altered judgment is rejected (E_VERIFY) and nothing is done', async () => {
   const t = await approvedTask();
   const file = path.join(t.paths.approvals, `${t.approval.id}.json`);
   const record = JSON.parse(await readFile(file, 'utf8'));
-  record.summary.final = ['에이전트가 바꾼 요약'];
+  record.behaviorDiffs.final = ['에이전트가 바꾼 설명'];
   await writeFile(file, JSON.stringify(record));
   await rejectsWith(applyAny({ home: t.home, taskId: t.taskId }), 'E_VERIFY');
 
   delete record.signature;
   await writeFile(file, JSON.stringify(record));
   await rejectsWith(applyAny({ home: t.home, taskId: t.taskId }), 'E_VERIFY');
-  assert.deepEqual((await readRecords(t.repo.dir)).records, []);
+  assert.equal(await specKept(t), true);
   assert.equal(await stateOf(t.home, t.taskId), 'approved');
 });
 
-test('a draft changed after approval is rejected (E_VERIFY)', async () => {
+test('a draft changed after the judgment is rejected (E_VERIFY)', async () => {
   const t = await approvedTask();
-  const draft = { ...t.draft, notes: '승인 뒤에 고침' };
+  const draft = { ...t.draft, notes: '판정 뒤에 고침' };
   await writeFile(t.paths.draft, JSON.stringify(draft));
   await rejectsWith(applyAny({ home: t.home, taskId: t.taskId }), 'E_VERIFY');
-  assert.deepEqual((await readRecords(t.repo.dir)).records, []);
+  assert.equal(await specKept(t), true);
 });
 
-test('source changed after approval: stale (E_CONFLICT) and nothing is written', async () => {
+test('an item approval from before the pivot is refused (E_VERIFY); prepare starts a new handoff instead of a recheck', async () => {
   const t = await approvedTask();
-  await t.repo.write('src/a.mjs', 'export const a = 3;\n');
+  const file = path.join(t.paths.approvals, `${t.approval.id}.json`);
+  const judgment = JSON.parse(await readFile(file, 'utf8'));
+  // A validly signed schema 1 approval, as 0.3 wrote it.
+  const legacy = await sign(
+    t.home,
+    {
+      schemaVersion: 1,
+      id: judgment.id,
+      taskId: judgment.taskId,
+      kind: 'full',
+      target: { sourceHash: judgment.target.sourceHash, materials: judgment.target.materials, draftSha256: judgment.target.draftSha256 },
+      summary: { initial: ['요약'], final: ['요약'] },
+      items: [],
+      approver: judgment.approver,
+      approvedAt: judgment.judgedAt,
+    },
+    { keystore: 'file' },
+  );
+  await writeFile(file, JSON.stringify(legacy));
+  await assert.rejects(applyAny({ home: t.home, taskId: t.taskId }), (/** @type {any} */ e) => {
+    assert.equal(e.code, 'E_VERIFY');
+    assert.match(e.message, /이전 형식\(항목별 승인\)/);
+    assert.match(String(e.hint), /prepare-handoff로 다시 인계/);
+    return true;
+  });
+  assert.equal(await specKept(t), true);
+
+  const again = await prepareHandoff({ cwd: t.repo.dir, home: t.home, specs: [SPEC] });
+  assert.deepEqual([again.taskId, again.alreadyPrepared, again.state, again.recheck], [t.taskId, false, 'prepared', null]);
+});
+
+test('code changed after the judgment: stale (E_CONFLICT) and nothing is done', async () => {
+  const t = await approvedTask();
+  await t.repo.write('src/cart.mjs', `${CART_HEAD}// later\n`);
   await rejectsWith(applyAny({ home: t.home, taskId: t.taskId }), 'E_CONFLICT');
   assert.equal(await stateOf(t.home, t.taskId), 'stale');
-  assert.deepEqual((await readRecords(t.repo.dir)).records, []);
+  assert.equal(await specKept(t), true);
 });
 
-test('another branch checked out: refuses to write records there', async () => {
+test('another branch checked out: refuses to apply there', async () => {
   const t = await approvedTask();
   t.repo.git('checkout', '-q', '-b', 'other');
   await rejectsWith(applyAny({ home: t.home, taskId: t.taskId }), 'E_CONFLICT');
-  assert.deepEqual((await readRecords(t.repo.dir)).records, []);
+  assert.equal(await specKept(t), true);
 });
 
 test('a PR created before a failure is found on the next run (no duplicate PR)', async () => {
@@ -212,13 +228,13 @@ test('a PR created before a failure is found on the next run (no duplicate PR)',
   assert.deepEqual(again.pr.existing, { number: 7, url: pr.url, base: 'main' });
 });
 
-test('a transient failure after the records are written says so; the retry continues at the PR step', async () => {
+test('a transient failure after the judgment is applied says so; the retry continues at the PR step', async () => {
   const t = await approvedTask({ gh: { fail: 'network' } });
   await assert.rejects(applyAny({ home: t.home, taskId: t.taskId }), (/** @type {any} */ e) => {
     assert.ok(e instanceof HeirloomError);
     assert.equal(e.code, 'E_TRANSIENT');
     assert.match(e.message, /기록 파일은 이미 씀/);
-    assert.match(e.message, /\.heirloom\/decisions\/d-[a-z0-9]+\.md/);
+    assert.match(e.message, /쓸 기록 없음/);
     assert.match(e.message, /gh pr list 실패/);
     assert.match(String(e.hint), /기록을 다시 쓰지 않고 PR 단계부터/);
     return true;
@@ -231,13 +247,13 @@ test('a transient failure after the records are written says so; the retry conti
   assert.equal(again.pr.available, true);
 });
 
-test('PR step unavailable: records are still written and the reason is reported', async () => {
+test('PR step unavailable: the judgment is still applied and the reason is reported', async () => {
   const notGithub = await approvedTask({ github: false });
   const a = await applyAny({ home: notGithub.home, taskId: notGithub.taskId });
   assert.equal(a.state, 'applied');
   assert.equal(a.pr.available, false);
   assert.equal(a.pr.reason, 'unsupported_remote');
-  assert.equal(a.files.length, 1);
+  assert.deepEqual(a.removed, [SPEC]);
 
   const noGh = await approvedTask({ gh: null });
   const b = await applyAny({ home: noGh.home, taskId: noGh.taskId });
@@ -260,16 +276,6 @@ test('PR templates: one is returned as the template; several are listed without 
   await writeFile(path.join(single, '.github', 'pull_request_template.md'), '## Summary\n');
   spawnSync('git', ['init', '-q'], { cwd: single });
   assert.deepEqual(await prTemplateChoice(single), { template: '.github/pull_request_template.md', templates: ['.github/pull_request_template.md'] });
-});
-
-test('quick approval: nothing to write, PR material only', async () => {
-  const t = await approvedTask({ records: false });
-  const out = await applyAny({ home: t.home, taskId: t.taskId });
-  assert.equal(out.state, 'applied');
-  assert.deepEqual(out.files, []);
-  assert.deepEqual(out.records, []);
-  assert.equal(out.pr.available, true);
-  assert.equal((await readdir(t.repo.dir)).includes('.heirloom'), false);
 });
 
 test('apply before approval or on an unknown task', async () => {
@@ -299,7 +305,7 @@ test('scripts: apply.mjs lists, applies and exits 4 on a bad signature; complete
   const forged = await approvedTask();
   const file = path.join(forged.paths.approvals, `${forged.approval.id}.json`);
   const rec = JSON.parse(await readFile(file, 'utf8'));
-  rec.items[0].decision = 'rejected';
+  rec.items[0].verdict = 'revert';
   await writeFile(file, JSON.stringify(rec));
   const bad = spawnSync(process.execPath, [apply, '--task', forged.taskId], { cwd: forged.repo.dir, env: { ...process.env, HEIRLOOM_HOME: forged.home }, encoding: 'utf8' });
   assert.equal(bad.status, 4);

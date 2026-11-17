@@ -1,6 +1,6 @@
 # Hosts
 
-Heirloom runs in Claude Code, Codex, Antigravity and, in part, Cursor CLI. The handoff, the dashboard, the approval and the records work the same in all of them. What differs is how each host loads the plugin, injects the convention at session start and reminds the agent at stop.
+Heirloom runs in Claude Code, Codex, Antigravity and, in part, Cursor CLI. The handoff, the probe runs, the dashboard, the judgment and the records work the same in all of them. What differs is how each host loads the plugin, injects the convention at session start and reminds the agent at stop.
 
 ## Support level
 
@@ -39,7 +39,6 @@ Agents call the skills on their own. To call one yourself:
 | Folder the hooks work in | `cwd` | `cwd` | `cwd`, or the first git repository among `workspacePaths` when `cwd` is not one (a folder added with `--add-dir` can come first) | The first of `workspace_roots` (hooks run in the plugin folder and get no `cwd`) |
 | Stop after an interruption | No stop hook | No stop hook (checked on an early interruption) | Runs, but Heirloom reminds only after a normal end of the turn | No stop hook |
 | Repository IDs | In `.git` | In `~/.heirloom/ids/` when the sandbox keeps `.git` read-only | In `.git` | In `.git` |
-| Headless context curation | `claude -p` with allowed tools | `codex exec` with a per-run allow-list hook ([Security](security.md#headless-curation-runs)) | `agy -p` with per-run permission rules | Not available; the curation runs with another host |
 
 ### Opening the dashboard from Codex
 
@@ -48,7 +47,3 @@ Codex's default sandbox blocks network access, so the agent's handoff cannot sta
 ```sh
 node ~/.codex/plugins/cache/heirloom/heirloom/<version>/skills/using-heirloom/scripts/open-dashboard.mjs
 ```
-
-### Codex trust entries
-
-`codex exec` records each directory it runs in as trusted in `~/.codex/config.toml` (`[projects."<path>"] trust_level = "trusted"`), also for headless curation runs. Each curation therefore leaves one entry for its worktree under `~/.heirloom/worktrees/`. Heirloom does not edit your Codex config; remove old entries yourself if you want.

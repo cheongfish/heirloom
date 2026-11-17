@@ -13,11 +13,9 @@ import { taskIdFor } from '../../skills/using-heirloom/lib/store.mjs';
 import { appendEvent } from '../../skills/using-heirloom/lib/events.mjs';
 import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
 import { computeSourceState } from '../../skills/using-heirloom/lib/state.mjs';
-import { writeRecord, renderBody } from '../../skills/using-heirloom/lib/records.mjs';
-import { submittedTask } from '../helpers/handoff-fixture.mjs';
-import { approveTask } from '../../skills/using-heirloom/dashboard/approve.mjs';
-import { draftDigest } from '../../skills/using-heirloom/lib/canonical.mjs';
-import { readJson } from '../../skills/using-heirloom/lib/fsx.mjs';
+import { writeRecord } from '../../skills/using-heirloom/lib/records.mjs';
+import { approvedTask } from '../helpers/handoff-fixture.mjs';
+import { CART_HEAD } from '../helpers/judge-fixture.mjs';
 
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -129,22 +127,14 @@ test('stop: spec and plan documents alone are not work changes (brainstorming/pl
   assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: false })).remind, true);
 });
 
-test('stop: an approved task whose code changed is reminded of the incremental recheck, once per state', async () => {
-  const t = await submittedTask();
-  const paths = taskPaths(t.home, t.taskId);
-  const draft = /** @type {any} */ (await readJson(paths.draft));
-  await approveTask({
-    home: t.home,
-    taskId: t.taskId,
-    keystore: 'file',
-    request: { kind: 'full', draftSha256: draftDigest(draft), sourceHash: t.sourceHash, summary: ['s'], items: [{ index: 0, decision: 'approved' }] },
-  });
+test('stop: a judged task whose code changed is reminded of the recheck, once per state', async () => {
+  const t = await approvedTask();
   assert.equal((await evaluateStop({ cwd: t.repo.dir, home: t.home, stopHookActive: false })).reason, 'handoff_requested', 'the approved state itself');
 
   await t.repo.write('docs/notes.md', 'only a document\n');
   assert.deepEqual(await evaluateStop({ cwd: t.repo.dir, home: t.home, stopHookActive: false }), { remind: false, reason: 'recheck_not_needed' }, 'a document alone does not ask for a recheck');
 
-  await t.repo.write('src/a.mjs', 'export const a = 3;\n');
+  await t.repo.write('src/cart.mjs', `${CART_HEAD}// changed\n`);
   const first = await evaluateStop({ cwd: t.repo.dir, home: t.home, stopHookActive: false });
   assert.equal(first.reason, 'recheck');
   assert.equal(first.remind, true);
@@ -170,10 +160,7 @@ test('stop: respects project specGlobs', async () => {
  * @param {string[]} codePaths
  */
 async function record(root, id, kind, title, codePaths, active = true) {
-  const body =
-    kind === 'axiom'
-      ? renderBody('axiom', { property: 'P', scope: 'S', exceptions: '', checks: '' })
-      : renderBody('decision', { problem: 'P', choice: 'C', alternatives: '', scope: '' });
+  const body = kind === 'axiom' ? '\n## 유지할 성질\n\nP\n' : '\n## 문제\n\nP\n\n## 선택과 이유\n\nC\n';
   await writeRecord(root, {
     meta: {
       schemaVersion: 1,
@@ -202,15 +189,14 @@ test('session context: convention only outside a git repository', async () => {
   assert.doesNotMatch(context, /^<heirloom-project>$/m);
 });
 
-test('session context: axioms, decision index with related ones first, cap, pending tasks', async () => {
+test('session context: rules, no scope from records before the pivot, pending tasks', async () => {
   const { upstream, repo, home } = await workRepo();
-  // Records merged on the base branch are active (PLAN 14.3).
+  // Schema 1 records are past records since the pivot: they give no scope (pivot 7).
   await record(upstream.dir, 'a-00000001', 'axiom', '승인은 사람만 한다', ['skills/**']);
-  await record(upstream.dir, 'a-00000002', 'axiom', '비활성 axiom', [], false);
   await record(upstream.dir, 'd-00000001', 'decision', '무관한 결정', ['lib/other.mjs']);
-  await record(upstream.dir, 'd-00000002', 'decision', '관련 결정', ['src/**/*.mjs']);
-  await record(upstream.dir, 'd-00000003', 'decision', '또 다른 무관한 결정', ['lib/x.mjs']);
-  await record(upstream.dir, 'd-00000004', 'decision', '폐기된 결정', ['src/a.mjs'], false);
+  await record(upstream.dir, 'd-00000002', 'decision', '관련 결정', ['src/**/*.mjs', 'lib/other.mjs']);
+  await record(upstream.dir, 'd-00000003', 'decision', '경로 없는 결정', []);
+  await record(upstream.dir, 'd-00000004', 'decision', '폐기된 결정', ['src/gone.mjs'], false);
   upstream.commitAll('records');
   repo.git('fetch', '-q', 'origin');
   repo.git('merge', '-q', 'origin/main');
@@ -232,17 +218,18 @@ test('session context: axioms, decision index with related ones first, cap, pend
   }
 
   const context = await buildSessionContext({ cwd: repo.dir, home, pluginRoot: PLUGIN_ROOT });
-  assert.match(context, /a-00000001: 승인은 사람만 한다/);
-  assert.doesNotMatch(context, /비활성 axiom/);
-  assert.doesNotMatch(context, /폐기된 결정/);
-  const related = context.indexOf('d-00000002');
-  const unrelated = context.indexOf('d-00000001');
-  assert.ok(related !== -1 && unrelated !== -1 && related < unrelated, 'related decision listed first');
-  assert.doesNotMatch(context, /d-00000003/, 'capped at maxDecisions');
-  assert.match(context, /1개 더 있음/);
+  assert.match(context, /## 규칙\n- 요청이 기존 결정과 충돌하면[^\n]*\n- spec 문서는 작성 시점의 의도다/);
+  assert.doesNotMatch(context, /결정 기록 범위/);
+  assert.doesNotMatch(context, /d-0000000\d|a-00000001|무관한 결정|승인은 사람만 한다|src\/gone\.mjs/, 'no ids, titles, axioms or inactive records');
   assert.match(context, new RegExp(`${taskId}.*승인됨`));
   assert.match(context, /apply-approval/);
-  assert.match(context, /fetch/);
+});
+
+test('session context: no scope section without decisions', async () => {
+  const { repo, home } = await workRepo();
+  const context = await buildSessionContext({ cwd: repo.dir, home, pluginRoot: PLUGIN_ROOT });
+  assert.match(context, /## 규칙/);
+  assert.doesNotMatch(context, /결정 기록 범위/);
 });
 
 test('session context: does not create id files in a repository never used with Heirloom', async () => {

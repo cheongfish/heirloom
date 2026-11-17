@@ -9,16 +9,16 @@
     "maxRecords": 8,
     "maxTokens": 6000
   },
-  "sessionIndex": {
-    "maxDecisions": 30
-  },
-  "curation": {
-    "minUnreviewed": 10,
-    "maxAgeDays": 30,
-    "minForAge": 3,
-    "batchSize": 20
-  },
   "testCadence": {
     "mode": "off"
+  },
+  "probe": {
+    "setup": [],
+    "maxProbes": 10,
+    "setupTimeoutSeconds": 600,
+    "testTimeoutSeconds": 600
+  },
+  "spec": {
+    "afterMerge": "delete"
   }
 }

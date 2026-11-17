@@ -10,15 +10,12 @@ import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { submittedTask } from '../helpers/handoff-fixture.mjs';
+import { approvedTask as judgedAndAccepted } from '../helpers/handoff-fixture.mjs';
 import { providerTask } from '../helpers/provider-fixture.mjs';
 import { tempDir } from '../helpers/git-fixture.mjs';
-import { approveTask } from '../../skills/using-heirloom/dashboard/approve.mjs';
 import { applyApproval, completePr, prTemplateChoice } from '../../skills/using-heirloom/lib/apply.mjs';
-import { draftDigest } from '../../skills/using-heirloom/lib/canonical.mjs';
 import { HeirloomError } from '../../skills/using-heirloom/lib/errors.mjs';
 import { deriveState, readEvents } from '../../skills/using-heirloom/lib/events.mjs';
-import { readJson } from '../../skills/using-heirloom/lib/fsx.mjs';
 import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
 import { openMergeRequest } from '../../skills/using-heirloom/lib/merge-request.mjs';
 import { checkPrExpiry } from '../../skills/using-heirloom/lib/pr-expiry.mjs';
@@ -36,11 +33,14 @@ process.env.GIT_TERMINAL_PROMPT = '0';
 const MR_URL = 'https://gitlab.com/group/sub/widgets/-/merge_requests/7';
 
 /**
- * A submitted task on a GitLab-looking remote, approved in the dashboard, with a fake glab.
+ * A task on a GitLab-looking remote, judged in the dashboard with every question accepted,
+ * with a fake glab.
  * @param {{ remote?: string, glab?: { hosts?: string[], mrs?: any[], fail?: string } | null }} [options]
  */
 async function approvedTask({ remote = 'git@gitlab.com:group/sub/widgets.git', glab = {} } = {}) {
-  const t = await submittedTask();
+  // The probes run node: the PATH of an earlier task in the same test may lack it.
+  process.env.PATH = PATH0;
+  const t = await judgedAndAccepted();
   t.repo.git('remote', 'set-url', 'origin', remote);
   const dir = await tempDir('glab');
   const log = path.join(dir, 'log.jsonl');
@@ -51,15 +51,7 @@ async function approvedTask({ remote = 'git@gitlab.com:group/sub/widgets.git', g
   process.env.FAKE_GH_LOG = path.join(dir, 'gh.jsonl');
   process.env.PATH = glab === null ? await gitOnlyPath() : [FAKE_GLAB_DIR, FAKE_GH_DIR, PATH0].join(path.delimiter);
 
-  const paths = taskPaths(t.home, t.taskId);
-  const draft = /** @type {any} */ (await readJson(paths.draft));
-  const approval = await approveTask({
-    home: t.home,
-    taskId: t.taskId,
-    keystore: 'file',
-    request: { kind: 'full', draftSha256: draftDigest(draft), sourceHash: t.sourceHash, summary: ['a를 2로 바꿨다', 'spec을 추가했다'], items: [{ index: 0, decision: 'approved' }] },
-  });
-  return { ...t, approval, paths, log, glabState };
+  return { ...t, paths: taskPaths(t.home, t.taskId), log, glabState };
 }
 
 async function gitOnlyPath() {
@@ -95,7 +87,7 @@ test('gitlab.com: apply reports MR material; complete records the MR with its pr
   const t = await approvedTask();
   const out = await applyAny({ home: t.home, taskId: t.taskId });
   assert.equal(out.state, 'applied');
-  assert.equal(out.files.length, 1);
+  assert.deepEqual(out.files, []);
   assert.equal(out.pr.available, true);
   assert.equal(out.pr.reason, null);
   assert.equal(out.pr.provider, 'gitlab');
@@ -146,7 +138,7 @@ test('an MR closed without merge expires the task; merged or unknown MRs keep it
   assert.ok((await calls(t.log)).some((a) => a[0] === 'api' && a.includes('projects/group%2Fsub%2Fwidgets/merge_requests/7')));
 });
 
-test('glab missing or not logged in: records are written and the reason is reported', async () => {
+test('glab missing or not logged in: the judgment is applied and the reason is reported', async () => {
   const missing = await approvedTask({ glab: null });
   const a = await applyAny({ home: missing.home, taskId: missing.taskId });
   assert.equal(a.state, 'applied');
@@ -246,7 +238,7 @@ test('open-mr: creates the MR from a body file without a shell; a second run fin
   await rejectsWith(openMergeRequest({ home: t.home, taskId: t.taskId, title: 't', bodyFile }), 'E_CONFLICT');
 });
 
-test('open-mr: refuses before the records are written, on a GitHub remote, and without glab', async () => {
+test('open-mr: refuses before the judgment is applied, on a GitHub remote, and without glab', async () => {
   const dir = await tempDir('body');
   const bodyFile = path.join(dir, 'body.md');
   await writeFile(bodyFile, '- 요약\n');
@@ -324,7 +316,9 @@ test('scripts: apply → open-mr creates the MR with the template body unchanged
   assert.deepEqual(t.run('apply', ['--task', t.taskId]).out.data.pr.existing, { iid: 1, url, base: 'main' });
 
   const done = t.run('complete', ['--task', t.taskId, '--pr-url', url]);
-  assert.deepEqual(done.out.data, { taskId: t.taskId, state: 'pr_created', prUrl: url, provider: 'gitlab' });
+  const { status, ...rest } = done.out.data;
+  assert.deepEqual(rest, { taskId: t.taskId, state: 'pr_created', prUrl: url, provider: 'gitlab' });
+  assert.deepEqual([status.sha, status.posted], [t.repo.git('rev-parse', 'HEAD'), true]);
   assert.equal((await t.lastEvent())?.provider, 'gitlab');
 
   const update = t.run('open-mr', ['--task', t.taskId, '--iid', '1', '--body-file', await t.bodyFile('- 새 요약\n')]);

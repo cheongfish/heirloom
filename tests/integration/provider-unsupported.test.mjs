@@ -1,5 +1,5 @@
 // Unsupported remotes (a local path, GitHub Enterprise, a host glab is not logged in to): the
-// records are written, no PR or MR is opened, and neither gh nor glab is used for one.
+// judgment is applied, no PR or MR is opened, and neither gh nor glab is used for one.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,12 +7,12 @@ import assert from 'node:assert/strict';
 import { ROOT, providerTask } from '../helpers/provider-fixture.mjs';
 import { buildSessionContext } from '../../skills/using-heirloom/lib/session-context.mjs';
 
-test('a local path remote: records written, unsupported_remote, no gh or glab call at all', async () => {
+test('a local path remote: judgment applied, unsupported_remote, no gh or glab call at all', async () => {
   const t = await providerTask({ remote: '/srv/git/widgets.git' });
   const r = t.run('apply', ['--task', t.taskId]);
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual([r.out.data.pr.available, r.out.data.pr.provider, r.out.data.pr.reason, r.out.data.pr.repo, r.out.data.pr.host], [false, null, 'unsupported_remote', null, null]);
-  assert.equal(r.out.data.files.length, 1);
+  assert.equal(r.out.data.state, 'applied');
   assert.deepEqual(await t.calls('gh'), []);
   assert.deepEqual(await t.calls('glab'), []);
 

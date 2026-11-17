@@ -71,4 +71,4 @@ The installed version is `version` in `<plugin folder>/.claude-plugin/plugin.jso
 
 ## Remove local data
 
-Removing the plugin keeps `~/.heirloom/` (approvals, keys, task state) and the repository's `.heirloom/` records. Delete `~/.heirloom/` only if the user wants to; see [data.md](data.md#what-you-may-delete) first.
+Removing the plugin keeps `~/.heirloom/` (judgments, keys, task state) and the repository's `.heirloom/` records. Delete `~/.heirloom/` only if the user wants to; see [data.md](data.md#what-you-may-delete) first.

@@ -44,16 +44,14 @@ export function taskPaths(home, taskId) {
     dir,
     input: path.join(dir, 'input.json'),
     draft: path.join(dir, 'draft.json'),
-    draftInitial: path.join(dir, 'draft.initial.json'),
     check: path.join(dir, 'check.json'),
     handoff: path.join(dir, 'handoff.md'),
     approvals: path.join(dir, 'approvals'),
     events: path.join(dir, 'events.jsonl'),
-    curation: path.join(dir, 'curation.json'),
     conversation: path.join(dir, 'conversation.json'),
     prBody: path.join(dir, 'pr-body.md'),
-    /** @param {'curate' | 'apply'} phase */
-    agentLog: (phase) => path.join(dir, `agent-${phase}.log`),
+    probes: path.join(dir, 'probes'),
+    answers: path.join(dir, 'answers.json'),
   };
 }
 
@@ -79,7 +77,6 @@ export function repoPaths(root) {
     decisions: path.join(dir, 'decisions'),
     axioms: path.join(dir, 'axioms'),
     config: path.join(dir, 'config.json'),
-    curation: path.join(dir, 'curation'),
   };
 }
 

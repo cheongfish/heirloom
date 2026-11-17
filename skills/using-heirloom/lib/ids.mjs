@@ -158,8 +158,7 @@ export async function resolveIds(home, info) {
         await writeFileAtomic(repo.file, `${repoId}\n`, { mode: 0o644 });
       }
     }
-    const managed = index.worktrees[worktreeId]?.managed;
-    index.worktrees[worktreeId] = { repoId, path: info.root, lastSeen: new Date().toISOString(), ...(managed ? { managed } : {}) };
+    index.worktrees[worktreeId] = { repoId, path: info.root, lastSeen: new Date().toISOString() };
     return { repoId, worktreeId };
   });
 }

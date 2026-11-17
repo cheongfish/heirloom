@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
+import { SPEC } from '../helpers/handoff-fixture.mjs';
 import { ROOT, providerTask } from '../helpers/provider-fixture.mjs';
 
 const PR_URL = 'https://github.com/acme/widgets/pull/1';
@@ -28,11 +29,12 @@ test('apply → gh pr create → apply finds the PR → complete records it with
   assert.equal(first.status, 0, first.stderr);
   const pr = first.out.data.pr;
   assert.deepEqual([pr.available, pr.reason, pr.base, pr.head, pr.existing, pr.template], [true, null, 'main', 'feat', null, '.github/pull_request_template.md']);
-  assert.equal(first.out.data.files.length, 1);
+  // No decision record was kept; the spec is deleted as the judgment's default lifetime says.
+  assert.deepEqual([first.out.data.files, first.out.data.removed], [[], [SPEC]]);
   assert.equal(await t.state(), 'applied');
 
   // The agent opens the PR itself with gh.
-  const body = await t.bodyFile('## 요약\n\n- a를 2로 바꿨다\n- spec을 추가했다\n');
+  const body = await t.bodyFile('## 요약\n\n- 할인 경계를 100개로 바꿨다\n');
   const env = { ...process.env, FAKE_GH_STATE: t.files.ghState };
   execFileSync(process.execPath, [path.join(ROOT, 'tests', 'helpers', 'fake-gh', 'gh'), 'pr', 'create', '--repo', pr.repo, '--base', pr.base, '--head', pr.head, '--title', 'feat: a', '--body-file', body], { env });
 
@@ -42,18 +44,20 @@ test('apply → gh pr create → apply finds the PR → complete records it with
 
   const done = t.run('complete', ['--task', t.taskId, '--pr-url', PR_URL]);
   assert.equal(done.status, 0, done.stderr);
-  assert.deepEqual(done.out.data, { taskId: t.taskId, state: 'pr_created', prUrl: PR_URL, provider: 'github' });
+  const { status, ...rest } = done.out.data;
+  assert.deepEqual(rest, { taskId: t.taskId, state: 'pr_created', prUrl: PR_URL, provider: 'github' });
+  assert.deepEqual([status.sha, status.posted], [t.repo.git('rev-parse', 'HEAD'), true]);
   const event = await t.lastEvent();
   assert.deepEqual([event?.type, event?.provider, event?.url], ['pr_created', 'github', PR_URL]);
   assert.equal(t.run('complete', ['--task', t.taskId, '--pr-url', 'https://github.com/acme/widgets/pull/2']).status, 3, 'another PR URL conflicts');
 });
 
-test('gh missing or not logged in: the records are written and the reason is reported', async () => {
+test('gh missing or not logged in: the judgment is applied and the reason is reported', async () => {
   const missing = await providerTask({ remote: 'git@github.com:acme/widgets.git', gh: null });
   const a = missing.run('apply', ['--task', missing.taskId]);
   assert.equal(a.status, 0, a.stderr);
   assert.deepEqual([a.out.data.pr.available, a.out.data.pr.provider, a.out.data.pr.reason], [false, 'github', 'gh_missing']);
-  assert.equal(a.out.data.files.length, 1);
+  assert.equal(await missing.state(), 'applied');
 
   const unauth = await providerTask({ remote: 'git@github.com:acme/widgets.git', gh: { authed: false } });
   const b = unauth.run('apply', ['--task', unauth.taskId]);

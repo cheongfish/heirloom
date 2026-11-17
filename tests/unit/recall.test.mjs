@@ -1,10 +1,9 @@
-// Recall relevance, limits and the pending-change rules (MVP-PLAN M6).
+// Recall relevance and limits (MVP-PLAN M6).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { estimateTokens, pathMatches, scoreRecord, selectWithinLimits, splitList } from '../../skills/using-heirloom/lib/recall.mjs';
-import { approvalIds, pendingChange } from '../../skills/using-heirloom/lib/record-status.mjs';
 
 test('estimateTokens: UTF-8 bytes ÷ 3, so one Hangul syllable is about one token', () => {
   assert.equal(estimateTokens(''), 0);
@@ -47,56 +46,4 @@ test('selectWithinLimits: score order, axioms first on ties, count and token lim
 test('splitList: comma-separated and repeated values, trimmed and unique', () => {
   assert.deepEqual(splitList(['a, b', 'c', 'a', ' ']), ['a', 'b', 'c']);
   assert.deepEqual(splitList(undefined), []);
-});
-
-const ap = (/** @type {string} */ id) => ({ id, signer: 'SHA256:x', approvedAt: '2026-11-12T00:00:00Z' });
-/** @returns {any} */
-const meta = (over = {}) => ({
-  schemaVersion: 1,
-  id: 'd-00000001',
-  kind: 'decision',
-  title: 't',
-  active: true,
-  codePaths: [],
-  topics: [],
-  supersedes: [],
-  supersededBy: null,
-  relations: [],
-  sources: [],
-  taskId: 't-20261112-aaaaaaaa',
-  approval: ap('ap-000000000001'),
-  ...over,
-});
-
-test('approvalIds: current approval, deprecation and replaced revisions', () => {
-  const m = meta({
-    deprecation: { reason: 'r', taskId: 't-20261112-cccccccc', approval: ap('ap-000000000003') },
-    revisions: [{ approval: ap('ap-000000000000'), replacedBy: 'ap-000000000001', taskId: 't-20261112-bbbbbbbb', reason: 'r' }],
-  });
-  assert.deepEqual([...approvalIds(m)].sort(), ['ap-000000000000', 'ap-000000000001', 'ap-000000000003']);
-});
-
-test('pendingChange: what a worktree copy adds on top of the base copy', () => {
-  const none = () => undefined;
-  const base = meta();
-  assert.deepEqual(pendingChange(meta(), null, none), { change: 'add', taskId: 't-20261112-aaaaaaaa', by: null });
-  assert.equal(pendingChange(meta(), base, none), null);
-
-  const deprecated = meta({ active: false, deprecation: { reason: 'r', taskId: 't-20261112-cccccccc', approval: ap('ap-000000000009') } });
-  assert.deepEqual(pendingChange(deprecated, base, none), { change: 'deprecate', taskId: 't-20261112-cccccccc', by: null });
-  assert.equal(pendingChange(deprecated, deprecated, none), null, 'already merged');
-
-  const updated = meta({
-    title: 'new',
-    approval: ap('ap-000000000002'),
-    revisions: [{ approval: ap('ap-000000000001'), replacedBy: 'ap-000000000002', taskId: 't-20261112-bbbbbbbb', reason: 'r' }],
-  });
-  assert.deepEqual(pendingChange(updated, base, none), { change: 'update', taskId: 't-20261112-bbbbbbbb', by: null });
-  assert.equal(pendingChange(base, updated, none), null, 'the base is newer than the worktree');
-
-  const superseded = meta({ active: false, supersededBy: 'd-00000002' });
-  const lookup = (/** @type {string} */ id) => (id === 'd-00000002' ? meta({ id, taskId: 't-20261112-dddddddd' }) : undefined);
-  assert.deepEqual(pendingChange(superseded, base, lookup), { change: 'supersede', taskId: 't-20261112-dddddddd', by: 'd-00000002' });
-
-  assert.equal(pendingChange(meta({ title: 'hand edit' }), base, none), null, 'a hand edit carries no approval');
 });
