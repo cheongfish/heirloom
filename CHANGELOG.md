@@ -20,6 +20,7 @@
 
 ### 변경
 
+- 사용자 문서(README, `docs/agent/`)를 판정 흐름에 맞춰 고쳤습니다. 탐침·예측·판정, PR 단락과 `heirloom/understood` commit status, spec 처리와 `spec.afterMerge`, 좁은 결정 기록과 앵커 확인을 설명하고, commit status를 브랜치 보호의 머지 조건으로 거는 방법과 0.4 이전 기록(스키마 1 결정, axiom)을 다루는 방법을 더했습니다.
 - 0.4 이전 형식의 기록(스키마 1 결정, axiom)은 과거 기록으로만 읽습니다. `recall-context`는 이 기록을 규칙(`records`)으로 돌려주지 않고 `legacy`에 id와 파일만 알리며, 세션 시작의 결정 기록 범위에도 넣지 않습니다. 저장소의 기록 파일은 지우지 않습니다. `recall-context`의 결과에서 `inactive`가 없어지고 `legacy`가 생겼으며, `records` 항목은 `title`·`kind` 대신 `choice`·`anchorCheck`·`anchors`를 씁니다.
 - 세션 시작 블록을 줄였습니다. 활성 axiom 목록, decision 색인(제목과 `[관련]` 표시), 다른 작업의 머지 대기 변경, 머지 판정 줄을 빼고, 규칙 두 줄과 결정 기록이 걸린 경로 목록만 넣습니다. 결정 원문은 그 경로를 고치기 전에 `recall-context`로 읽습니다. 프로젝트 설정 `sessionIndex.maxDecisions`는 더 이상 쓰지 않으며, 기존 설정 파일에 있어도 무시합니다.
 

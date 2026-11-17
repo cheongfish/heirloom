@@ -5,7 +5,7 @@ description: "Heirloom session conventions for context recall, handoffs, and hum
 
 # Using Heirloom
 
-Heirloom hands off finished work for dashboard approval and preserves approved decisions for later tasks. A handoff reports readiness; it proves neither correctness nor approval.
+Heirloom hands off finished work for a human to predict and judge in the dashboard before merge, and keeps the few decisions later work must respect as anchored records. A handoff reports readiness; it proves neither correctness nor approval.
 
 ## When to request a handoff
 

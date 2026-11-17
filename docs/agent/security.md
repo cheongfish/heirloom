@@ -2,16 +2,18 @@
 
 The development agent has shell and file write access. Heirloom therefore does not try to make forged approvals impossible. It aims to make them **detectable and auditable**.
 
-## Approval signatures
+## Judgment signatures
 
-- The dashboard signs each approval with a per-user ed25519 key.
+- The dashboard signs each judgment with a per-user ed25519 key.
 - The signature covers:
-  - the approved source state, material hashes and draft digest,
-  - the final summary and the decision on each item,
-  - the approval time and the approver (key fingerprint and git user).
-- The signature is verified before records are written or a PR is opened. In these cases the handoff is treated as not approved, and nothing is written:
+  - the judged source state, head commit, material hashes, draft digest and probe run hash,
+  - per question: the prediction or answer, what was revealed, the hashes of the probe outputs it rests on, the verdict, the reason, spec choices and records kept,
+  - the behavior descriptions as edited, the spec lifetime and the confirmed discussions,
+  - the prediction and judgment times and the approver (key fingerprint and git user).
+- The signature is verified before records are written, the PR paragraph is built or the commit status is posted. In these cases the handoff is treated as not judged, and nothing is written:
   - the signature is missing or wrong,
-  - the draft changed after approval.
+  - the draft changed after the judgment.
+- Predictions are saved before anything is revealed, and the server does not send observed values until then.
 - The private key is kept in the first available of:
   1. the macOS keychain,
   2. Linux `secret-tool` (when a D-Bus session is available),
@@ -22,7 +24,7 @@ The development agent has shell and file write access. Heirloom therefore does n
 
 - Binds to `127.0.0.1` only. Other computers cannot connect.
 - Rejects requests whose `Host` or `Origin` is not the dashboard address. It sends no CORS headers and rejects cross-site requests (`Sec-Fetch-Site: cross-site`).
-- Requests that change state (approve, discard) need a session token. The server creates the token in memory at start and never writes it to disk.
+- Requests that change state (predict, judge, discard) need a session token. The server creates the token in memory at start and never writes it to disk.
 - The page uses a strict Content Security Policy that blocks inline scripts.
 
 ## Probe runs
@@ -38,15 +40,17 @@ A probe run executes the commands of the agent's probes file, the test command a
 A program running as the same OS user, such as the development agent itself, can bypass this:
 
 - **Reading the key file.** When the private key is kept in a file, a program running as the same user can read it and forge approvals. A keychain reduces this risk but does not remove it.
-- **Approving through the dashboard.** A program running as the same user can load the dashboard page, take the session token, and call the approval API.
+- **Judging through the dashboard.** A program running as the same user can load the dashboard page, take the session token, and call the prediction and judgment API.
+- **Reading outputs before predicting.** Probe outputs are on disk under `~/.heirloom/tasks/<taskId>/probes/` from the moment they run. Hiding them in the dashboard keeps a human honest, not a program.
 
 These limits concern deliberate bypasses. For detection, Heirloom keeps:
 
-- **An audit log.** For every approval request, the dashboard server logs the `User-Agent` and `Sec-Fetch-*` headers to `~/.heirloom/server/server.log`. This helps spot requests that did not come from a browser. Headers can be forged, though, so the log alone is not proof.
-- **Key fingerprints.** Approval records and the repository's record files include the signing key fingerprint. Review the `.heirloom/` changes as part of the PR.
+- **An audit log.** For every judgment request, the dashboard server logs the `User-Agent` and `Sec-Fetch-*` headers to `~/.heirloom/server/server.log`. This helps spot requests that did not come from a browser. Headers can be forged, though, so the log alone is not proof.
+- **Key fingerprints.** Judgment records and the repository's decision records include the signing key fingerprint. Review the `.heirloom/` changes as part of the PR.
+- **Commit status.** `heirloom/understood` is posted with your `gh` or `glab` login. Anyone with write access to the repository can post a status of the same name; a status is a signal on the PR, not proof of a judgment.
 
 ## Recommendations
 
 - Use a keychain where one is available. This is the default.
 - Do not instruct the agent to read or write `~/.heirloom/` directly.
-- If the agent reports something as approved that you did not approve, check `server.log` and the approval record times.
+- If the agent reports something as judged that you did not judge, check `server.log` and the judgment record times.

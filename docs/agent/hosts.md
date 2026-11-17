@@ -1,6 +1,6 @@
 # Hosts
 
-Heirloom runs in Claude Code, Codex, Antigravity and, in part, Cursor CLI. The handoff, the dashboard, the approval and the records work the same in all of them. What differs is how each host loads the plugin, injects the convention at session start and reminds the agent at stop.
+Heirloom runs in Claude Code, Codex, Antigravity and, in part, Cursor CLI. The handoff, the probe runs, the dashboard, the judgment and the records work the same in all of them. What differs is how each host loads the plugin, injects the convention at session start and reminds the agent at stop.
 
 ## Support level
 
