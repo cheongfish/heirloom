@@ -32,6 +32,7 @@ The environment variable `HEIRLOOM_HOME` changes this location. Directories are 
 | `tasks/<taskId>/handoff.md` | Readable handoff file |
 | `tasks/<taskId>/approvals/ap-<id>.json` | Signed approval records |
 | `tasks/<taskId>/events.jsonl` | Task event log |
+| `tasks/<taskId>/probes/` | The last probe run: the probes file it ran (`spec.json`), outputs and hashes on base and head (`result.json`), the test command's output (`tests-base.log`, `tests-head.log`) |
 | `sessions/<hash>.json` | Per worktree: the transcript path, first and last hook time of recent sessions (kept for 7 days), and whether the session was told it can hand off work without a spec |
 | `keys/current.json` | Fingerprint of the current signing key and where its private key is kept |
 | `keys/private.key` | The private key, only when no keychain can be used (mode 0600) |

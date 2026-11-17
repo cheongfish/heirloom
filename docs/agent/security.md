@@ -25,6 +25,14 @@ The development agent has shell and file write access. Heirloom therefore does n
 - Requests that change state (approve, discard) need a session token. The server creates the token in memory at start and never writes it to disk.
 - The page uses a strict Content Security Policy that blocks inline scripts.
 
+## Probe runs
+
+A probe run executes the commands of the agent's probes file, the test command and the setup commands, once on the base and once on the head of the change.
+
+- They run without a shell, in temporary worktrees outside the repository (removed afterwards), with your user's permissions. The network is not limited.
+- The commands are recorded with their outputs in `~/.heirloom/tasks/<taskId>/probes/`, so you can see what ran.
+- A probe that runs too long is killed with its process group (`timeoutSeconds`, default 30).
+
 ## Known limits
 
 A program running as the same OS user, such as the development agent itself, can bypass this:

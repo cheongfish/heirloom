@@ -13,6 +13,15 @@ export const DEFAULT_SPEC_GLOBS = Object.freeze(['docs/superpowers/specs/**', '*
  * @property {string[]} specGlobs
  * @property {{ maxRecords: number, maxTokens: number }} recall
  * @property {{ mode: 'off' | 'phase' }} testCadence opt-in rule for how often the full test suite runs
+ * @property {ProbeConfig} probe how probes run (pivot 5.1)
+ */
+
+/**
+ * @typedef {object} ProbeConfig
+ * @property {string[][]} setup commands run once in each probe worktree before the probes (dependency install)
+ * @property {number} maxProbes
+ * @property {number} setupTimeoutSeconds per setup command
+ * @property {number} testTimeoutSeconds default for the test command when the probes file gives none
  */
 
 /**
@@ -30,6 +39,12 @@ export async function loadProjectConfig(root) {
     specGlobs: c.specGlobs ?? [...DEFAULT_SPEC_GLOBS],
     recall: { maxRecords: c.recall?.maxRecords ?? 8, maxTokens: c.recall?.maxTokens ?? 6000 },
     testCadence: { mode: c.testCadence?.mode ?? 'off' },
+    probe: {
+      setup: c.probe?.setup ?? [],
+      maxProbes: c.probe?.maxProbes ?? 10,
+      setupTimeoutSeconds: c.probe?.setupTimeoutSeconds ?? 600,
+      testTimeoutSeconds: c.probe?.testTimeoutSeconds ?? 600,
+    },
   };
 }
 

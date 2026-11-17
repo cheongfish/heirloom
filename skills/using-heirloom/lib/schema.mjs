@@ -387,6 +387,32 @@ export const indexSchema = object({
   lastFetch: recordOf(timestamp),
 });
 
+// ---------------------------------------------------------------- probes (pivot 5.1)
+
+/** A command as an argument vector. It runs without a shell. */
+const argv = arrayOf(nonEmpty, { min: 1 });
+
+/** Test output formats Heirloom reads to tell which tests changed between base and head. */
+export const TEST_PARSERS = /** @type {const} */ (['node-tap', 'pytest', 'jest-json', 'exit-code']);
+
+/** The probes file the agent writes: commands that show what this change does. */
+export const probeSpecSchema = object(
+  {
+    probes: arrayOf(
+      object(
+        { id: str({ pattern: /^[a-z][a-z0-9-]{0,31}$/ }), title: nonEmpty, run: argv },
+        { optional: { timeoutSeconds: int({ min: 1, max: 600 }) } },
+      ),
+    ),
+  },
+  {
+    optional: {
+      setup: arrayOf(argv),
+      tests: object({ command: argv, parser: oneOf(...TEST_PARSERS) }, { optional: { timeoutSeconds: int({ min: 1, max: 3600 }) } }),
+    },
+  },
+);
+
 // ---------------------------------------------------------------- config (5.8)
 
 export const projectConfigSchema = object(
@@ -400,6 +426,14 @@ export const projectConfigSchema = object(
       sessionIndex: object({}, { optional: { maxDecisions: int({ min: 0 }) } }),
       curation: object({}, { optional: { minUnreviewed: int({ min: 1 }), maxAgeDays: int({ min: 1 }), minForAge: int({ min: 1 }), batchSize: int({ min: 1 }) } }),
       testCadence: object({}, { optional: { mode: oneOf('off', 'phase') } }),
+      probe: object({}, {
+        optional: {
+          setup: arrayOf(argv),
+          maxProbes: int({ min: 1, max: 50 }),
+          setupTimeoutSeconds: int({ min: 1, max: 3600 }),
+          testTimeoutSeconds: int({ min: 1, max: 3600 }),
+        },
+      }),
     },
   },
 );

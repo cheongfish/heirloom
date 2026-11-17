@@ -34,6 +34,10 @@ The files are JSON, so they cannot hold comments. Unknown keys and out-of-range 
 | `recall.maxRecords` | `8` | Maximum number of records returned by context recall |
 | `recall.maxTokens` | `6000` | Token budget for context recall, estimated as UTF-8 bytes ÷ 3 (about one token per Hangul syllable) |
 | `testCadence.mode` | `"off"` | How often the development workflow (Superpowers and the like) runs tests. `"phase"` adds rules at session start: the plan groups its tasks into phases, each task runs only its own tests, task reviews rely on the implementer's reported runs (a focused test only for a specific doubt), and the full test suite runs only at the end of each phase and at the end (before the final review and the handoff). The test commands are the ones the plan states. |
+| `probe.setup` | `[]` | Commands (argument lists, no shell) run once in each temporary probe worktree before the probes, for example `[["npm", "ci"]]`. The worktrees have no ignored files such as `node_modules`. A probes file with its own `setup` replaces this. |
+| `probe.maxProbes` | `10` | Maximum number of probes in one probe run |
+| `probe.setupTimeoutSeconds` | `600` | Time limit of each setup command |
+| `probe.testTimeoutSeconds` | `600` | Time limit of the test command when the probes file gives none |
 
 ## Environment variables
 

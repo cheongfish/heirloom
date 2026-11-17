@@ -43,6 +43,7 @@ test('loadProjectConfig: defaults without a file, merges and validates a file', 
   assert.equal(defaults.baseBranch, null);
   assert.deepEqual(defaults.specGlobs, DEFAULT_SPEC_GLOBS);
   assert.equal(defaults.recall.maxRecords, 8);
+  assert.deepEqual(defaults.probe, { setup: [], maxProbes: 10, setupTimeoutSeconds: 600, testTimeoutSeconds: 600 });
 
   await mkdir(path.join(root, '.heirloom'));
   await writeFile(

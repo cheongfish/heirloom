@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 추가
+
+- 탐침 실행(`prepare-handoff/scripts/probe.mjs --task <taskId> --file <probes.json>`). 에이전트가 적은 탐침 명령과 테스트 명령을 Heirloom이 base(고정된 merge-base)와 head(인계한 소스 상태, 커밋하지 않은 변경 포함)의 임시 worktree에서 직접 실행합니다. 종료 코드, 출력, 실행 시간과 출력 해시, 탐침 묶음 해시(`probeSetHash`)를 작업의 `probes/`에 남기고, 테스트별 결과가 달라진 테스트를 모읍니다. 테스트 출력은 `node --test --test-reporter=tap`, `pytest -v`, `jest --json`을 읽고, 읽지 못하면 종료 코드만 비교합니다. 프로젝트 설정 `probe.setup`, `probe.maxProbes`(기본 10), `probe.setupTimeoutSeconds`, `probe.testTimeoutSeconds`를 더했습니다.
+
 ### 변경
 
 - 세션 시작 블록을 줄였습니다. 활성 axiom 목록, decision 색인(제목과 `[관련]` 표시), 다른 작업의 머지 대기 변경, 머지 판정 줄을 빼고, 규칙 두 줄과 결정 기록이 걸린 경로 목록만 넣습니다. 결정 원문은 그 경로를 고치기 전에 `recall-context`로 읽습니다. 프로젝트 설정 `sessionIndex.maxDecisions`는 더 이상 쓰지 않으며, 기존 설정 파일에 있어도 무시합니다.
