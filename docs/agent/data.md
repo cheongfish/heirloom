@@ -36,7 +36,9 @@ The environment variable `HEIRLOOM_HOME` changes this location. Directories are 
 | `tasks/<taskId>/answers.json` | The predictions saved for the current draft |
 | `tasks/<taskId>/approvals/ap-<id>.json` | Signed judgments, with the input, draft and probe run each was made on (`.input.json`, `.draft.json`, `.probes.json`). Approvals from before 0.4 may also be here; they are no longer applied. |
 | `tasks/<taskId>/events.jsonl` | Task event log |
-| `tasks/<taskId>/probes/` | The last probe run: the probes file it ran (`spec.json`), outputs and hashes on base and head (`result.json`), the test command's output (`tests-base.log`, `tests-head.log`) |
+| `tasks/<taskId>/probes/` | The last probe run: the probes file it ran (`spec.json`), outputs and hashes on base and head (`result.json`, with the allowance it ran under in `permit`), the test command's output (`tests-base.log`, `tests-head.log`) |
+| `tasks/<taskId>/probe-permit-request.json` | The probe commands last shown for your allowance, each marked as allowed before or new |
+| `tasks/<taskId>/probe-permits/` | Your signed answers to probe permit requests (allowed or denied, with the reason) |
 | `sessions/<hash>.json` | Per worktree: the transcript path, first and last hook time of recent sessions (kept for 7 days), and whether the session was told it can hand off work without a spec |
 | `keys/current.json` | Fingerprint of the current signing key and where its private key is kept |
 | `keys/private.key` | The private key, only when no keychain can be used (mode 0600) |

@@ -7,7 +7,6 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { cloneRepo, makeRepo, tempDir } from '../helpers/git-fixture.mjs';
 import { submittedTask } from '../helpers/handoff-fixture.mjs';
@@ -17,8 +16,6 @@ import { runProbes } from '../../skills/using-heirloom/lib/probe.mjs';
 import { submitDraft } from '../../skills/using-heirloom/lib/submit.mjs';
 import { computeSourceState } from '../../skills/using-heirloom/lib/state.mjs';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const SCRIPT = path.join(ROOT, 'skills', 'prepare-handoff', 'scripts', 'probe.mjs');
 const SPEC = 'docs/specs/cart.md';
 
 const CART_BASE = `export function total({ qty, unit }) {
@@ -185,19 +182,7 @@ test('refused: bad probes files, too many probes, a changed source, a task past 
   assert.match(late, /^E_CONFLICT: 현재 상태\(awaiting_approval\)에서는/);
 });
 
-test('script: prints one JSON object; the probes file path is relative to the working directory', async () => {
-  const { repo, home, taskId } = await nodeTask();
-  const dir = await tempDir('probes');
-  await writeFile(path.join(dir, 'probes.json'), JSON.stringify({ probes: [{ id: 'p1', title: '12개 구매 결제액', run: total12 }] }));
-  const run = (/** @type {string[]} */ args, /** @type {string} */ cwd) => spawnSync(process.execPath, [SCRIPT, ...args], { cwd, encoding: 'utf8', env: { ...process.env, HEIRLOOM_HOME: home } });
-  const ok = run(['--task', taskId, '--file', 'probes.json'], dir);
-  assert.equal(ok.status, 0, ok.stderr);
-  const data = JSON.parse(ok.stdout).data;
-  assert.equal(data.probes[0].head.stdout, '120\n');
-  const missing = run(['--task', taskId, '--file', 'nope.json'], repo.dir);
-  assert.equal(missing.status, 2);
-  assert.match(JSON.parse(missing.stdout).error.message, /탐침 파일을 읽지 못함/);
-});
+// The probe.mjs script is tested with the person's allowance in probe-permit.test.mjs.
 
 // ---------------------------------------------------------------- schema 2 draft
 

@@ -341,7 +341,7 @@ const taskRow = (t) =>
       h('span', { class: 'seed-list-item__title' }, t.branch ?? '(브랜치 없음)'),
       h('span', { class: 'seed-list-item__detail' }, `${t.repoRoot ?? '저장소 알 수 없음'} · ${t.taskId} · 갱신 ${when(t.updatedAt)}`),
     ),
-    h('div', { class: 'seed-list-item__suffix' }, h('div', { class: 'hl-row' }, t.merged === true ? badge('positive', '머지됨') : stateBadge(t.state))),
+    h('div', { class: 'seed-list-item__suffix' }, h('div', { class: 'hl-row' }, t.permitPending ? badge('warning', '허락 대기') : null, t.merged === true ? badge('positive', '머지됨') : stateBadge(t.state))),
   );
 
 /** @param {any} t a listed task: finished, or applied without a PR and already merged */
@@ -351,9 +351,10 @@ async function renderOverview() {
   const data = await api('/api/tasks');
   /** @type {any[]} */
   const tasks = data.tasks;
+  const permits = tasks.filter((t) => t.permitPending);
   const waiting = tasks.filter((t) => t.state === 'awaiting_approval');
-  const stale = tasks.filter((t) => t.stale && t.state !== 'awaiting_approval');
-  const active = tasks.filter((t) => !t.stale && t.state !== 'awaiting_approval' && !isDone(t));
+  const stale = tasks.filter((t) => t.stale && t.state !== 'awaiting_approval' && !t.permitPending);
+  const active = tasks.filter((t) => !t.stale && t.state !== 'awaiting_approval' && !t.permitPending && !isDone(t));
   const applying = active.filter((t) => APPLYING.has(t.state));
   const open = active.filter((t) => !APPLYING.has(t.state));
   const done = tasks.filter((t) => isDone(t) && !t.stale).slice(0, 10);
@@ -393,6 +394,7 @@ async function renderOverview() {
   replace(
     main,
     h('h1', { class: 'hl-title' }, '전체 목록'),
+    permits.length ? listSection('탐침 실행 허락 대기', permits.map(taskRow), '') : null,
     listSection('승인 대기', waiting.map(taskRow), '승인을 기다리는 인계가 없습니다.'),
     optional('반영 대기', applying.map(taskRow)),
     optional('인계되지 않은 변경', unhandedRows, uncheckedNote),
@@ -585,6 +587,75 @@ function prLink(task) {
   const event = [...(task.events ?? [])].reverse().find((/** @type {any} */ e) => e.type === 'pr_created');
   if (!event?.url) return null;
   return h('section', { class: 'hl-card' }, h('p', {}, 'PR: ', h('a', { href: event.url, rel: 'noreferrer noopener', target: '_blank' }, event.url)));
+}
+
+// ------------------------------------------------------------------ probe permit
+
+const PERMIT_ROLE = { setup: '준비', probe: '탐침', tests: '테스트' };
+/** Reason typed for a denial, kept across redraws of the same request. */
+let permitReason = { sha: '', text: '' };
+
+/**
+ * The probe commands waiting for the person's allowance: every command is shown in full
+ * before anything runs.
+ * @param {any} task
+ */
+function permitPanel(task) {
+  const request = task.probePermit.request;
+  if (permitReason.sha !== request.sha256) permitReason = { sha: request.sha256, text: '' };
+  const status = h('div', { class: 'hl-stack' });
+  const allow = /** @type {HTMLButtonElement} */ (button(BUTTON.primary, '허락하고 실행', () => void decide('allowed')));
+  const deny = /** @type {HTMLButtonElement} */ (button(BUTTON.outline, '거절', () => void decide('denied')));
+  const sync = () => {
+    deny.disabled = !permitReason.text.trim();
+  };
+  /** @param {'allowed' | 'denied'} decision */
+  async function decide(decision) {
+    if (decision === 'allowed' && !window.confirm('이 명령들을 base와 head 임시 worktree에서 실행해도 될까요? 이 저장소에서 같은 명령은 다시 묻지 않습니다.')) return;
+    allow.disabled = true;
+    deny.disabled = true;
+    try {
+      await post(`/api/tasks/${encodeURIComponent(task.taskId)}/probe-permit`, { requestSha256: request.sha256, decision, ...(decision === 'denied' ? { reason: permitReason.text.trim() } : {}) });
+      permitReason = { sha: '', text: '' };
+      await loadTask(task.taskId, { force: true });
+    } catch (err) {
+      const e = /** @type {ApiError} */ (err);
+      replace(status, callout('critical', '답을 저장하지 못함', e.message));
+      allow.disabled = false;
+      sync();
+    }
+  }
+  const fresh = request.commands.filter((/** @type {any} */ c) => !c.known).length;
+  sync();
+  return h(
+    'div',
+    { class: 'hl-stack' },
+    h(
+      'section',
+      { class: 'hl-card hl-stack' },
+      h('h2', { class: 'hl-section-title' }, '탐침 실행 허락'),
+      h(
+        'p',
+        { class: 'hl-muted hl-small' },
+        `에이전트가 아래 명령을 이번 변경의 base와 head 임시 worktree에서 각각 실행하려 합니다(새 명령 ${fresh}개). 명령은 셸 없이, 에이전트 세션과 같은 권한으로 실행되며 네트워크도 막지 않습니다. 허락하면 이 저장소에서 같은 명령은 다시 묻지 않습니다. 명령이 실행하는 저장소 코드(테스트 등)는 허락한 뒤에도 바뀔 수 있습니다.`,
+      ),
+      h(
+        'ul',
+        { class: 'hl-files' },
+        request.commands.map((/** @type {any} */ c) =>
+          h(
+            'li',
+            { class: 'hl-stack-tight' },
+            h('div', { class: 'hl-row' }, c.known ? badge('neutral', '이전에 허락함') : badge('warning', '새 명령'), h('span', { class: 'hl-muted hl-small' }, `${PERMIT_ROLE[/** @type {'setup'} */ (c.role)] ?? c.role}${c.id ? ` ${c.id}` : ''}${c.title ? `: ${c.title}` : ''}`)),
+            h('code', { class: 'hl-command' }, commandText(c.run)),
+          ),
+        ),
+      ),
+      fieldBlock('거절 이유 (거절할 때 필수)', textInput({ value: permitReason.text, multiline: true, label: '거절 이유', oninput: (v) => { permitReason.text = v; sync(); } }), '에이전트가 이 이유를 받아 탐침 파일을 고칩니다.'),
+      status,
+      h('div', { class: 'hl-row' }, allow, deny),
+    ),
+  );
 }
 
 // ------------------------------------------------------------------ prediction and judgment
@@ -1211,7 +1282,7 @@ function judgmentSummaryCard(task) {
 // Task screen layout: title and tabs (one panel per tab). The selected tab is kept in the
 // URL hash.
 
-/** @typedef {'overview' | 'judge' | 'approval'} TabId */
+/** @typedef {'overview' | 'permit' | 'judge' | 'approval'} TabId */
 
 const titleSlot = h('div');
 const tabList = h('div', { class: TABS.list, role: 'tablist', 'aria-label': '인계 검토 화면' });
@@ -1219,6 +1290,7 @@ const tabIndicator = h('div', { class: TABS.indicator, 'aria-hidden': 'true' });
 /** @type {Record<TabId, HTMLElement>} */
 const panels = {
   overview: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-overview', 'aria-labelledby': 'tab-overview' }),
+  permit: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-permit', 'aria-labelledby': 'tab-permit' }),
   judge: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-judge', 'aria-labelledby': 'tab-judge' }),
   approval: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-approval', 'aria-labelledby': 'tab-approval' }),
 };
@@ -1237,6 +1309,7 @@ function tabLabel(id) {
     return [h('span', {}, '개요'), n ? badge('warning', `확인 ${n}`) : null];
   }
   if (id === 'approval') return '판정 내용';
+  if (id === 'permit') return [h('span', {}, '탐침 실행 허락'), badge('warning', '대기')];
   const j = judge?.task.judge;
   if (!j) return '질문';
   if (!j.revealed) {
@@ -1322,6 +1395,15 @@ function drawForm(task) {
   }
   // A judged task, or a draft from before 0.4, which is no longer judged here.
   judge = null;
+  if (task.probePermit?.pending) {
+    replace(panels.judge);
+    replace(panels.approval);
+    replace(panels.permit, permitPanel(task));
+    drawTabs(['overview', 'permit']);
+    if (!activeTabChosen) selectTab('permit');
+    return;
+  }
+  replace(panels.permit);
   replace(panels.judge);
   const card = judgmentSummaryCard(task);
   const pr = prLink(task);

@@ -455,6 +455,9 @@ export const EVENT_TYPES = /** @type {const} */ ([
   'discarded',
   'expired',
   'returned',
+  // The person's allowance of probe commands; neither moves the task.
+  'probe_permit_requested',
+  'probe_permit_decided',
   // Written by the context curation removed in 0.4; kept so older task logs still read.
   'agent_started',
   'agent_finished',
@@ -497,6 +500,40 @@ export const probeSpecSchema = object(
       tests: object({ command: argv, parser: oneOf(...TEST_PARSERS) }, { optional: { timeoutSeconds: int({ min: 1, max: 3600 }) } }),
     },
   },
+);
+
+/** A command a probe run would start: a setup command, a probe, or the test command. */
+const probeCommand = object({ role: oneOf('setup', 'probe', 'tests'), run: argv }, { optional: { id: shortId, title: nonEmpty } });
+
+/** The probe commands waiting for the person's allowance. */
+export const probePermitRequestSchema = object({
+  schemaVersion: v1,
+  taskId,
+  repoId: str({ pattern: PATTERNS.repoId }),
+  sha256,
+  requestedAt: timestamp,
+  commands: arrayOf(object({ role: oneOf('setup', 'probe', 'tests'), run: argv, known: bool }, { optional: { id: shortId, title: nonEmpty } }), { min: 1 }),
+});
+
+/**
+ * The person's signed answer to a probe permit request. An allowance covers the exact
+ * commands in it, for every later probe run in the same repository.
+ */
+export const probePermitSchema = object(
+  {
+    schemaVersion: v1,
+    id: approvalId,
+    kind: oneOf('probe-permit'),
+    taskId,
+    repoId: str({ pattern: PATTERNS.repoId }),
+    requestSha256: sha256,
+    commands: arrayOf(probeCommand, { min: 1 }),
+    decision: oneOf('allowed', 'denied'),
+    decidedAt: timestamp,
+    approver: object({ fingerprint: nonEmpty, gitUser: nullable(nonEmpty) }),
+    signature: nonEmpty,
+  },
+  { optional: { reason: nonEmpty } },
 );
 
 // ---------------------------------------------------------------- config (5.8)

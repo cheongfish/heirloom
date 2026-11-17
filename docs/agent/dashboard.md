@@ -13,6 +13,7 @@ The dashboard is a local web page where a human predicts, then judges, what a ha
 
 | Section | Content |
 | --- | --- |
+| 탐침 실행 허락 대기 (probe permit) | Tasks whose probe commands wait for your allowance before they run. Shown only when there are some. |
 | 승인 대기 (awaiting approval) | Handoffs waiting for a human. Always shown. |
 | 반영 대기 (waiting to apply) | Accepted tasks whose PR is not open yet (approved, applied) |
 | 인계되지 않은 변경 (unhanded changes) | Worktrees with code changes but no handoff for their current state |
@@ -32,6 +33,15 @@ The task screen shows the title, the state badge, the task ID and `branch → ba
 | --- | --- |
 | 개요 (overview) | Task boundary (repository, branch, reviewed source state, changed files grouped as 신규/수정/삭제 (new/modified/deleted), materials), warnings, and for a recheck the judgment it builds on and changed files no behavior description points at. A badge shows how many notices need attention. |
 | 예측 n/m → 판정 n/m (predict → judge) | The questions. The label counts what is done. |
+
+### Allowing probe commands
+
+Before Heirloom runs the agent's probes, the task screen opens on **탐침 실행 허락** (allow probe commands). It lists every command that would run on base and head: setup commands (준비), probes (탐침, with id and title) and the test command (테스트), each in full. Commands you allowed before in this repository are marked 이전에 허락함; the others 새 명령 (new).
+
+- **허락하고 실행** (allow and run) signs the allowance; the waiting agent starts the run. The same commands are not asked again in this repository.
+- **거절** (deny) needs a reason. The agent gets it and changes its probes file.
+
+The browser opens once per new request, as after a submit (`dashboard.openBrowser`).
 
 ### Before the reveal
 

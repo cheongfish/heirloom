@@ -20,6 +20,8 @@
 
 - 반복된 되돌림 권고. 같은 질문(같은 id)을 두 번째로 되돌리면 대시보드가 그 질문과 작업 개요에 "설계부터 다시 합의하길 권함"을 보여 주고, 이전 라운드의 되돌림 이유를 함께 보여 줍니다. 판정 화면 응답의 질문마다 `returns`(이전 되돌림)가, 작업 응답에 `repeatedReturns`가 생겼습니다. 에이전트는 `prepare`의 `previousJudgment.returned[].timesReturned`와 `wait-approval`의 `returned[].timesReturned`로 횟수를 받고, 2 이상이면 다시 고치기 전에 사용자에게 설계 합의를 권합니다. PR을 막는 것 외에 자동으로 하는 일은 없습니다.
 
+- 탐침 실행 허락. `probe.mjs`가 준비 명령, 탐침, 테스트 명령을 실행하기 전에 명령 전체를 대시보드 "탐침 실행 허락" 화면에 보이고, 사람이 허락할 때까지 기다립니다(기본 8분, `--timeout-minutes`). 허락과 거절은 사용자 키로 서명해 작업의 `probe-permits/`에 둡니다. 거절에는 이유가 필요하고, 에이전트는 이유가 담긴 `E_INPUT`을 받아 탐침 파일을 고칩니다. 같은 저장소에서 허락한 명령(인자 목록이 글자 그대로 같은 것)은 다시 묻지 않습니다. 시간 안에 답이 없으면 `permission.state: "pending"`을 돌려주고, 같은 명령을 다시 실행하면 같은 요청을 이어서 기다립니다. 탐침 실행 기록(`probes/result.json`)과 결과에 허락 id(`permit`, `permission`)가 남습니다. 전체 목록에 "탐침 실행 허락 대기" 구역이 생겼습니다.
+
 ### 변경
 
 - 사용자 문서(README, `docs/agent/`)를 판정 흐름에 맞춰 고쳤습니다. 탐침·예측·판정, PR 단락과 `heirloom/understood` commit status, spec 처리와 `spec.afterMerge`, 좁은 결정 기록과 앵커 확인을 설명하고, commit status를 브랜치 보호의 머지 조건으로 거는 방법과 0.4 이전 기록(스키마 1 결정, axiom)을 다루는 방법을 더했습니다.

@@ -70,6 +70,11 @@ export function nextState(state, event) {
     case 'stale':
       require(state, event, ['approved', 'applied', 'pr_created']);
       return 'stale';
+    case 'probe_permit_requested':
+    case 'probe_permit_decided':
+      // Probe commands wait for the person's allowance before they run; the task stays where it is.
+      require(state, event, ['prepared', 'drafted']);
+      return /** @type {TaskState} */ (state);
     case 'agent_started':
     case 'agent_finished':
       // Notices about a headless run of the context curation removed in 0.4: older task logs

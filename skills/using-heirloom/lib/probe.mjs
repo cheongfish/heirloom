@@ -4,7 +4,8 @@
 // draft then come from a recorded run, not from the agent's word.
 //
 // Commands run without a shell, with the worktree as working directory and the user's
-// permissions. The network is not limited; the commands are recorded for the human to see.
+// permissions. The network is not limited. The person allows the commands before they run
+// (probe-permit.mjs), and they are recorded with their outputs.
 
 import { spawn } from 'node:child_process';
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readlink, realpath, rm, symlink } from 'node:fs/promises';
@@ -214,7 +215,7 @@ async function overlaySource({ root, dir, files }) {
  * @param {string} label
  * @returns {ProbeSpec}
  */
-function checkSpec(spec, { maxProbes }, label) {
+export function checkProbeSpec(spec, { maxProbes }, label) {
   assertValid(probeSpecSchema, spec, label);
   const s = /** @type {ProbeSpec} */ (spec);
   const ids = s.probes.map((p) => p.id);
@@ -285,10 +286,11 @@ const preview = (r) => ({
 
 /**
  * Run the probes of a prepared handoff on base and head and record the result in the task's
- * `probes/` directory, replacing an earlier run.
- * @param {{ home: string, taskId: string, spec: unknown, specLabel?: string, now?: Date }} options
+ * `probes/` directory, replacing an earlier run. `probe.mjs` reaches this only through the
+ * person's allowance (probe-permit.mjs); `permit` records which one.
+ * @param {{ home: string, taskId: string, spec: unknown, specLabel?: string, permit?: { permitId: string | null }, now?: Date }} options
  */
-export async function runProbes({ home, taskId, spec: rawSpec, specLabel = 'probes', now = new Date() }) {
+export async function runProbes({ home, taskId, spec: rawSpec, specLabel = 'probes', permit, now = new Date() }) {
   const paths = taskPaths(home, taskId);
   return withTaskLock(home, taskId, async () => {
     const input = /** @type {any} */ (await readJson(paths.input));
@@ -299,7 +301,7 @@ export async function runProbes({ home, taskId, spec: rawSpec, specLabel = 'prob
     }
     const root = input.repo.root;
     const config = (await loadProjectConfig(root)).probe;
-    const spec = checkSpec(rawSpec, config, specLabel);
+    const spec = checkProbeSpec(rawSpec, config, specLabel);
 
     const current = await currentSourceState({ root, base: input.base });
     if (current.hash !== input.source.hash) {
@@ -406,6 +408,7 @@ export async function runProbes({ home, taskId, spec: rawSpec, specLabel = 'prob
       setup: { commands: setupCommands, base: setup.base, head: setup.head },
       probes,
       tests: testsRecord,
+      ...(permit ? { permit } : {}),
       warnings,
     };
 
@@ -431,6 +434,7 @@ export async function runProbes({ home, taskId, spec: rawSpec, specLabel = 'prob
         changedCount: testsRecord.changed.length,
       },
       setup: { commands: setupCommands, failed: [...setup.base, ...setup.head].some((s) => s.exitCode !== 0) },
+      ...(permit ? { permit } : {}),
       warnings,
     };
   });

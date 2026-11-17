@@ -51,6 +51,8 @@ export function taskPaths(home, taskId) {
     conversation: path.join(dir, 'conversation.json'),
     prBody: path.join(dir, 'pr-body.md'),
     probes: path.join(dir, 'probes'),
+    probePermitRequest: path.join(dir, 'probe-permit-request.json'),
+    probePermits: path.join(dir, 'probe-permits'),
     answers: path.join(dir, 'answers.json'),
   };
 }

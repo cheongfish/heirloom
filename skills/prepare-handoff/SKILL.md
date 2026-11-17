@@ -59,8 +59,14 @@ Write a probes file outside the repository (for example next to `draftPath`):
 - `setup`: commands run once in each worktree before the probes, for example `[["npm", "ci"]]`. The worktrees have no ignored files such as `node_modules`. The project setting `probe.setup` is used when the file has none.
 
 ```sh
-node <this skill>/scripts/probe.mjs --task <taskId> --file <probes file>
+node <this skill>/scripts/probe.mjs --task <taskId> --file <probes file> [--timeout-minutes <n>]
 ```
+
+Nothing runs until the person allows the commands. Commands they allowed before in this repository (exactly the same argument list) run right away. Otherwise the script shows every command in the dashboard and waits for the answer, 8 minutes by default; give the Bash call a longer timeout, or run it in the background if the host wakes you on completion.
+
+- `permission.state: "allowed"`: the probes ran; read the result below.
+- `permission.state: "pending"` (`timedOut: true`): no answer yet. Tell the user the dashboard (`permission.dashboardUrl`) waits for their allowance of `permission.commands`, then run the same command again; it waits for the same request. Do not change the probes file meanwhile: changed commands make a new request.
+- `E_INPUT` "사람이 탐침 명령을 거절함": the message carries the person's reason. Change the probes file accordingly and run again. Never run the commands yourself to get around a denial.
 
 Read `probes` (outputs per side, `sameOutput`), `tests.changed` (tests whose result differs), `warnings` and `probeSetHash`. If every probe shows the same output on both sides, or a probe fails for a reason unrelated to the change (missing setup, wrong path), fix the probes file and run it again. The last run is the one the draft is checked against.
 
