@@ -1,0 +1,63 @@
+// The prediction and judgment screen in a real browser (pivot step 4): the page shows no
+// result before the predictions are saved, then reveals and takes the verdicts.
+// Runs only with PLAYWRIGHT_CORE (a playwright-core package directory) and CHROMIUM (the
+// browser executable) set, as evals/acceptance/dashboard.mjs uses them.
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+import { OBSERVED, judgedTask } from '../helpers/judge-fixture.mjs';
+import { createDashboardServer } from '../../skills/using-heirloom/dashboard/server.mjs';
+import { deriveState, readEvents } from '../../skills/using-heirloom/lib/events.mjs';
+import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
+
+const { PLAYWRIGHT_CORE, CHROMIUM } = process.env;
+const skip = PLAYWRIGHT_CORE && CHROMIUM ? false : 'PLAYWRIGHT_CORE와 CHROMIUM이 없음';
+
+test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) => {
+  const pw = await import(pathToFileURL(path.join(/** @type {string} */ (PLAYWRIGHT_CORE), 'index.mjs')).href);
+  const { chromium } = pw.default ?? pw;
+  const { home, taskId } = await judgedTask();
+  const server = await createDashboardServer({ home, port: 0, version: '0.0.0-test', codeHash: 'test', keystore: 'file' });
+  t.after(() => server.close());
+  const browser = await chromium.launch({ executablePath: CHROMIUM, headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  /** @type {string[]} */
+  const errors = [];
+  page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
+  page.on('dialog', (/** @type {any} */ d) => d.accept());
+
+  await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
+  await page.getByText('먼저 결과를 예측하세요').waitFor();
+  const before = await page.locator('main').innerText();
+  assert.ok(!before.includes(OBSERVED.head), 'no head output on the page before the reveal');
+  assert.match(before, /qty: 12, unit: 10/, 'the probe command is shown');
+  const reveal = page.getByRole('button', { name: '예측 저장하고 결과 보기' });
+  assert.equal(await reveal.isDisabled(), true, 'disabled until every prediction is in');
+
+  await page.getByLabel('q1 예측').fill(OBSERVED.base);
+  await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
+  await reveal.click();
+  await page.getByText('동작 차이').first().waitFor();
+  const after = await page.locator('main').innerText();
+  assert.ok(after.includes(OBSERVED.head), 'the head output is revealed');
+  assert.match(after, /틀림/);
+  const q1 = page.getByRole('radiogroup', { name: 'q1 판정' });
+  assert.equal(await q1.getByRole('radio', { name: '예상대로' }).isDisabled(), true, 'a wrong prediction cannot be judged as expected');
+
+  await q1.getByRole('radio', { name: '잘못 알았음' }).click();
+  await page.getByRole('radiogroup', { name: 'q2 판정' }).getByRole('radio', { name: '예상대로' }).click();
+  await page.getByRole('radiogroup', { name: 'q3 판정' }).getByRole('radio', { name: '의도와 같음' }).click();
+  await page.getByRole('radiogroup', { name: 'q4 판정' }).getByRole('radio', { name: '답함' }).click();
+  const submit = page.getByRole('button', { name: '판정 저장' });
+  assert.equal(await submit.isDisabled(), true, 'the open choice still needs an answer');
+  await page.getByLabel('q4 답').fill('100으로 한다');
+  await submit.click();
+  await page.getByText('판정 내용').first().waitFor();
+  assert.match(await page.locator('main').innerText(), /모두 수용/);
+  assert.equal(deriveState(await readEvents(taskPaths(home, taskId).events)), 'approved');
+  assert.deepEqual(errors, []);
+});

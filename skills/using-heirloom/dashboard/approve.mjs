@@ -102,6 +102,7 @@ export async function approveTask({ home, taskId, request, keystore }) {
     if (!input || !draft) throw new HeirloomError('E_CONFLICT', '승인할 초안이 없음');
     const state = deriveState(await readEvents(paths.events));
     if (state !== 'awaiting_approval') throw new HeirloomError('E_CONFLICT', `승인 대기 상태가 아님 (현재: ${state})`);
+    if (draft.schemaVersion === 2) throw new HeirloomError('E_CONFLICT', '이 초안은 예측과 판정으로 처리한다(/judge)');
 
     const carried = new Set(input.recheck ? carriedItems({ recheck: input.recheck, draft }).records : []);
     checkRequest(request, draft.records, draft.summary.length, carried);

@@ -316,6 +316,7 @@ const STATE = {
   pr_created: ['positive', 'PR 작성됨'],
   failed: ['critical', '실패'],
   stale: ['critical', '재확인 필요'],
+  returned: ['warning', '되돌림'],
   discarded: ['neutral', '폐기됨'],
   expired: ['neutral', '만료됨'],
 };
@@ -529,7 +530,7 @@ function titleBlock(task) {
       { class: 'hl-spread' },
       input ? h('p', {}, h('code', {}, input.branch ?? '(분리된 HEAD)'), ' → ', h('code', {}, input.base.ref)) : h('span'),
       // Discard is rare and cannot be undone: it sits by the title, not in the sticky approval bar.
-      form?.task.taskId === task.taskId ? discardButton : null,
+      (form ?? judge)?.task.taskId === task.taskId ? discardButton : null,
     ),
   );
 }
@@ -1311,6 +1312,12 @@ async function submitApproval() {
 }
 
 async function discardTask() {
+  if (judge) {
+    const j = judge;
+    if (!window.confirm('이 인계를 폐기할까요? 폐기한 작업은 판정하거나 반영할 수 없습니다.')) return;
+    await judgeStep(j, '폐기 실패', () => post(`/api/tasks/${encodeURIComponent(j.task.taskId)}/discard`, { reason: 'user' }));
+    return;
+  }
   if (!form) return;
   const f = form;
   if (!window.confirm('이 인계를 폐기할까요? 폐기한 작업은 승인하거나 반영할 수 없습니다.')) return;
@@ -1364,7 +1371,7 @@ function approvalSummaryCard(task) {
 }
 
 /** @type {Record<string, string>} */
-const APPROVAL_TITLE = { full: '승인 내용', quick: '간이 승인 내용', incremental: '증분 승인 내용' };
+const APPROVAL_TITLE = { full: '승인 내용', quick: '간이 승인 내용', incremental: '증분 승인 내용', judgment: '판정 내용' };
 
 /** @param {any} task */
 function prLink(task) {
@@ -1373,10 +1380,411 @@ function prLink(task) {
   return h('section', { class: 'hl-card' }, h('p', {}, 'PR: ', h('a', { href: event.url, rel: 'noreferrer noopener', target: '_blank' }, event.url)));
 }
 
+// ------------------------------------------------------------------ prediction and judgment (schema 2)
+
+/**
+ * A radio group styled as a SEED segmented control, with any options. Starts empty.
+ * @param {{ label: string, options: [string, string][], value: string | null, disabled?: Set<string>, onchange: (value: string) => void }} o
+ */
+function choiceControl({ label, options, value, disabled = new Set(), onchange }) {
+  const root = h('div', { class: 'seed-segmented-control__root hl-decision hl-choice', role: 'radiogroup', 'aria-label': label });
+  root.style.setProperty('--segment-count', String(options.length));
+  root.append(h('div', { class: 'seed-segmented-control__indicator', 'aria-hidden': 'true' }));
+  /** @type {HTMLButtonElement[]} */
+  const items = options.map(([v, text]) => h('button', { type: 'button', role: 'radio', class: 'seed-segmented-control__item', 'data-value': v, disabled: disabled.has(v) }, text));
+  root.append(...items);
+  /** @param {string | null} v */
+  const set = (v) => {
+    const index = options.findIndex(([o]) => o === v);
+    items.forEach((item, i) => {
+      item.setAttribute('aria-checked', String(i === index));
+      item.toggleAttribute('data-checked', i === index);
+      item.tabIndex = i === (index < 0 ? 0 : index) ? 0 : -1;
+    });
+    root.toggleAttribute('data-has-value', index >= 0);
+    root.style.setProperty('--segment-index', String(Math.max(index, 0)));
+  };
+  items.forEach((item, i) => {
+    item.addEventListener('click', () => {
+      set(options[i][0]);
+      onchange(options[i][0]);
+    });
+  });
+  set(value);
+  return root;
+}
+
+/** @type {Record<string, string>} */
+const QUESTION_KIND = { predict: '결과 예측', 'test-lock': '테스트가 막는 동작', intent: '의도와 일치', fork: '열린 선택' };
+
+/** Verdict options per question kind, as the server accepts them. @type {Record<string, [string, string][]>} */
+const VERDICT_OPTIONS = {
+  predict: [['as-expected', '예상대로'], ['my-misunderstanding', '잘못 알았음'], ['revert', '되돌림'], ['split', '분리']],
+  'test-lock': [['as-expected', '예상대로'], ['my-misunderstanding', '잘못 알았음'], ['revert', '되돌림'], ['split', '분리']],
+  intent: [['as-expected', '의도와 같음'], ['my-misunderstanding', '달라도 맞음'], ['revert', '되돌림'], ['split', '분리']],
+  fork: [['answered', '답함'], ['revert', '되돌림'], ['split', '분리']],
+};
+const RETURNING = new Set(['revert', 'split']);
+
+/** What each verdict means, under the control. @type {Record<string, string>} */
+const VERDICT_HELP = {
+  'as-expected': '예측이 맞았고 이 동작을 받아들입니다.',
+  'my-misunderstanding': '예측은 틀렸지만 실제 동작이 의도대로입니다. PR에 예측이 틀렸다는 사실이 남습니다.',
+  answered: '아래에 적은 답이 PR 본문에 남습니다.',
+  revert: '이 동작이 틀렸습니다. 작업이 에이전트에게 되돌아가 코드를 고칩니다.',
+  split: '동작은 맞지만 이번 PR에서 뺍니다. 에이전트가 별도 브랜치로 옮깁니다.',
+};
+
+/**
+ * @typedef {object} JudgeForm
+ * @property {any} task
+ * @property {Map<string, string>} predictions
+ * @property {Map<string, string>} verdicts
+ * @property {Map<string, string>} reasons
+ * @property {Map<string, string>} answers fork answers
+ * @property {string[]} diffs behavior descriptions as the person edits them
+ * @property {HTMLElement} status
+ * @property {boolean} dirty
+ * @property {boolean} busy
+ */
+
+/** @type {JudgeForm | null} */
+let judge = null;
+
+/** @param {any} task @returns {JudgeForm} */
+function newJudgeForm(task) {
+  return {
+    task,
+    predictions: new Map(),
+    verdicts: new Map(),
+    reasons: new Map(),
+    answers: new Map(),
+    diffs: (task.judge.behaviorDiffs ?? []).map((/** @type {any} */ d) => d.text),
+    status: h('div', { class: 'hl-stack' }),
+    dirty: false,
+    busy: false,
+  };
+}
+
+/** @param {string[]} run */
+const commandText = (run) => run.map((a) => (/[\s"'$`\\]/.test(a) ? JSON.stringify(a) : a)).join(' ');
+
+/** @param {any} task @param {string} id */
+const commandOf = (task, id) => task.judge.commands.find((/** @type {any} */ c) => c.id === id);
+
+/** @param {any} q */
+function questionHead(q) {
+  return h('div', { class: 'hl-spread' }, h('div', { class: 'hl-row' }, badge(q.kind === 'fork' ? 'warning' : 'informative', QUESTION_KIND[q.kind] ?? q.kind), h('code', { class: 'hl-muted' }, q.id)));
+}
+
+/** @param {any} task @param {string} id */
+function probeCommand(task, id) {
+  const c = commandOf(task, id);
+  if (!c) return h('p', { class: 'hl-muted' }, `탐침 ${id}`);
+  return h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, `탐침 ${c.id}: ${c.title}`), h('code', { class: 'hl-command' }, commandText(c.run)));
+}
+
+/** @param {any[] | undefined} sources */
+const questionSources = (sources) =>
+  sources?.length
+    ? h(
+        'ul',
+        { class: 'hl-files' },
+        sources.map((s) => h('li', {}, h('span', { class: 'hl-muted' }, s.ref === '@conversation' ? '대화 ' : `${s.ref}${s.lines ? ` ${s.lines[0]}-${s.lines[1]}행` : ''} `), s.quote ? `“${s.quote}”` : null)),
+      )
+    : null;
+
+/** @param {JudgeForm} f @param {any} q */
+function predictionCard(f, q) {
+  /** @type {Child[]} */
+  const body = [questionHead(q), h('p', { class: 'hl-question' }, q.prompt)];
+  if (q.kind === 'predict') body.push(probeCommand(f.task, q.probe));
+  if (q.kind === 'test-lock') body.push(h('p', {}, h('code', {}, q.test), h('span', { class: 'hl-muted' }, ` — ${q.plain}`)));
+  body.push(questionSources(q.sources));
+  /** @param {string} v */
+  const set = (v) => {
+    if (v.trim()) f.predictions.set(q.id, v);
+    else f.predictions.delete(q.id);
+    f.dirty = true;
+    refreshJudge();
+  };
+  if (q.kind === 'test-lock') body.push(choiceControl({ label: `${q.id} 답`, options: [['yes', '예'], ['no', '아니오']], value: f.predictions.get(q.id) ?? null, onchange: set }));
+  else if (q.answerType === 'choice') body.push(choiceControl({ label: `${q.id} 답`, options: q.choices.map((/** @type {string} */ c) => [c, c]), value: f.predictions.get(q.id) ?? null, onchange: set }));
+  else body.push(fieldBlock('내 예측', textInput({ value: f.predictions.get(q.id) ?? '', label: `${q.id} 예측`, placeholder: q.answerType === 'number' ? '숫자' : '결과', oninput: set })));
+  return h('section', { class: 'hl-card hl-stack', id: `question-${q.id}` }, body);
+}
+
+/** @param {JudgeForm} f */
+function predictPanel(f) {
+  const j = f.task.judge;
+  const first = j.questions.filter((/** @type {any} */ q) => q.predictFirst);
+  const later = j.questions.filter((/** @type {any} */ q) => !q.predictFirst);
+  const reveal = /** @type {HTMLButtonElement} */ (button(BUTTON.primary, first.length ? '예측 저장하고 결과 보기' : '결과 보기', () => void savePredictions(), { id: 'reveal' }));
+  return h(
+    'div',
+    { class: 'hl-stack' },
+    callout('informative', '먼저 결과를 예측하세요', '예측을 저장해야 실제 결과가 공개됩니다. 저장한 예측은 바꿀 수 없습니다. 틀린 예측도 그대로 PR에 남아 리뷰어에게 도움이 됩니다.'),
+    j.questions.length > 5 ? callout('warning', `질문이 ${j.questions.length}개`, '이 변경은 한 번에 이해하기에 클 수 있습니다. 나눌 수 있는지 에이전트와 상의해 보세요.') : null,
+    j.setupFailed ? callout('warning', '탐침 준비 명령 실패', '실행 환경을 갖추지 못한 채 탐침이 돌았습니다. 결과가 실행 실패일 수 있습니다.') : null,
+    first.map((/** @type {any} */ q) => predictionCard(f, q)),
+    later.length
+      ? h('section', { class: 'hl-card hl-stack' }, h('h2', { class: 'hl-section-title' }, '결과를 본 뒤 답할 질문'), h('ul', { class: 'hl-files' }, later.map((/** @type {any} */ q) => h('li', {}, badge('neutral', QUESTION_KIND[q.kind] ?? q.kind), ` ${q.prompt}`))))
+      : null,
+    h(
+      'details',
+      {},
+      h('summary', {}, `실행한 탐침 명령 ${j.commands.length}개`),
+      h('p', { class: 'hl-muted hl-small' }, 'base와 head의 임시 worktree에서 셸 없이 실행했습니다.'),
+      h('ul', { class: 'hl-files' }, j.commands.map((/** @type {any} */ c) => h('li', {}, h('span', { class: 'hl-muted' }, `${c.id} ${c.title}: `), h('code', {}, commandText(c.run))))),
+    ),
+    f.status,
+    h('div', { class: 'hl-row' }, reveal),
+  );
+}
+
+/** @param {any} run */
+function outputBlock(run) {
+  const tail = run.error ? `실행 못 함: ${run.error}` : run.timedOut ? '시간 초과' : run.exitCode !== 0 ? `종료 코드 ${run.exitCode}` : null;
+  return h('div', { class: 'hl-stack-tight' }, h('pre', { class: 'hl-output' }, run.stdout || h('span', { class: 'hl-muted' }, '(출력 없음)')), tail ? h('span', { class: 'hl-muted hl-small' }, tail, run.stderr ? ` — ${run.stderr.slice(0, 300)}` : '') : null);
+}
+
+/** @param {any} task @param {string} id */
+function observedProbe(task, id) {
+  const p = task.judge.probes.find((/** @type {any} */ x) => x.id === id);
+  if (!p) return null;
+  return h(
+    'div',
+    { class: 'hl-stack-tight' },
+    h('span', { class: 'hl-muted hl-small' }, `탐침 ${p.id}: ${p.title}`, p.same ? ' · base와 같음' : ''),
+    h('code', { class: 'hl-command' }, commandText(p.run)),
+    h('div', { class: 'hl-compare' }, h('div', {}, h('span', { class: 'hl-muted hl-small' }, '이전 (base)'), outputBlock(p.base)), h('div', {}, h('span', { class: 'hl-muted hl-small' }, '이후 (head)'), outputBlock(p.head))),
+  );
+}
+
+/** @type {Record<string, string>} */
+const TEST_STATUS = { pass: '통과', fail: '실패', skip: '건너뜀', absent: '없음' };
+
+/** @param {JudgeForm} f @param {any} q */
+function judgeCard(f, q) {
+  const j = f.task.judge;
+  const observed = j.observed[q.id] ?? { probes: [], tests: [], correct: null };
+  const prediction = j.predictions[q.id];
+  /** @type {Child[]} */
+  const body = [questionHead(q), h('p', { class: 'hl-question' }, q.prompt), questionSources(q.sources)];
+  if (prediction !== undefined) {
+    const shown = q.kind === 'test-lock' ? (prediction === 'yes' ? '예' : '아니오') : prediction;
+    body.push(
+      h('div', { class: 'hl-row' }, h('span', {}, '내 예측: ', h('strong', {}, shown)), observed.correct === true ? badge('positive', '맞음') : observed.correct === false ? badge('critical', '틀림') : badge('neutral', '직접 비교')),
+    );
+  }
+  if (q.kind === 'test-lock') {
+    body.push(h('p', {}, h('code', {}, q.test), h('span', { class: 'hl-muted' }, ` — ${q.plain}`)));
+    body.push(
+      observed.tests.length
+        ? h('ul', { class: 'hl-files' }, observed.tests.map((/** @type {any} */ t) => h('li', {}, h('code', {}, t.name), ` ${TEST_STATUS[t.base] ?? t.base} → ${TEST_STATUS[t.head] ?? t.head}`, t.location ? h('span', { class: 'hl-muted' }, ` (${t.location})`) : null)))
+        : h('p', { class: 'hl-muted' }, '이 테스트는 base와 head에서 결과가 같습니다.'),
+    );
+  }
+  for (const id of observed.probes) body.push(observedProbe(f.task, id));
+  if (q.kind === 'fork') {
+    body.push(h('p', { class: 'hl-muted hl-small' }, `코드: ${q.codePaths.join(', ')} · 열린 이유: ${q.whyOpen}`));
+  }
+  const disabled = new Set();
+  if (observed.correct === false) disabled.add('as-expected');
+  if (observed.correct === true) disabled.add('my-misunderstanding');
+  const verdict = f.verdicts.get(q.id) ?? null;
+  const help = h('span', { class: 'hl-muted hl-small' }, verdict ? VERDICT_HELP[verdict] : '');
+  const extra = h('div', { class: 'hl-stack-tight' });
+  const drawExtra = () => {
+    const v = f.verdicts.get(q.id);
+    replace(
+      extra,
+      q.kind === 'fork' && v === 'answered'
+        ? fieldBlock('답', textInput({ value: f.answers.get(q.id) ?? '', multiline: true, label: `${q.id} 답`, oninput: (x) => { f.answers.set(q.id, x); f.dirty = true; refreshJudge(); } }))
+        : null,
+      v && RETURNING.has(v)
+        ? fieldBlock('이유 (필수)', textInput({ value: f.reasons.get(q.id) ?? '', multiline: true, label: `${q.id} 이유`, oninput: (x) => { f.reasons.set(q.id, x); f.dirty = true; refreshJudge(); } }), '에이전트가 이 이유를 받아 코드를 고칩니다.')
+        : null,
+    );
+  };
+  drawExtra();
+  body.push(
+    choiceControl({
+      label: `${q.id} 판정`,
+      options: VERDICT_OPTIONS[q.kind] ?? [],
+      value: verdict,
+      disabled,
+      onchange: (v) => {
+        f.verdicts.set(q.id, v);
+        f.dirty = true;
+        help.textContent = VERDICT_HELP[v] ?? '';
+        drawExtra();
+        refreshJudge();
+      },
+    }),
+    help,
+    extra,
+  );
+  return h('section', { class: 'hl-card hl-stack', id: `question-${q.id}` }, body);
+}
+
+/** @param {JudgeForm} f */
+function judgePanel(f) {
+  const j = f.task.judge;
+  const submit = /** @type {HTMLButtonElement} */ (button(BUTTON.primary, '판정 저장', () => void saveJudgment(), { id: 'judge-submit' }));
+  return h(
+    'div',
+    { class: 'hl-stack' },
+    h(
+      'section',
+      { class: 'hl-card hl-stack' },
+      h('h2', { class: 'hl-section-title' }, '동작 차이'),
+      h('p', { class: 'hl-muted hl-small' }, '문장은 고칠 수 있지만, 숫자와 따옴표 친 값(관측값)은 바꿀 수 없습니다.'),
+      j.behaviorDiffs.length
+        ? j.behaviorDiffs.map((/** @type {any} */ d, /** @type {number} */ i) =>
+            h(
+              'div',
+              { class: 'hl-stack-tight' },
+              textInput({ value: f.diffs[i], multiline: true, label: `동작 차이 ${i + 1}`, oninput: (v) => { f.diffs[i] = v; f.dirty = true; refreshJudge(); } }),
+              h('span', { class: 'hl-muted hl-small' }, `근거 탐침 ${d.probes.join(', ')}${d.codePaths.length ? ` · ${d.codePaths.join(', ')}` : ''}`),
+            ),
+          )
+        : h('p', { class: 'hl-muted' }, '동작 차이 설명이 없습니다.'),
+    ),
+    j.inferences?.length
+      ? callout('warning', '실행 증거 없음', h('span', {}, j.inferences.map((/** @type {any} */ x, /** @type {number} */ i) => [i ? h('br') : null, `${x.text} (확인하지 못한 이유: ${x.reason})`])))
+      : null,
+    j.tests
+      ? h(
+          'details',
+          {},
+          h('summary', {}, `테스트: base ${j.tests.base.counts.pass}/${j.tests.base.counts.fail} → head ${j.tests.head.counts.pass}/${j.tests.head.counts.fail} (통과/실패), 결과가 바뀐 테스트 ${j.tests.changed.length}개`),
+          j.tests.changed.length
+            ? h('ul', { class: 'hl-files' }, j.tests.changed.map((/** @type {any} */ t) => h('li', {}, h('code', {}, t.name), ` ${TEST_STATUS[t.base] ?? t.base} → ${TEST_STATUS[t.head] ?? t.head}`)))
+            : h('p', { class: 'hl-muted' }, j.tests.comparison === 'tests' ? '없음' : '테스트별 결과를 읽지 못해 종료 코드만 비교했습니다.'),
+        )
+      : null,
+    j.questions.map((/** @type {any} */ q) => judgeCard(f, q)),
+    f.status,
+    h('div', { class: 'hl-row' }, submit),
+  );
+}
+
+/** Why the current step cannot be saved yet. @param {JudgeForm} f @returns {string[]} */
+function judgeBlockers(f) {
+  const j = f.task.judge;
+  /** @type {string[]} */
+  const why = [];
+  if (!j.revealed) {
+    const open = j.questions.filter((/** @type {any} */ q) => q.predictFirst && !f.predictions.has(q.id));
+    if (open.length) why.push(`예측하지 않은 질문: ${open.map((/** @type {any} */ q) => q.id).join(', ')}`);
+    return why;
+  }
+  const undecided = j.questions.filter((/** @type {any} */ q) => !f.verdicts.has(q.id));
+  if (undecided.length) why.push(`판정하지 않은 질문: ${undecided.map((/** @type {any} */ q) => q.id).join(', ')}`);
+  const noReason = j.questions.filter((/** @type {any} */ q) => RETURNING.has(f.verdicts.get(q.id) ?? '') && !f.reasons.get(q.id)?.trim());
+  if (noReason.length) why.push(`이유가 없는 되돌림·분리: ${noReason.map((/** @type {any} */ q) => q.id).join(', ')}`);
+  const noAnswer = j.questions.filter((/** @type {any} */ q) => f.verdicts.get(q.id) === 'answered' && !f.answers.get(q.id)?.trim());
+  if (noAnswer.length) why.push(`답이 없는 열린 선택: ${noAnswer.map((/** @type {any} */ q) => q.id).join(', ')}`);
+  if (f.diffs.some((d) => !d.trim())) why.push('비어 있는 동작 차이 설명');
+  return why;
+}
+
+function refreshJudge() {
+  if (!judge) return;
+  const why = judgeBlockers(judge);
+  const target = /** @type {HTMLButtonElement | null} */ (document.getElementById(judge.task.judge.revealed ? 'judge-submit' : 'reveal'));
+  if (target) {
+    target.disabled = Boolean(why.length) || judge.busy;
+    target.toggleAttribute('data-disabled', target.disabled);
+    if (judge.task.judge.revealed) target.textContent = [...judge.verdicts.values()].some((v) => RETURNING.has(v)) ? '판정 저장 (작업 되돌림)' : '판정 저장';
+  }
+  if (!judge.busy) replace(judge.status, why.length ? h('span', { class: 'hl-small hl-blocked' }, `저장 전에 필요: ${why.join(' · ')}`) : null);
+  discardButton.disabled = judge.busy;
+  refreshTabLabels();
+}
+
+/**
+ * @param {JudgeForm} f
+ * @param {string} title
+ * @param {() => Promise<unknown>} work
+ */
+async function judgeStep(f, title, work) {
+  f.busy = true;
+  refreshJudge();
+  try {
+    await work();
+    f.dirty = false;
+    clearBanner();
+    await loadTask(f.task.taskId, { force: true });
+  } catch (err) {
+    const e = /** @type {ApiError} */ (err);
+    f.busy = false;
+    replace(f.status, callout('critical', title, e.status === 409 ? h('span', {}, e.message, ' ', button(BUTTON.smallWeak, '새로 불러오기', () => void loadTask(f.task.taskId, { force: true }))) : e.message));
+    refreshJudge();
+  }
+}
+
+async function savePredictions() {
+  if (!judge || judgeBlockers(judge).length) return;
+  const f = judge;
+  if (!window.confirm('예측을 저장하고 결과를 볼까요? 저장한 예측은 바꿀 수 없습니다.')) return;
+  await judgeStep(f, '예측을 저장하지 못함', () => post(`/api/tasks/${encodeURIComponent(f.task.taskId)}/predict`, { draftSha256: f.task.draftSha256, answers: Object.fromEntries(f.predictions) }));
+}
+
+async function saveJudgment() {
+  if (!judge || judgeBlockers(judge).length) return;
+  const f = judge;
+  const returning = [...f.verdicts.values()].some((v) => RETURNING.has(v));
+  if (returning && !window.confirm('되돌림이나 분리가 있어 작업이 에이전트에게 되돌아갑니다. PR은 열리지 않습니다. 저장할까요?')) return;
+  const items = f.task.judge.questions.map((/** @type {any} */ q) => {
+    const verdict = /** @type {string} */ (f.verdicts.get(q.id));
+    return {
+      id: q.id,
+      verdict,
+      ...(RETURNING.has(verdict) ? { reason: f.reasons.get(q.id)?.trim() } : {}),
+      ...(verdict === 'answered' ? { answer: f.answers.get(q.id)?.trim() } : {}),
+    };
+  });
+  await judgeStep(f, '판정을 저장하지 못함', () =>
+    post(`/api/tasks/${encodeURIComponent(f.task.taskId)}/judge`, { draftSha256: f.task.draftSha256, sourceHash: f.task.input.source.hash, items, behaviorDiffs: f.diffs.map((d) => d.trim()) }),
+  );
+}
+
+/** @type {Record<string, string>} */
+const VERDICT_LABEL = { 'as-expected': '예상대로', 'my-misunderstanding': '잘못 알았음', answered: '답함', revert: '되돌림', split: '분리' };
+
+/** The signed judgment, after it was saved. @param {any} task */
+function judgmentSummaryCard(task) {
+  const a = task.latestApproval;
+  if (!a || a.kind !== 'judgment') return null;
+  return h(
+    'section',
+    { class: 'hl-card hl-stack' },
+    h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, '판정 내용'), h('div', { class: 'hl-row' }, a.outcome === 'accepted' ? badge('positive', '모두 수용') : badge('critical', '되돌림'), h('code', { class: 'hl-muted' }, a.id))),
+    h('p', { class: 'hl-muted hl-small' }, `head ${a.target.headSha ? a.target.headSha.slice(0, 12) : '알 수 없음'} · 탐침 묶음 ${short(a.target.probeSetHash)} · ${when(a.judgedAt)}`),
+    h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, '동작 차이'), h('ul', { class: 'hl-files' }, a.behaviorDiffs.final.map((/** @type {string} */ t) => h('li', {}, t)))),
+    h(
+      'ul',
+      { class: 'hl-files' },
+      a.items.map((/** @type {any} */ i) =>
+        h(
+          'li',
+          {},
+          badge(RETURNING.has(i.verdict) ? 'critical' : 'positive', VERDICT_LABEL[i.verdict] ?? i.verdict),
+          ` ${i.id} ${i.prompt}`,
+          i.answer !== null ? h('span', { class: 'hl-muted' }, ` · 답: ${i.answer}${i.correct === false ? ' (틀림)' : i.correct === true ? ' (맞음)' : ''}`) : null,
+          i.reason ? h('span', { class: 'hl-muted' }, ` · 이유: ${i.reason}`) : null,
+        ),
+      ),
+    ),
+  );
+}
+
 // Task screen layout: title, tabs (one panel per tab), and the approval bar fixed at the
 // bottom of every tab. The selected tab is kept in the URL hash.
 
-/** @typedef {'overview' | 'summary' | 'decision' | 'axiom' | 'approval'} TabId */
+/** @typedef {'overview' | 'summary' | 'decision' | 'axiom' | 'judge' | 'approval'} TabId */
 
 const titleSlot = h('div');
 const tabList = h('div', { class: TABS.list, role: 'tablist', 'aria-label': '인계 검토 화면' });
@@ -1387,6 +1795,7 @@ const panels = {
   summary: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-summary', 'aria-labelledby': 'tab-summary' }),
   decision: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-decision', 'aria-labelledby': 'tab-decision' }),
   axiom: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-axiom', 'aria-labelledby': 'tab-axiom' }),
+  judge: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-judge', 'aria-labelledby': 'tab-judge' }),
   approval: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-approval', 'aria-labelledby': 'tab-approval' }),
 };
 const tabsRoot = h('div', { class: `${TABS.root} hl-tabs` }, tabList, Object.values(panels));
@@ -1394,6 +1803,8 @@ const tabsRoot = h('div', { class: `${TABS.root} hl-tabs` }, tabList, Object.val
 let tabIds = [];
 /** @type {TabId} */
 let activeTab = /** @type {TabId} */ (window.location.hash.slice(1) || 'overview');
+/** Whether the URL named a tab, so the screen does not jump away from it. */
+const activeTabChosen = Boolean(window.location.hash.slice(1));
 
 /** @param {TabId} id @returns {Child} */
 function tabLabel(id) {
@@ -1403,6 +1814,16 @@ function tabLabel(id) {
   }
   if (id === 'summary') return 'PR 요약';
   if (id === 'approval') return APPROVAL_TITLE[latest?.latestApproval?.kind] ?? '승인 내용';
+  if (id === 'judge') {
+    const j = judge?.task.judge;
+    if (!j) return '질문';
+    if (!j.revealed) {
+      const first = j.questions.filter((/** @type {any} */ q) => q.predictFirst);
+      return [h('span', {}, `예측 ${first.filter((/** @type {any} */ q) => judge?.predictions.has(q.id)).length}/${first.length}`)];
+    }
+    const done = j.questions.filter((/** @type {any} */ q) => judge?.verdicts.has(q.id)).length;
+    return [h('span', {}, `판정 ${done}/${j.questions.length}`), done === j.questions.length ? badge('positive', '완료') : null];
+  }
   const indexes = form ? openIndexes(form, form.kinds[id]) : [];
   const decided = indexes.filter((i) => form?.decisions.has(i)).length;
   return [h('span', {}, `${kindName(id)} ${decided}/${indexes.length}`), decided === indexes.length ? badge('positive', '완료') : null];
@@ -1470,6 +1891,30 @@ function drawStatic(task) {
 
 /** @param {any} task */
 function drawForm(task) {
+  if (task.judge) {
+    form = null;
+    actionsBar.remove();
+    for (const id of /** @type {TabId[]} */ (['summary', 'decision', 'axiom'])) replace(panels[id]);
+    if (task.state === 'awaiting_approval' && task.input) {
+      const f = newJudgeForm(task);
+      judge = f;
+      replace(panels.judge, task.judge.revealed ? judgePanel(f) : predictPanel(f));
+      replace(panels.approval);
+      drawTabs(['overview', 'judge']);
+      if (!activeTabChosen) selectTab('judge');
+      refreshJudge();
+      return;
+    }
+    judge = null;
+    replace(panels.judge);
+    const card = judgmentSummaryCard(task);
+    const pr = prLink(task);
+    replace(panels.approval, pr, card);
+    drawTabs(card || pr ? ['overview', 'approval'] : ['overview']);
+    return;
+  }
+  judge = null;
+  replace(panels.judge);
   if (task.state === 'awaiting_approval' && task.draft && task.input) {
     const f = newForm(task);
     form = f;
@@ -1506,10 +1951,11 @@ async function loadTask(taskId, { force = false } = {}) {
   const task = await api(`/api/tasks/${encodeURIComponent(taskId)}`);
   latest = task;
   if (!main.contains(tabsRoot)) replace(main, h('p', {}, h('a', { href: '/', class: 'hl-back' }, '← 전체 목록')), titleSlot, tabsRoot);
-  const shown = form?.task;
-  const changed = !shown || shown.draftSha256 !== task.draftSha256 || shown.state !== task.state;
-  if (force || !form || !form.dirty) {
-    if (force || changed || !form) drawForm(task);
+  const active = form ?? judge;
+  const shown = active?.task;
+  const changed = !shown || shown.draftSha256 !== task.draftSha256 || shown.state !== task.state || shown.judge?.revealed !== task.judge?.revealed;
+  if (force || !active || !active.dirty) {
+    if (force || changed || !active) drawForm(task);
     drawStatic(task);
     clearBanner();
     return;
@@ -1564,7 +2010,7 @@ events.addEventListener('open', () => {
   if (!disconnected) return;
   disconnected = false;
   // A restarted server has a new session token: reload unless the human is editing.
-  if (!form?.dirty) {
+  if (!(form ?? judge)?.dirty) {
     window.location.reload();
     return;
   }

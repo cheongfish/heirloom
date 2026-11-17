@@ -96,7 +96,8 @@ async function projectSection(cwd, home) {
     /** @type {string[]} */
     const pending = [];
     for (const { taskId } of tasksForWorktree(index, ids.worktreeId)) {
-      const state = deriveState(await readEvents(taskPaths(home, taskId).events));
+      const events = await readEvents(taskPaths(home, taskId).events);
+      const state = deriveState(events);
       if (state === 'approved') pending.push(`- ${taskId}: 승인됨, 아직 반영되지 않음 → 사용자에게 알리고, 요청하면 apply-approval 스킬로 처리한다.`);
       else if (state === 'applied') {
         if (await appliedTaskMerged({ home, taskId })) continue;
@@ -105,6 +106,11 @@ async function projectSection(cwd, home) {
       }
       else if (state === 'stale') pending.push(`- ${taskId}: 승인 이후 소스나 자료가 바뀜(재확인 필요) → prepare-handoff를 다시 실행하면 바뀐 부분과 연결된 항목만 다시 승인받는다. 기존 승인은 보존된다.`);
       else if (state === 'awaiting_approval') pending.push(`- ${taskId}: 대시보드에서 사람의 승인을 기다리는 중.`);
+      else if (state === 'returned') {
+        const returned = /** @type {any} */ (events.filter((e) => e.type === 'returned').at(-1));
+        const why = (returned?.items ?? []).map((/** @type {any} */ i) => `${i.id} ${i.verdict === 'split' ? '분리' : '되돌림'}: ${i.reason}`).join('; ');
+        pending.push(`- ${taskId}: 사람이 판정에서 되돌림(${why}) → 코드와 spec을 고친 뒤 prepare-handoff를 다시 실행한다.`);
+      }
     }
     if (pending.length) lines.push('', '## 이 작업 트리의 미처리 인계', ...pending);
   }

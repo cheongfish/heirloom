@@ -14,7 +14,7 @@ import { draftSchema, draftV2Schema, isMarkdownCodePath, validate } from './sche
 import { createHash } from 'node:crypto';
 
 /** @param {string} s */
-const normalize = (s) => s.replace(/\s+/g, ' ').trim();
+export const normalize = (s) => s.replace(/\s+/g, ' ').trim();
 
 /**
  * @param {string} pattern code path or glob
@@ -224,12 +224,12 @@ const QUESTIONS_MAX = 5;
  * a hyphen is as often a range or a separator as a minus.
  * @param {string} text
  */
-function numbersIn(text) {
+export function numbersIn(text) {
   return new Set([...text.matchAll(/\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g)].map((m) => Number(m[0].replace(/,/g, ''))));
 }
 
 /** Strings in double quotes (straight or curly) or curly single quotes. */
-function quotedIn(/** @type {string} */ text) {
+export function quotedIn(/** @type {string} */ text) {
   return [...text.matchAll(/"([^"\n]+)"|“([^”\n]+)”|‘([^’\n]+)’/g)].map((m) => m[1] ?? m[2] ?? m[3]);
 }
 

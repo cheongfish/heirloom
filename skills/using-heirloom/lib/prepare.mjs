@@ -15,7 +15,7 @@ import { matchesAny } from './glob.mjs';
 import { filesChangedBetween, repoInfo, resolveBase, tryGit } from './git.mjs';
 import { reviewMatchesSource } from './handoff.mjs';
 import { resolveIds } from './ids.mjs';
-import { taskPaths } from './paths.mjs';
+import { approvalFiles, taskPaths } from './paths.mjs';
 import { findProjectRules } from './project-rules.mjs';
 import { affectedItems, buildBaseline, diffStates } from './recheck.mjs';
 import { readRecords } from './records.mjs';
@@ -144,7 +144,7 @@ export async function prepareHandoff(options) {
       if (approvalId !== undefined) input.recheck = await recheckFor({ home, root, taskId, approvalId, base, source, materials });
       // A new state invalidates the previous draft and its derived files (input.json is
       // immutable only within one source/material state).
-      await Promise.all([paths.draft, paths.draftInitial, paths.check, paths.handoff].map((f) => rm(f, { force: true })));
+      await Promise.all([paths.draft, paths.draftInitial, paths.check, paths.handoff, paths.answers].map((f) => rm(f, { force: true })));
       await writeJsonAtomic(paths.input, input);
       current = await appendEvent(paths.events, {
         type: 'prepared',
@@ -180,9 +180,27 @@ export async function prepareHandoff(options) {
       relatedRecords,
       projectRules: input.projectRules,
       recheck: input.recheck ? recheckReport(input.recheck) : null,
+      previousJudgment: await previousJudgment(paths, events),
       conversation: { ...conversation, path: paths.conversation },
     };
   });
+}
+
+/**
+ * The questions the person sent back in the task's last judgment, when that judgment
+ * returned the work: the agent fixes them in this round (pivot 6.1). Null otherwise.
+ * @param {ReturnType<typeof taskPaths>} paths
+ * @param {import('./events.mjs').TaskEvent[]} events
+ */
+async function previousJudgment(paths, events) {
+  const last = events.filter((e) => e.type === 'approved' || e.type === 'returned').at(-1);
+  if (last?.type !== 'returned' || typeof last.approvalId !== 'string') return null;
+  const record = /** @type {any} */ (await readJson(approvalFiles(paths.approvals, last.approvalId).record));
+  const items = (record?.items ?? []).filter((/** @type {any} */ i) => i.verdict === 'revert' || i.verdict === 'split');
+  return {
+    approvalId: last.approvalId,
+    returned: items.map((/** @type {any} */ i) => ({ id: i.id, kind: i.kind, prompt: i.prompt, answer: i.answer, verdict: i.verdict, reason: i.reason })),
+  };
 }
 
 /**

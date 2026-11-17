@@ -21,6 +21,8 @@ Pass the actual spec, final review file (`--review`) if available, and reviewed 
 Read the result:
 
 - `alreadyPrepared: true`, `state` `awaiting_approval` or later: report the existing handoff and stop without drafting.
+- `alreadyPrepared: true`, `state` `returned`: nothing changed since the person sent the work back. Fix what `previousJudgment` lists first, then run this skill again.
+- Non-null `previousJudgment`: the last judgment returned these questions (`verdict` `revert`: the behavior is wrong; `split`: move it out of this branch), with the person's `reason`. This round must address each one; ask about the changed behavior again.
 - `ok: false`: report `error.message` and `error.hint`; stop. `E_INPUT` (exit 2) requires clarification, not guessing; `E_CONFLICT` (3) means concurrent processing; `E_TRANSIENT` (75) already retried, so do not rerun.
 - Otherwise use `taskId`, `draftPath`, `source.files`, `materials`, `unknowns`, `relatedRecords`, and `reviewMatchesSource`.
 - Non-null `recheck`: the work was approved before and changed since. Write a full draft for the current state (sections 2 and 3).
@@ -133,6 +135,7 @@ On completion, handle `data.state`:
 | `applied`, `pr_created` | Report already applied elsewhere. |
 | `discarded`, `expired` | Report; do not apply. |
 | `stale` | Report code changed during review. After changes finish, rerun this skill for incremental recheck. |
+| `returned` | The person sent the work back; `data.returned` lists the questions and reasons. Report them, change the code (for `split`, move that behavior out of this branch), then rerun this skill. Do not open a PR. |
 | `timedOut: true`, still `awaiting_approval` | Report no approval yet; it remains applicable later. |
 
 ## 6. Report

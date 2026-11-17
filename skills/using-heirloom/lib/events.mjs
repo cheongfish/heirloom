@@ -9,7 +9,7 @@ import { assertValid, eventSchema } from './schema.mjs';
 /** @typedef {{ at: string, type: EventType, [key: string]: unknown }} TaskEvent */
 /**
  * @typedef {'prepared' | 'drafted' | 'awaiting_approval' | 'approved' | 'applied' | 'pr_created'
- *   | 'failed' | 'stale' | 'discarded' | 'expired'} TaskState
+ *   | 'failed' | 'stale' | 'returned' | 'discarded' | 'expired'} TaskState
  */
 
 const TERMINAL = new Set(['discarded', 'expired']);
@@ -51,6 +51,10 @@ export function nextState(state, event) {
     case 'approved':
       require(state, event, ['awaiting_approval']);
       return 'approved';
+    case 'returned':
+      // The human judged and sent the work back: the agent changes the code and prepares again.
+      require(state, event, ['awaiting_approval']);
+      return 'returned';
     case 'approval_received':
       require(state, event, ['approved', 'applied', 'pr_created']);
       return /** @type {TaskState} */ (state);

@@ -52,6 +52,7 @@ export function taskPaths(home, taskId) {
     conversation: path.join(dir, 'conversation.json'),
     prBody: path.join(dir, 'pr-body.md'),
     probes: path.join(dir, 'probes'),
+    answers: path.join(dir, 'answers.json'),
   };
 }
 

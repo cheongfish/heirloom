@@ -22,6 +22,7 @@ import { readRecords } from '../lib/records.mjs';
 import { PATTERNS } from '../lib/schema.mjs';
 import { VERSION } from '../lib/version.mjs';
 import { approveTask } from './approve.mjs';
+import { isJudgedDraft, judgeTask, judgeView, recordPredictions, redactedDraft } from './judge.mjs';
 
 const MAX_BODY = 1024 * 1024;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -275,20 +276,25 @@ export async function createDashboardServer(options) {
     }
     const input = /** @type {any} */ (await readJson(paths.input));
     // Approval ids are random; the event log gives the order.
-    const lastApproved = events.filter((e) => e.type === 'approved').at(-1)?.approvalId;
+    const lastApproved = events.filter((e) => e.type === 'approved' || e.type === 'returned').at(-1)?.approvalId;
     const latest = typeof lastApproved === 'string' && approvals.includes(lastApproved) ? await readJson(path.join(paths.approvals, `${lastApproved}.json`)) : undefined;
+    // A schema 2 draft holds observed values: until the person's predictions are saved, the
+    // screen gets only the questions and the probe commands.
+    const judge = isJudgedDraft(draft) ? await judgeView({ home, taskId }) : null;
+    const hidden = judge !== null && !judge.revealed;
     return {
       taskId,
       state: deriveState(events),
       input: input ?? null,
-      draft: draft ?? null,
-      draftInitial: (await readJson(paths.draftInitial)) ?? null,
+      draft: draft === undefined ? null : hidden ? redactedDraft(draft) : draft,
+      draftInitial: judge ? null : (await readJson(paths.draftInitial)) ?? null,
+      judge,
       check: (await readJson(paths.check)) ?? null,
       draftSha256: draft === undefined ? null : draftDigest(draft),
       events,
       approvals,
       latestApproval: latest ?? null,
-      targets: input ? await targetsOf(input.repo.root, /** @type {any} */ (draft)?.records ?? []) : {},
+      targets: input && !judge ? await targetsOf(input.repo.root, /** @type {any} */ (draft)?.records ?? []) : {},
       carried: carriedOf(input, draft),
     };
   }
@@ -344,11 +350,20 @@ export async function createDashboardServer(options) {
       if (!String(req.headers['content-type'] ?? '').startsWith('application/json')) {
         return fail(res, 415, 'E_INPUT', 'application/json 본문만 받음');
       }
-      const action = /^\/api\/tasks\/([^/]+)\/(approve|discard)$/.exec(pathname);
+      const action = /^\/api\/tasks\/([^/]+)\/(approve|discard|predict|judge)$/.exec(pathname);
       if (!action) return fail(res, 404, 'E_NOT_FOUND', '경로가 없음');
       const taskId = decodeURIComponent(action[1]);
       if (!(await exists(taskPaths(home, taskId).dir))) return fail(res, 404, 'E_NOT_FOUND', '작업이 없음');
       const body = /** @type {any} */ (await readBody(req));
+      if (action[2] === 'predict') {
+        log(`predict ${taskId} sec-fetch-site=${req.headers['sec-fetch-site'] ?? '-'} origin=${req.headers.origin ?? '-'}`);
+        return json(res, 200, { ok: true, ...(await recordPredictions({ home, taskId, request: body })) });
+      }
+      if (action[2] === 'judge') {
+        log(`judge ${taskId} ua=${JSON.stringify(req.headers['user-agent'] ?? '')} sec-fetch-site=${req.headers['sec-fetch-site'] ?? '-'} origin=${req.headers.origin ?? '-'}`);
+        const judgment = await judgeTask({ home, taskId, request: body, keystore });
+        return json(res, 200, { ok: true, judgment });
+      }
       if (action[2] === 'approve') {
         log(`approve ${taskId} ua=${JSON.stringify(req.headers['user-agent'] ?? '')} sec-fetch-site=${req.headers['sec-fetch-site'] ?? '-'} origin=${req.headers.origin ?? '-'}`);
         const approval = await approveTask({ home, taskId, request: body, keystore });

@@ -378,6 +378,48 @@ export const draftV2Schema = object(
   },
 );
 
+// ---------------------------------------------------------------- judgment (pivot 5.4)
+
+/** What the person concluded about one question. */
+export const VERDICTS = /** @type {const} */ (['as-expected', 'my-misunderstanding', 'answered', 'revert', 'split']);
+/** Verdicts that accept the behavior; the others send the work back. */
+export const ACCEPTING = new Set(['as-expected', 'my-misunderstanding', 'answered']);
+
+const probeHash = object({ base: sha256, head: sha256 });
+
+/**
+ * The signed judgment of a schema 2 draft, kept where approvals are kept. One item per
+ * question: the person's prediction or answer, what was revealed and the verdict.
+ */
+export const judgmentSchema = object({
+  schemaVersion: oneOf(2),
+  id: approvalId,
+  taskId,
+  kind: oneOf('judgment'),
+  target: object({ sourceHash: stateHash, headSha: nullable(str({ pattern: PATTERNS.commit })), draftSha256: sha256, probeSetHash: stateHash, materials: recordOf(nullable(sha256)) }),
+  behaviorDiffs: object({ initial: arrayOf(nonEmpty), final: arrayOf(nonEmpty) }),
+  items: arrayOf(
+    object(
+      {
+        id: str({ pattern: SHORT_ID }),
+        kind: oneOf('predict', 'test-lock', 'intent', 'fork'),
+        prompt: nonEmpty,
+        answer: nullable(text),
+        correct: nullable(bool),
+        revealed: object({}, { extra: true }),
+        probeHashes: recordOf(probeHash),
+        verdict: oneOf(...VERDICTS),
+      },
+      { optional: { reason: nonEmpty } },
+    ),
+  ),
+  outcome: oneOf('accepted', 'returned'),
+  predictedAt: timestamp,
+  judgedAt: timestamp,
+  approver: object({ fingerprint: nonEmpty, gitUser: nullable(nonEmpty) }),
+  signature: nonEmpty,
+});
+
 // ---------------------------------------------------------------- approval (5.5)
 
 export const approvalSchema = object({
@@ -413,6 +455,7 @@ export const EVENT_TYPES = /** @type {const} */ ([
   'stale',
   'discarded',
   'expired',
+  'returned',
   // Written by the context curation removed in 0.4; kept so older task logs still read.
   'agent_started',
   'agent_finished',
