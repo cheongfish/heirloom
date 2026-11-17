@@ -266,7 +266,7 @@ test('HEIRLOOM_DISABLE_CONVENTION=1 (evaluation only) injects nothing at session
   assert.equal(JSON.parse(stop.stdout).decision, 'block');
 });
 
-test('session-start records the session host for the worktree Heirloom knows (curation follows it)', { skip }, async () => {
+test('session-start records the session host for the worktree Heirloom knows', { skip }, async () => {
   const upstream = await makeRepo();
   const repo = await cloneRepo(upstream);
   const home = await tempDir('home');

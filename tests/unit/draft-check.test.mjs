@@ -212,27 +212,6 @@ test('relate: target and related record must be active and different; allowed in
   assert.match(errors, /records\[3\]\.relation\.id: 관계 대상 기록이 없음 \(d-zzzzzzzz\)/);
 });
 
-test('curation handoff: summary code paths are not checked; candidate checks run', async () => {
-  const root = await fixture();
-  const curationInput = { ...input(), trigger: 'curation', source: { hash: SOURCE_HASH, files: [] }, materials: [], curation: { batch: ['d-aaaaaaaa', 'd-bbbbbbbb'], related: [], axioms: [], history: [] } };
-  const d = draft();
-  d.summary = [{ text: '정리', codePaths: ['src/nothing-changed.mjs'] }];
-  d.records = [
-    {
-      op: 'add',
-      kind: 'axiom',
-      title: '서명은 사용자별 키로 한다',
-      body: { property: 'p', scope: 's', exceptions: '', checks: 'c' },
-      codePaths: [],
-      topics: [],
-      sources: [{ ref: 'docs/spec.md', quote: '키는 사용자별로 둔다.' }],
-      evidence: ['d-aaaaaaaa'],
-    },
-  ];
-  const result = await checkDraft({ root, input: curationInput, draft: d, records: [existing('d-aaaaaaaa', true), existing('d-bbbbbbbb', true)], repoFiles: REPO_FILES });
-  assert.deepEqual(result.errors, ['$.records[0].evidence: 근거 decision이 2개 이상이어야 함']);
-});
-
 test('conversation sources: the quote must be part of a message the person typed; its hash is filled', async () => {
   const root = await fixture();
   const typed = '변환 결과는\n반올림하지 않는다. 화면에서만 자른다.';

@@ -9,7 +9,6 @@ import { readJson, writeJsonAtomic } from '../lib/fsx.mjs';
 import { tryGit } from '../lib/git.mjs';
 import { newApprovalId } from '../lib/ids.mjs';
 import { approvalFiles, taskPaths } from '../lib/paths.mjs';
-import { isCandidate } from '../lib/curation.mjs';
 import { carriedItems } from '../lib/recheck.mjs';
 import { approvalSchema, arrayOf, assertValid, codePath, validate } from '../lib/schema.mjs';
 import { sign } from '../lib/sign.mjs';
@@ -36,10 +35,9 @@ const MAX_REASON = 2000;
  * @param {any[]} records draft records
  * @param {number} summaryCount draft summary bullets
  * @param {Set<number>} carried record indexes that keep their approval (incremental handoff)
- * @param {any} input frozen input (curation candidates need a reason to be held or rejected)
  * @returns {asserts request is ApprovalRequest}
  */
-function checkRequest(request, records, summaryCount, carried, input) {
+function checkRequest(request, records, summaryCount, carried) {
   /** @param {string} message */
   const bad = (message) => {
     throw new HeirloomError('E_INPUT', message);
@@ -71,9 +69,6 @@ function checkRequest(request, records, summaryCount, carried, input) {
     if (item.reopen !== undefined && !carried.has(item.index)) bad(`항목 ${item.index}: 승인이 유지되는 항목이 아니어서 reopen을 쓸 수 없음`);
     if (item.reason !== undefined && (typeof item.reason !== 'string' || !item.reason.trim() || item.reason.length > MAX_REASON)) {
       bad(`항목 ${item.index}: 이유는 ${MAX_REASON}자 이하의 비어 있지 않은 문자열이어야 함`);
-    }
-    if (item.decision !== 'approved' && isCandidate(input, records[item.index]) && item.reason === undefined) {
-      bad(`항목 ${item.index}: axiom 후보를 보류·거절할 때는 이유가 필요함`);
     }
     if (item.edited !== undefined) {
       if (records[item.index].op !== 'add') bad(`항목 ${item.index}: add 항목만 수정할 수 있음`);
@@ -109,7 +104,7 @@ export async function approveTask({ home, taskId, request, keystore }) {
     if (state !== 'awaiting_approval') throw new HeirloomError('E_CONFLICT', `승인 대기 상태가 아님 (현재: ${state})`);
 
     const carried = new Set(input.recheck ? carriedItems({ recheck: input.recheck, draft }).records : []);
-    checkRequest(request, draft.records, draft.summary.length, carried, input);
+    checkRequest(request, draft.records, draft.summary.length, carried);
     const digest = draftDigest(draft);
     if (request.draftSha256 !== digest || request.sourceHash !== input.source.hash) {
       throw new HeirloomError('E_CONFLICT', '화면이 보던 초안이나 소스 상태가 현재와 다름. 화면을 새로 고친 뒤 다시 검토한다.');

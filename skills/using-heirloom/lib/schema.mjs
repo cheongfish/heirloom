@@ -146,7 +146,6 @@ export const PATTERNS = Object.freeze({
   taskId: /^t-\d{8}-[0-9a-hjkmnp-tv-z]{8}$/,
   approvalId: /^ap-[0-9a-hjkmnp-tv-z]{12}$/,
   recordId: /^[da]-[0-9a-hjkmnp-tv-z]{8}$/,
-  curationId: /^c-[0-9a-hjkmnp-tv-z]{8}$/,
   sha256: /^[0-9a-f]{64}$/,
   stateHash: /^sha256:[0-9a-f]{64}$/,
   commit: /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/,
@@ -240,30 +239,6 @@ function recheckSchema() {
 
 const fileStatus = oneOf('A', 'M', 'D');
 
-// ---------------------------------------------------------------- curation review history
-
-/** `.heirloom/curation/c-<id>.json`: one reviewed batch with its candidates and changes. */
-export const curationReviewSchema = object({
-  schemaVersion: v1,
-  id: str({ pattern: PATTERNS.curationId }),
-  taskId,
-  approvalId,
-  reviewedAt: timestamp,
-  batch: arrayOf(recordId),
-  candidates: arrayOf(
-    object(
-      { title: nonEmpty, evidence: arrayOf(recordId), decision: oneOf('accepted', 'held', 'rejected') },
-      { optional: { axiomId: recordId, reason: nonEmpty } },
-    ),
-  ),
-  changes: arrayOf(
-    object(
-      { op: oneOf('add', 'update', 'supersede', 'deprecate', 'relate'), target: recordId, decision: oneOf('approved', 'rejected', 'pending') },
-      { optional: { reason: nonEmpty } },
-    ),
-  ),
-});
-
 export const inputSchema = object({
   schemaVersion: v1,
   taskId,
@@ -272,7 +247,7 @@ export const inputSchema = object({
   branch: nullable(nonEmpty),
   base: object({ ref: nonEmpty, mergeBase: str({ pattern: PATTERNS.commit }) }),
   sdlcTaskRef: nullable(nonEmpty),
-  trigger: oneOf('auto', 'manual', 'curation'),
+  trigger: oneOf('auto', 'manual'),
   source: object({
     hash: stateHash,
     files: arrayOf(object({ path: nonEmpty, status: fileStatus, sha256: str({ pattern: /^([0-9a-f]{64}|deleted)$/ }) })),
@@ -289,7 +264,6 @@ export const inputSchema = object({
 }, {
   optional: {
     recheck: recheckSchema(),
-    curation: object({ batch: arrayOf(recordId), related: arrayOf(recordId), axioms: arrayOf(recordId), history: arrayOf(curationReviewSchema) }),
   },
 });
 
@@ -395,6 +369,7 @@ export const EVENT_TYPES = /** @type {const} */ ([
   'stale',
   'discarded',
   'expired',
+  // Written by the context curation removed in 0.4; kept so older task logs still read.
   'agent_started',
   'agent_finished',
 ]);
@@ -405,6 +380,7 @@ export const eventSchema = object({ at: timestamp, type: oneOf(...EVENT_TYPES) }
 
 export const indexSchema = object({
   schemaVersion: v1,
+  // `managed` marked worktrees of the context curation removed in 0.4; kept so older indexes still read.
   worktrees: recordOf(object({ repoId: str({ pattern: PATTERNS.repoId }), path: nonEmpty, lastSeen: timestamp }, { optional: { managed: bool, host: oneOf('claude-code', 'codex', 'antigravity'), hostAt: timestamp } })),
   tasks: recordOf(taskId),
   reminders: recordOf(object({ sourceHash: stateHash, at: timestamp })),
@@ -420,7 +396,7 @@ export const projectConfigSchema = object(
       baseBranch: nonEmpty,
       specGlobs: arrayOf(nonEmpty),
       recall: object({}, { optional: { maxRecords: int({ min: 1 }), maxTokens: int({ min: 1 }) } }),
-      // Accepted for configs written before 0.4 and ignored: the session start no longer lists decisions.
+      // `sessionIndex` and `curation` are accepted for configs written before 0.4 and ignored.
       sessionIndex: object({}, { optional: { maxDecisions: int({ min: 0 }) } }),
       curation: object({}, { optional: { minUnreviewed: int({ min: 1 }), maxAgeDays: int({ min: 1 }), minForAge: int({ min: 1 }), batchSize: int({ min: 1 }) } }),
       testCadence: object({}, { optional: { mode: oneOf('off', 'phase') } }),
@@ -433,6 +409,7 @@ export const userConfigSchema = object(
   {
     optional: {
       dashboard: object({}, { optional: { idleMinutes: int({ min: 1 }), openBrowser: bool, staleDays: int({ min: 1 }), port: int({ min: 1024, max: 65535 }) } }),
+      // Accepted for configs written before 0.4 and ignored: the context curation was removed.
       curation: object({}, { optional: { agent: object({}, { optional: { host: oneOf('claude-code', 'codex', 'antigravity'), command: nonEmpty, model: nullable(nonEmpty) } }) } }),
     },
   },

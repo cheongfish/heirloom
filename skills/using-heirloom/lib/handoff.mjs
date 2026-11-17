@@ -79,7 +79,7 @@ export function renderHandoff({ input, draft, warnings }) {
     `- worktree: ${input.worktree.path}`,
     `- 대상 브랜치: ${input.base.ref} (merge-base ${input.base.mergeBase.slice(0, 12)})`,
     `- 소스 상태: ${input.source.hash}`,
-    `- 인계 방식: ${input.trigger === 'auto' ? '자동' : input.trigger === 'curation' ? '맥락 정리' : '수동'}`,
+    `- 인계 방식: ${input.trigger === 'auto' ? '자동' : '수동'}`,
     `- SDLC 작업 식별자: ${input.sdlcTaskRef ?? '미확인'}`,
     `- 준비 시각: ${input.createdAt}`,
   );
@@ -88,10 +88,6 @@ export function renderHandoff({ input, draft, warnings }) {
   if (review === true) out.push('- 최종 리뷰 대상 상태와 현재 상태가 같다.');
 
   if (input.recheck) out.push('', ...renderRecheck(input.recheck, draft));
-  if (input.curation) {
-    const c = input.curation;
-    out.push('', '## 정리 묶음', '', `- 미검토 decision (${c.batch.length}): ${c.batch.join(', ') || '없음'}`, `- 관련 기록 (${c.related.length}): ${c.related.join(', ') || '없음'}`, `- 활성 axiom (${c.axioms.length}): ${c.axioms.join(', ') || '없음'}`, `- 이전 검토 이력: ${c.history.length}건`);
-  }
 
   out.push('', `## 변경 파일 (${input.source.files.length})`, '');
   for (const f of input.source.files) out.push(`- ${f.status} ${f.path}`);

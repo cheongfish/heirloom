@@ -68,8 +68,8 @@ export function nextState(state, event) {
       return 'stale';
     case 'agent_started':
     case 'agent_finished':
-      // Notices about a headless run the dashboard started: they never move the task, and a
-      // run may finish after the task was discarded.
+      // Notices about a headless run of the context curation removed in 0.4: older task logs
+      // still have them, and they never moved the task.
       return /** @type {TaskState} */ (state);
     case 'discarded':
     case 'expired':

@@ -10,6 +10,7 @@
 
 ### 제거
 
+- 맥락 정리를 지웠습니다. 효용을 측정한 적이 없고, 헤드리스 실행과 전용 worktree 관리 비용이 컸습니다. `curate-decisions` 스킬, 대시보드의 '맥락 정리' 목록과 '정리 실행'·'다시 실행', 정리 검토 화면, axiom 후보의 보류·거절 이유, 헤드리스 실행(`agent-runner.mjs`)과 Codex 허용 목록 훅(`hook-allowlist.mjs`)이 없어졌습니다. 저장소의 `.heirloom/curation/` 검토 이력은 더 이상 읽지 않습니다. 설정 `curation.*`(사용자·프로젝트)은 기존 파일에 있어도 무시합니다. 진행 중이던 정리 작업이 있었다면 `~/.heirloom/worktrees/` 아래 worktree를 저장소에서 `git worktree remove`로 지웁니다.
 - spec 위치 등록 흐름을 지웠습니다. 인계한 spec이 `specGlobs`에 맞지 않을 때 패턴 추가를 제안하던 `prepare.mjs`의 `specCoverage`와 `prepare-handoff/scripts/add-spec-globs.mjs`가 없어졌습니다. `specGlobs` 설정과 stop 훅의 spec 감지는 그대로이며, 필요하면 `.heirloom/config.json`에 직접 패턴을 더합니다.
 
 ## [0.3.6] - 2026-11-16

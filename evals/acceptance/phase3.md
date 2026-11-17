@@ -1,6 +1,6 @@
-# 3차 수용 점검 (B1~B6)
+# 3차 수용 점검 (B1~B5)
 
-3차 기능(증분 재확인, GitLab MR, 별도 맥락 정리)을 실제 Claude Code 세션으로 끝까지 돌려 본다. 방법은 [MVP 점검](README.md)과 같다. 점검하는 에이전트가 fixture에서 자식 `claude -p` 세션을 실행하고 transcript와 상태로 판정한다. 다른 점은 대시보드 조작이다. 사람 대신 헤드리스 Chromium이 실제 화면을 눌러 승인한다(`dashboard.mjs`). 화면을 사람이 직접 보는 확인은 하지 않는다. 대신 화면 글자와 캡처를 근거로 남긴다.
+3차 기능(증분 재확인, GitLab MR)을 실제 Claude Code 세션으로 끝까지 돌려 본다. 방법은 [MVP 점검](README.md)과 같다. 점검하는 에이전트가 fixture에서 자식 `claude -p` 세션을 실행하고 transcript와 상태로 판정한다. 다른 점은 대시보드 조작이다. 사람 대신 헤드리스 Chromium이 실제 화면을 눌러 승인한다(`dashboard.mjs`). 화면을 사람이 직접 보는 확인은 하지 않는다. 대신 화면 글자와 캡처를 근거로 남긴다.
 
 CI에서는 실행하지 않는다. 실제 GitHub·GitLab 원격으로 하는 확인은 원격 저장소가 생긴 뒤 MVP의 남은 기준과 함께 한다.
 
@@ -12,7 +12,6 @@ CI에서는 실행하지 않는다. 실제 GitHub·GitLab 원격으로 하는 �
 | `fetch-local.sh <dir>` | 가짜 원격 모드에서 `git fetch origin`을 대신한다. |
 | `merge-local.sh <dir> <branch>` | 머지를 흉내 낸다. 가짜 원격 모드에서도 동작한다. |
 | `upstream-change.sh <dir>` | B3용. 다른 사람이 main에 올린 변경을 흉내 내고 현재 브랜치를 rebase한다. |
-| `seed-decisions.mjs <dir> [--more]` | B6용. 승인·머지된 decision 5개를 main에 만든다. `--more`는 무관한 decision 하나를 더한다. |
 | `dashboard.mjs <url> --steps '<JSON>'` | 대시보드 화면 조작. 단계 종류는 파일 머리 주석에 있다. |
 | `inspect.mjs` | 작업 상태와 이벤트를 본다(MVP와 같음). |
 | `results-template-phase3.md` | 기록표. |
@@ -52,8 +51,6 @@ node $H/evals/acceptance/dashboard.mjs "$URL" --text --shot $F/shots/x.png \
 | Run H | `--fake-github` | B1 승인 뒤 리뷰 수정 → B2 PR 작성 뒤 수정 (PR이 있는 상태에서 재확인) |
 | Run I | 로컬 | B3 대상 브랜치 rebase → B4 검토 중 추가 변경 |
 | Run J | `--fake-gitlab` | B5 GitLab MR (템플릿, 닫힘 만료) |
-| Run K | 로컬 | B6 정리 실행부터 정리 결과 머지, 두 번째 정리까지 |
-| Run L | `--fake-gitlab` | B6 변형: 헤드리스 반영 단계가 GitLab MR까지 만드는지 |
 
 ## B1·B2. 리뷰 수정과 PR 뒤 수정 (Run H)
 
@@ -92,19 +89,10 @@ node $H/evals/acceptance/dashboard.mjs "$URL" --text --shot $F/shots/x.png \
 2. 에이전트가 `open-mr.mjs`로 MR을 만드는지 본다. 가짜 glab 상태 파일의 MR 본문이 `Default.md` 템플릿의 제목(`## 요약`, `## 테스트`)과 승인 요약을 그대로 담아야 한다. `complete.mjs`가 기록한 `pr_created` 이벤트에 `provider: gitlab`이 있어야 한다.
 3. 상태 파일에서 MR을 `"state": "closed"`로 바꾸고 대시보드 전체 목록을 연다. 몇 초 뒤 작업 화면이 '만료됨'이고 `expired` 이벤트(`reason: pr_closed`)가 있어야 한다.
 
-## B6. 맥락 정리 (Run K, Run L)
-
-1. 로컬 fixture에 사용자 설정 `curation.agent`(`model: "sonnet"`)를 두고 `HEIRLOOM_HOME=$F/home node $H/evals/acceptance/seed-decisions.mjs $F`를 실행한다.
-2. 사용자 작업 트리를 바꿔 둔다(`feat/kelvin`에서 커밋하지 않은 수정). `(git status --porcelain; git rev-parse HEAD; git branch --show-current; git diff) | sha256sum`을 남긴다.
-3. 전체 목록에서 '정리 실행'을 누른다. 헤드리스 초안 단계가 끝나면 작업 화면을 본다. 중복 정리와 axiom 후보(근거 decision 2개 이상)가 있어야 한다.
-4. axiom 후보를 이유 없이 거절하면 '승인 저장'이 잠기는지 본다. 이유를 적어 거절하고 나머지를 승인한다.
-5. 헤드리스 반영 단계 뒤 전용 worktree의 커밋에 `.heirloom/curation/c-*.json`이 있고, 거절 이유가 그대로 담겼는지 본다. 사용자 작업 트리의 해시가 같아야 한다.
-6. 정리 브랜치를 머지하고(`merge-local.sh $F heirloom/curate-…`), `seed-decisions.mjs $F --more`로 무관한 decision을 하나 더한다. 전체 목록에서 첫 정리가 끝났고 전용 worktree와 브랜치가 지워졌는지 본다.
-7. 다시 '정리 실행'. 이전에 거절한 후보를 새 근거 없이 다시 제안하지 않아야 한다.
-8. Run L은 `--fake-gitlab` fixture에서 1·3번을 하고 모두 승인한다. 반영 단계가 `open-mr.mjs`로 MR을 만들고 `complete.mjs`까지 가는지 본다.
+맥락 정리 점검(B6)은 0.4에서 기능을 지우면서 뺐다. 지난 결과는 `results/`에 남아 있다.
 
 ## 판정
 
 - 시나리오마다 기록표의 확인 항목이 모두 '예'이면 통과다.
 - 제품 결함은 재현 테스트를 먼저 쓰고 고친다. 에이전트 행동 문제는 SKILL.md를 고치고 같은 시나리오를 다시 돌린다.
-- B1~B6이 모두 통과하면 3차 계획의 N4 수용 점검 체크박스를 표시한다.
+- B1~B5가 모두 통과하면 3차 계획의 N4 수용 점검 체크박스를 표시한다.

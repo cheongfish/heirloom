@@ -22,15 +22,9 @@ import { readRecords } from '../lib/records.mjs';
 import { PATTERNS } from '../lib/schema.mjs';
 import { VERSION } from '../lib/version.mjs';
 import { approveTask } from './approve.mjs';
-import { runCurationStep, startCuration } from './curate.mjs';
-import { agentStatusOf } from '../lib/agent-runner.mjs';
-import { cleanupCurationWorktrees, curationStatus } from '../lib/curation.mjs';
-import { readCurationMeta } from '../lib/curation-worktree.mjs';
-import { readIndex } from '../lib/store.mjs';
 
 const MAX_BODY = 1024 * 1024;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PLUGIN_ROOT = path.resolve(HERE, '..', '..', '..');
 const STATIC_DIR = path.join(HERE, 'static');
 const SEED_DIR = path.join(HERE, 'vendor', 'seed-design');
 const TYPES = { '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
@@ -74,8 +68,6 @@ async function exists(p) {
  * @property {import('../lib/sign.mjs').Keystore} [keystore]
  * @property {(line: string) => void} [log]
  * @property {() => number} [now] clock for the stale-task check (tests)
- * @property {string} [pluginRoot] where the headless curation finds the skills
- * @property {number} [agentTimeoutMs] time limit of one headless run
  */
 
 /**
@@ -94,8 +86,6 @@ export async function createDashboardServer(options) {
     keystore,
     log = () => {},
     now = Date.now,
-    pluginRoot = PLUGIN_ROOT,
-    agentTimeoutMs,
   } = options;
   const template = await readFile(path.join(STATIC_DIR, 'index.html'), 'utf8');
   /** @param {string} token */
@@ -106,19 +96,6 @@ export async function createDashboardServer(options) {
   /** @type {Set<http.ServerResponse>} */
   const sseClients = new Set();
   let lastActivity = Date.now();
-  /** Curation tasks with a headless run in progress: the server stays up while they run. */
-  /** @type {Set<string>} */
-  const agents = new Set();
-  /** @type {Omit<import('./curate.mjs').RunOptions, 'home' | 'pluginRoot'>} */
-  const runHooks = {
-    onStart: (id) => void agents.add(id),
-    onExit: (id) => {
-      agents.delete(id);
-      lastActivity = Date.now();
-    },
-    log,
-    timeoutMs: agentTimeoutMs,
-  };
   let actualPort = port;
 
   /**
@@ -218,7 +195,6 @@ export async function createDashboardServer(options) {
       if (!events.length) continue;
       const input = /** @type {any} */ (await readJson(paths.input));
       const state = deriveState(events);
-      const curation = await readCurationMeta(home, taskId);
       tasks.push({
         taskId,
         state,
@@ -230,34 +206,10 @@ export async function createDashboardServer(options) {
         worktreeId: input?.worktree.id ?? null,
         createdAt: input?.createdAt ?? events[0].at,
         updatedAt: events[events.length - 1].at,
-        curation: curation ? { worktree: curation.worktree, branch: curation.branch, removedAt: curation.removedAt ?? null, removeNote: curation.removeNote ?? null } : null,
-        agent: curation ? agentStatusOf(events) : null,
       });
     }
     tasks.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
     return tasks;
-  }
-
-  let cleanupRunning = false;
-  /** Remove the worktrees of finished curations in the background. */
-  function cleanupCurations() {
-    if (cleanupRunning) return;
-    cleanupRunning = true;
-    cleanupCurationWorktrees({ home })
-      .then((removed) => {
-        if (removed.length) log(`정리 worktree 삭제: ${removed.join(', ')}`);
-      })
-      .catch((err) => log(`정리 worktree 삭제 실패: ${err instanceof Error ? err.message : String(err)}`))
-      .finally(() => {
-        cleanupRunning = false;
-      });
-  }
-
-  /** Curation state of every repository with a registered (non-curation) worktree. */
-  async function curations() {
-    const index = await readIndex(home);
-    const repoIds = [...new Set(Object.values(index.worktrees).filter((w) => !w.managed).map((w) => w.repoId))].sort();
-    return Promise.all(repoIds.map((repoId) => curationStatus({ home, repoId, now: now() })));
   }
 
   async function overview() {
@@ -265,25 +217,21 @@ export async function createDashboardServer(options) {
     const at = now();
     const listed = await listTasks();
     checkClosedPrs(listed.filter((t) => t.state === 'pr_created').map((t) => t.taskId));
-    cleanupCurations();
     const tasks = listed.map((t) => ({ ...t, stale: isStaleTask(t, at, staleDays) }));
     const { changes, unchecked } = await findUnhandedChanges({ home });
-    return { tasks, unhanded: changes, unchecked, staleDays, curation: await curations() };
+    return { tasks, unhanded: changes, unchecked, staleDays };
   }
 
   /**
-   * Existing records the draft points at (targets, relations, axiom evidence) and the records
-   * a curation reviews, for display.
+   * Existing records the draft points at (targets, relations, axiom evidence), for display.
    * @param {string} root
    * @param {any[]} ops
-   * @param {any} input
    */
-  async function targetsOf(root, ops, input) {
+  async function targetsOf(root, ops) {
     const wanted = new Set([
       ...ops.filter((op) => op.op !== 'add').map((op) => op.target),
       ...ops.filter((op) => op.op === 'relate').map((op) => op.relation?.id),
       ...ops.flatMap((op) => (Array.isArray(op.evidence) ? op.evidence : [])),
-      ...(input?.curation ? [...input.curation.batch, ...input.curation.related, ...input.curation.axioms] : []),
     ]);
     /** @type {Record<string, { kind: string, title: string, active: boolean }>} */
     const out = {};
@@ -340,9 +288,7 @@ export async function createDashboardServer(options) {
       events,
       approvals,
       latestApproval: latest ?? null,
-      targets: input ? await targetsOf(input.repo.root, /** @type {any} */ (draft)?.records ?? [], input) : {},
-      curation: await readCurationMeta(home, taskId),
-      agent: agentStatusOf(events),
+      targets: input ? await targetsOf(input.repo.root, /** @type {any} */ (draft)?.records ?? []) : {},
       carried: carriedOf(input, draft),
     };
   }
@@ -384,12 +330,6 @@ export async function createDashboardServer(options) {
         req.on('close', () => sseClients.delete(res));
         return undefined;
       }
-      const repoCuration = /^\/api\/repos\/([^/]+)\/curation$/.exec(pathname);
-      if (repoCuration) {
-        const repoId = decodeURIComponent(repoCuration[1]);
-        if (!PATTERNS.repoId.test(repoId)) return fail(res, 404, 'E_NOT_FOUND', '저장소가 없음');
-        return json(res, 200, { ok: true, ...(await curationStatus({ home, repoId, now: now() })) });
-      }
       const detail = /^\/api\/tasks\/([^/]+)$/.exec(pathname);
       if (detail) {
         const taskId = decodeURIComponent(detail[1]);
@@ -404,19 +344,7 @@ export async function createDashboardServer(options) {
       if (!String(req.headers['content-type'] ?? '').startsWith('application/json')) {
         return fail(res, 415, 'E_INPUT', 'application/json 본문만 받음');
       }
-      const curate = /^\/api\/repos\/([^/]+)\/curate$/.exec(pathname);
-      if (curate) {
-        const repoId = decodeURIComponent(curate[1]);
-        if (!PATTERNS.repoId.test(repoId)) return fail(res, 404, 'E_NOT_FOUND', '저장소가 없음');
-        // The command always comes from the user config: a request can never choose it.
-        const body = await readBody(req);
-        if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length) {
-          return fail(res, 400, 'E_INPUT', '정리 실행 요청의 본문은 빈 객체여야 함');
-        }
-        log(`curate ${repoId} sec-fetch-site=${req.headers['sec-fetch-site'] ?? '-'} origin=${req.headers.origin ?? '-'}`);
-        return json(res, 200, { ok: true, ...(await startCuration({ home, pluginRoot, repoId, ...runHooks })) });
-      }
-      const action = /^\/api\/tasks\/([^/]+)\/(approve|discard|retry-agent)$/.exec(pathname);
+      const action = /^\/api\/tasks\/([^/]+)\/(approve|discard)$/.exec(pathname);
       if (!action) return fail(res, 404, 'E_NOT_FOUND', '경로가 없음');
       const taskId = decodeURIComponent(action[1]);
       if (!(await exists(taskPaths(home, taskId).dir))) return fail(res, 404, 'E_NOT_FOUND', '작업이 없음');
@@ -424,23 +352,7 @@ export async function createDashboardServer(options) {
       if (action[2] === 'approve') {
         log(`approve ${taskId} ua=${JSON.stringify(req.headers['user-agent'] ?? '')} sec-fetch-site=${req.headers['sec-fetch-site'] ?? '-'} origin=${req.headers.origin ?? '-'}`);
         const approval = await approveTask({ home, taskId, request: body, keystore });
-        // A curation goes on by itself once approved: the approval is the request to apply it.
-        /** @type {unknown} */
-        let agent = null;
-        if (await readCurationMeta(home, taskId)) {
-          try {
-            agent = (await runCurationStep({ home, pluginRoot, taskId, ...runHooks })).agent;
-          } catch (err) {
-            const e = classifyError(err);
-            agent = { pid: null, error: e.message };
-            log(`정리 반영 단계 시작 실패 ${taskId}: ${e.message}`);
-          }
-        }
-        return json(res, 200, { ok: true, approval, agent });
-      }
-      if (action[2] === 'retry-agent') {
-        log(`retry-agent ${taskId}`);
-        return json(res, 200, { ok: true, ...(await runCurationStep({ home, pluginRoot, taskId, ...runHooks })) });
+        return json(res, 200, { ok: true, approval });
       }
       const state = await appendEvent(taskPaths(home, taskId).events, {
         type: 'discarded',
@@ -495,7 +407,7 @@ export async function createDashboardServer(options) {
   }, 25_000);
   keepalive.unref();
   const idleTimer = setInterval(() => {
-    if (sseClients.size === 0 && agents.size === 0 && Date.now() - lastActivity >= idleMs) onIdle();
+    if (sseClients.size === 0 && Date.now() - lastActivity >= idleMs) onIdle();
   }, idleCheckMs);
   idleTimer.unref();
 

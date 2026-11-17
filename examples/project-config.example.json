@@ -9,12 +9,6 @@
     "maxRecords": 8,
     "maxTokens": 6000
   },
-  "curation": {
-    "minUnreviewed": 10,
-    "maxAgeDays": 30,
-    "minForAge": 3,
-    "batchSize": 20
-  },
   "testCadence": {
     "mode": "off"
   }

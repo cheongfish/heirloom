@@ -11,7 +11,7 @@ A plugin for Claude Code, Codex and Antigravity, with partial support for Cursor
 ## Rules for agents using this folder
 
 - **Never approve for the user.** Approvals happen only in the dashboard, by the human. Do not call the dashboard's approval API, do not read or copy `~/.heirloom/keys/`, do not create or edit files under `~/.heirloom/tasks/`.
-- **Do not edit records by hand.** `.heirloom/decisions/`, `.heirloom/axioms/` and `.heirloom/curation/` change only through an approved handoff.
+- **Do not edit records by hand.** `.heirloom/decisions/` and `.heirloom/axioms/` change only through an approved handoff.
 - **Let the user grant trust.** Installing the plugin, trusting hooks (Codex `/hooks`) and changing permission settings are the user's decisions. Ask before running such commands, and leave trust prompts to the user.
 - **No `--dangerously-*` flags** unless the user asks for them.
 - **Do not edit the host's own config** (for example `~/.codex/config.toml`) unless the user asks.
@@ -26,10 +26,9 @@ A plugin for Claude Code, Codex and Antigravity, with partial support for Cursor
 | Something does not work: symptom → check → cause → fix | [troubleshooting.md](troubleshooting.md) |
 | How handoff, approval, records, re-check and recall work | [workflow.md](workflow.md) |
 | The dashboard screens and server | [dashboard.md](dashboard.md) |
-| Context curation (reviewing many decisions, axiom candidates, headless runs) | [curation.md](curation.md) |
 | Settings files, keys, defaults, environment variables | [configuration.md](configuration.md) |
 | Where data lives and what may be deleted | [data.md](data.md) |
-| Security model, headless run limits, known limits | [security.md](security.md) |
+| Security model, known limits | [security.md](security.md) |
 
 ## Requirements
 
@@ -49,7 +48,6 @@ A plugin for Claude Code, Codex and Antigravity, with partial support for Cursor
 | Windows keychain | The private key is kept in a file (mode 0600). |
 | GitHub Enterprise | Only github.com counts as GitHub. |
 | Reminder at stop in Cursor CLI | Cursor CLI runs no stop hook. The agent hands off from the convention alone; nothing reminds it. |
-| Context curation with Cursor | A curation runs with the repository's last Claude Code, Codex or Antigravity session, or `curation.agent.host`. |
 | Cursor IDE, other Cursor install methods | Not checked. Use the Cursor CLI with `--plugin-dir`. |
 
 ## Feedback

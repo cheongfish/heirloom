@@ -9,7 +9,6 @@ Each Heirloom script prints one JSON object: `{"ok":true,"data":…}` or `{"ok":
 | Hook input and output | Start the host with `HEIRLOOM_HOOK_LOG=1`; read `~/.heirloom/hook-log.jsonl` |
 | Dashboard server | `~/.heirloom/server/server.log` |
 | A task's history | `~/.heirloom/tasks/<taskId>/events.jsonl` (one event per line) |
-| A headless curation run | `~/.heirloom/tasks/<taskId>/agent-<curate or apply>.log` |
 | Installed version | `version` in `<plugin folder>/.claude-plugin/plugin.json` ([install.md](install.md#install-locations)) |
 
 ## Symptoms
@@ -27,10 +26,6 @@ Each Heirloom script prints one JSON object: `{"ok":true,"data":…}` or `{"ok":
 | Approved, but nothing was applied | Task state in the dashboard | The session ended → in a new session ask the agent to "apply the approved handoff". State `stale` / "재확인 필요" → code changed after approval; run `prepare-handoff` again for a re-check ([workflow.md](workflow.md#changes-after-approval)). |
 | No PR or MR | `apply.mjs` result `pr.available: false` and its reason | `gh`/`glab` missing or not logged in, or the remote is not github.com/GitLab → records are committed; the user opens the PR or merges. |
 | Approval rejected as unsigned or tampered | `error.code` from `apply.mjs` | The draft or approval changed after signing → approve again in the dashboard. Never re-sign by hand. |
-| Headless curation failed: `command_missing` | Dashboard task screen | The host CLI is not on `PATH` → install it or set `curation.agent.command`. The host is the repository's last session host ([curation.md](curation.md)). |
-| Headless curation failed: `permission_denied` | `agent-<step>.log` | Antigravity needed a command outside the run's allow list → run again, or run the step by hand in the curation worktree. |
-| Headless curation failed: time limit | `agent-<step>.log` | Stopped after 30 minutes → run again or by hand. |
-| `~/.codex/config.toml` gains `[projects."…/.heirloom/worktrees/…"]` entries | — | `codex exec` records each curation worktree as trusted. Heirloom does not edit Codex's config; the user may remove old entries. |
 
 ## Reporting
 

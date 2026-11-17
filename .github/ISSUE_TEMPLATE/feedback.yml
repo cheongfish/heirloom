@@ -30,7 +30,6 @@ body:
         - 인계 (prepare-handoff) / Handoff
         - 대시보드 승인 / Dashboard approval
         - 반영·PR·MR (apply-approval) / Apply, PR, MR
-        - 맥락 정리 (curation) / Context curation
         - 기타 / Other
     validations:
       required: true

@@ -14,7 +14,6 @@ The dashboard is a local web page where a human reviews and approves handoffs. O
 | Section | Content |
 | --- | --- |
 | 승인 대기 (awaiting approval) | Handoffs waiting for a human. Always shown. |
-| 맥락 정리 (context curation) | Per repository: unreviewed decisions, the last curation, and a **정리 실행** (run curation) button. "정리 권장" marks a repository that meets the [suggestion condition](curation.md#when-heirloom-suggests-it). A running curation shows "정리 진행 중" instead. |
 | 반영 대기 (waiting to apply) | Approved tasks whose records are not written or whose PR is not open yet (approved, applied) |
 | 인계되지 않은 변경 (unhanded changes) | Worktrees with code changes but no handoff for their current state |
 | 오래된 미처리 건 (stale) | Unfinished tasks whose last activity is older than `dashboard.staleDays` (default 7). They never expire just because time passed. |
@@ -38,11 +37,10 @@ The task screen shows the title, the state badge, the task ID and `branch → ba
 | 승인 내용 (approval) | Shown after approval: final summary and the decision per item. The approver and the signing key stay in the signed approval file. |
 
 - **Edits and updates.** If the agent resubmits the draft while you are editing, your input stays and a "새 초안이 있음" (new draft available) banner appears.
-- **Approve button.** It is enabled only when the summary is not empty, every open item has a decision, and every held or rejected axiom candidate has a reason. While it is disabled, the bar says what is missing, and **다음 미처리 항목으로** (next open item) jumps to the first item that needs you.
+- **Approve button.** It is enabled only when the summary is not empty and every open item has a decision. While it is disabled, the bar says what is missing, and **다음 미처리 항목으로** (next open item) jumps to the first item that needs you.
 - **Summary origins.** On approval, each line is matched to the draft bullet it came from: an unchanged line by its text, an edited line by its position. The next re-check uses this to keep the code paths of each bullet. If you reorder lines and also reword them, a line can be matched to the wrong draft bullet.
 - **Re-check after approval.** When the code changed after an approval ([Workflow](workflow.md#changes-after-approval)), items that keep their approval are marked "승인 유지" (approval kept) and folded. Under the summary box, each draft bullet is listed as "승인 유지" or "다시 확인" (re-check) with its reasons and the approved text. Items up for re-check show why, and the approved version under "지난 승인 내용". "다시 검토" (review again) opens a kept item for a decision. Only open items need a decision; if none is open, one confirmation of the summary is enough.
 - **Discard.** "작업 폐기" (discard), at the right of the branch line above the tabs, ends the handoff after a confirmation. A discarded task cannot be approved or applied.
-- **Curation tasks.** A [context curation](curation.md) has the same tabs. Its overview shows the dedicated worktree, the state of the headless run (with "다시 실행" after a failure) and the batch with earlier review history. Axiom candidates list their evidence decisions and have a reason field, required to hold or reject them. Saving the approval starts the headless apply step.
 
 ## Server lifetime
 

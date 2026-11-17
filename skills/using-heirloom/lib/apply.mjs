@@ -10,8 +10,7 @@ import path from 'node:path';
 import { draftDigest } from './canonical.mjs';
 import { HeirloomError, classifyError } from './errors.mjs';
 import { appendEvent, deriveState, readEvents } from './events.mjs';
-import { readJson, writeFileAtomic } from './fsx.mjs';
-import { buildCurationReview, curationReviewPath } from './curation.mjs';
+import { readJson } from './fsx.mjs';
 import { verifiedApprovalRecord } from './baseline.mjs';
 import { git, readTreeTexts, repoInfo } from './git.mjs';
 import { findOpenPr, ghReady } from './github.mjs';
@@ -312,14 +311,6 @@ async function writeApprovedRecords({ root, input, draft, approval, events }) {
   for (const doc of writes) {
     await writeRecord(root, doc);
     written.push(path.relative(root, recordPath(root, doc.meta)).split(path.sep).join('/'));
-  }
-  // A curation also leaves its review history, so the batch counts as reviewed once merged
-  // and held or rejected candidates are not proposed again without new evidence.
-  if (input.trigger === 'curation') {
-    const review = buildCurationReview({ input, draft, approval });
-    const file = curationReviewPath(review.id);
-    await writeFileAtomic(path.join(root, file), `${JSON.stringify(review, null, 2)}\n`, { mode: 0o644, dirMode: 0o755 });
-    written.push(file);
   }
   /** @type {string[]} */
   const removed = [];

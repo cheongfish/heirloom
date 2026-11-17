@@ -10,7 +10,6 @@ Everything here is committed. Task state and approvals are never stored here, so
 | --- | --- |
 | `decisions/d-<id>.md` | A decision record: JSON front matter, then the body (problem, choice and reasons, rejected alternatives, scope) |
 | `axioms/a-<id>.md` | An axiom record: property to keep, scope and conditions, exceptions, checks |
-| `curation/c-<id>.json` | Review history of one [context curation](curation.md): the batch, each candidate with the decision and reason, the other changes |
 | `config.json` | Optional. [Project settings](configuration.md#project-settings) |
 
 - **Quoted messages.** A record whose decision was made in the chat keeps the quoted part of the user's message as its source (`"ref": "@conversation"`), so that text is committed with the record.
@@ -33,8 +32,6 @@ The environment variable `HEIRLOOM_HOME` changes this location. Directories are 
 | `tasks/<taskId>/handoff.md` | Readable handoff file |
 | `tasks/<taskId>/approvals/ap-<id>.json` | Signed approval records |
 | `tasks/<taskId>/events.jsonl` | Task event log |
-| `tasks/<taskId>/curation.json`, `agent-<step>.log` | Curation tasks only: the dedicated worktree and branch, and the headless run logs |
-| `worktrees/<repoId>/<taskId>/` | Dedicated worktree of a running curation. Removed when the curation ends. |
 | `sessions/<hash>.json` | Per worktree: the transcript path, first and last hook time of recent sessions (kept for 7 days), and whether the session was told it can hand off work without a spec |
 | `keys/current.json` | Fingerprint of the current signing key and where its private key is kept |
 | `keys/private.key` | The private key, only when no keychain can be used (mode 0600) |
@@ -49,7 +46,6 @@ The environment variable `HEIRLOOM_HOME` changes this location. Directories are 
 | `sessions/` | Yes. A handoff right after has no conversation to quote until the next session start or stop. |
 | `tasks/<taskId>/` of finished tasks (PR created, discarded, expired) | Yes. The record files in the repository are not affected. |
 | `tasks/<taskId>/` of open tasks | No: the handoff and its approval are lost. |
-| `worktrees/` | Not by hand: use `git worktree remove` from the repository, or discard the curation in the dashboard. |
 | `keys/public/` | No: past approvals can no longer be verified. |
 | `ids/` | No: the repository gets new IDs and loses the link to its open tasks. |
 | `keys/private.key` or the keychain entry | A new key is created at the next approval. Verifying past approvals needs only the public keys. |

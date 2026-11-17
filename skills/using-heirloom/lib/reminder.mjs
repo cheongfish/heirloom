@@ -18,7 +18,7 @@ import { specsReadInTranscript } from './transcript.mjs';
 /**
  * @typedef {object} StopDecision
  * @property {boolean} remind
- * @property {'stop_hook_active' | 'not_git' | 'no_base' | 'managed' | 'no_changes' | 'no_code_changes' | 'no_spec' | 'already_noticed' | 'notice' | 'already_reminded' | 'handoff_requested' | 'remind' | 'recheck' | 'recheck_not_needed'} reason
+ * @property {'stop_hook_active' | 'not_git' | 'no_base' | 'no_changes' | 'no_code_changes' | 'no_spec' | 'already_noticed' | 'notice' | 'already_reminded' | 'handoff_requested' | 'remind' | 'recheck' | 'recheck_not_needed'} reason
  * @property {string} [message] text for the agent when `remind` is true
  */
 
@@ -106,8 +106,6 @@ export async function evaluateStop({ cwd, home, stopHookActive, transcriptPath }
   }
   const known = await readIds(info, home);
   const index = known ? await readIndex(home) : null;
-  // A curation worktree is driven by its curation task, never by handoff reminders.
-  if (known && index?.worktrees[known.worktreeId]?.managed) return { remind: false, reason: 'managed' };
 
   const config = await loadProjectConfig(info.root);
   let base;

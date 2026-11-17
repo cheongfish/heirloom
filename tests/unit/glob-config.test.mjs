@@ -59,29 +59,21 @@ test('loadProjectConfig: defaults without a file, merges and validates a file', 
   await assert.rejects(loadProjectConfig(root), (err) => /** @type {any} */ (err).code === 'E_INPUT');
 });
 
-test('loadUserConfig: dashboard and curation agent defaults', async () => {
+test('loadUserConfig: dashboard defaults; a curation setting from before 0.4 is accepted and ignored', async () => {
   const home = await tempDir('home');
   assert.deepEqual(await loadUserConfig(home), {
     schemaVersion: 1,
     dashboard: { idleMinutes: 30, openBrowser: true, staleDays: 7, port: 17380 },
-    curation: { agent: { host: 'claude-code', command: 'claude', model: null } },
   });
   await writeFile(path.join(home, 'config.json'), JSON.stringify({ schemaVersion: 1, dashboard: { idleMinutes: 5, staleDays: 3 } }));
   assert.deepEqual((await loadUserConfig(home)).dashboard, { idleMinutes: 5, openBrowser: true, staleDays: 3, port: 17380 });
   await writeFile(path.join(home, 'config.json'), JSON.stringify({ schemaVersion: 1, curation: { agent: { command: '/opt/claude', model: 'sonnet' } } }));
-  assert.deepEqual((await loadUserConfig(home)).curation.agent, { host: 'claude-code', command: '/opt/claude', model: 'sonnet' });
-  for (const [host, command] of [['codex', 'codex'], ['antigravity', 'agy']]) {
-    await writeFile(path.join(home, 'config.json'), JSON.stringify({ schemaVersion: 1, curation: { agent: { host } } }));
-    assert.deepEqual((await loadUserConfig(home)).curation.agent, { host, command, model: null }, 'each profile has its own default command');
-  }
-  await writeFile(path.join(home, 'config.json'), JSON.stringify({ schemaVersion: 1, curation: { agent: { host: 'vim' } } }));
-  await assert.rejects(loadUserConfig(home), /host/);
+  assert.equal('curation' in (await loadUserConfig(home)), false);
 });
 
-test('loadProjectConfig: curation thresholds default and override one by one', async () => {
+test('loadProjectConfig: a curation setting from before 0.4 is accepted and ignored', async () => {
   const root = await tempDir('repo');
-  assert.deepEqual((await loadProjectConfig(root)).curation, { minUnreviewed: 10, maxAgeDays: 30, minForAge: 3, batchSize: 20 });
   await mkdir(path.join(root, '.heirloom'), { recursive: true });
   await writeFile(path.join(root, '.heirloom', 'config.json'), JSON.stringify({ schemaVersion: 1, curation: { batchSize: 5 } }));
-  assert.deepEqual((await loadProjectConfig(root)).curation, { minUnreviewed: 10, maxAgeDays: 30, minForAge: 3, batchSize: 5 });
+  assert.equal('curation' in (await loadProjectConfig(root)), false);
 });

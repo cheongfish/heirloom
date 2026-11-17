@@ -39,7 +39,6 @@ Of the dashed lines, phase tests work only when you turn on the [optional featur
 - If the code changes after approval, only the items the change touches come back to you.
 ### Context management
 - Later sessions get the paths that decisions cover, and read the full decisions before changing those paths.
-- When decisions pile up, the dashboard suggests a context curation.
 
 ## Optional features
 
@@ -100,7 +99,6 @@ Cursor is supported through its CLI (`agent`) only, and within it only the featu
     - Skills, the session-start context and the always-applied rule, recall of decisions in later sessions
 - Does not work
     - Reminding the agent to hand off when the session ends. Cursor CLI runs no stop hook, so if the agent forgets to hand off spec-based work, nothing reminds it.
-    - Running a context curation with Cursor. A curation runs with Claude Code, Codex or Antigravity.
 - Not checked
     - The Cursor IDE
     - Installing other than with `--plugin-dir` (marketplace, `~/.cursor/plugins/local/`)
@@ -115,7 +113,6 @@ Installation, settings and troubleshooting can be left to your agent. The detail
 
 - A handoff from the agent does not mean approval. Only a human can approve, and only in the dashboard.
 - Approvals are signed with a per-user key, and the dashboard listens on `127.0.0.1` only. A program running as the same OS user can still bypass this on purpose, so Heirloom aims at detection and audit rather than prevention.
-- A context curation runs a headless agent only when you choose it, with the commands limited per step.
 - Please tell us what you see with the [feedback form](https://github.com/cheongfish/heirloom/issues/new?template=feedback.yml).
 
 ## License
