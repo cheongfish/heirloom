@@ -16,6 +16,7 @@ import { filesChangedBetween, repoInfo, resolveBase, tryGit } from './git.mjs';
 import { reviewMatchesSource } from './handoff.mjs';
 import { resolveIds } from './ids.mjs';
 import { approvalFiles, taskPaths } from './paths.mjs';
+import { isMarkdownCodePath } from './schema.mjs';
 import { findProjectRules } from './project-rules.mjs';
 import { affectedItems, buildBaseline, diffStates } from './recheck.mjs';
 import { readRecords } from './records.mjs';
@@ -210,6 +211,7 @@ async function previousJudgment(paths, events) {
  */
 async function recheckFor({ home, root, taskId, approvalId, base, source, materials }) {
   const approved = await loadApprovalBaseline({ home, taskId, approvalId });
+  if (approved.approval.kind === 'judgment') return judgmentRecheck({ root, approved, base, source, materials });
   const baseline = buildBaseline({ draft: approved.draft, approval: approved.approval });
   const diff = diffStates({
     before: { files: approved.input.source.files, mergeBase: approved.input.base.mergeBase, materials: approved.approval.target.materials },
@@ -227,11 +229,37 @@ async function recheckFor({ home, root, taskId, approvalId, base, source, materi
 }
 
 /**
+ * Recheck after a judgment (pivot 6.3): the probes run again on the new head, and questions
+ * whose probe outputs stayed the same keep their verdict. Here only the changed files are
+ * listed, and the code files no behavior description or open choice of the judged draft
+ * points at (`unlinked`): the agent adds probes for them.
+ * @param {{ root: string, approved: { approval: any, input: any, draft: any }, base: { mergeBase: string }, source: { files: any[] }, materials: any[] }} options
+ */
+async function judgmentRecheck({ root, approved, base, source, materials }) {
+  const diff = diffStates({
+    before: { files: approved.input.source.files, mergeBase: approved.input.base.mergeBase, materials: approved.approval.target.materials },
+    after: { files: source.files, mergeBase: base.mergeBase, materials: Object.fromEntries(materials.map((m) => [m.ref, m.sha256])) },
+    baseChanged: await filesChangedBetween({ cwd: root, from: approved.input.base.mergeBase, to: base.mergeBase }),
+  });
+  const draft = approved.draft;
+  const linked = [...draft.behaviorDiffs.flatMap((/** @type {any} */ d) => d.codePaths), ...draft.questions.filter((/** @type {any} */ q) => q.kind === 'fork').flatMap((/** @type {any} */ q) => q.codePaths)];
+  const code = diff.changes.map((c) => c.path).filter((p) => !isMarkdownCodePath(p));
+  return {
+    kind: 'probes',
+    basedOn: approved.approval.id,
+    mergeBaseChanged: diff.mergeBaseChanged,
+    changes: diff.changes.map((c) => ({ path: c.path, reason: c.reason })),
+    unlinked: code.filter((p) => !matchesAny(p, linked)),
+  };
+}
+
+/**
  * The recheck as the agent needs it from prepare's output. The baseline itself is long and
  * is read from input.json.
  * @param {any} recheck
  */
 function recheckReport(recheck) {
+  if (recheck.kind === 'probes') return recheck;
   return {
     basedOn: recheck.basedOn,
     mergeBaseChanged: recheck.mergeBaseChanged,

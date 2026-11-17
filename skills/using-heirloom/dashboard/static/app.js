@@ -1518,7 +1518,8 @@ function predictionCard(f, q) {
 function predictPanel(f) {
   const j = f.task.judge;
   const first = j.questions.filter((/** @type {any} */ q) => q.predictFirst);
-  const later = j.questions.filter((/** @type {any} */ q) => !q.predictFirst);
+  const later = j.questions.filter((/** @type {any} */ q) => !q.predictFirst && !q.carried);
+  const kept = j.questions.filter((/** @type {any} */ q) => q.carried);
   const reveal = /** @type {HTMLButtonElement} */ (button(BUTTON.primary, first.length ? '예측 저장하고 결과 보기' : '결과 보기', () => void savePredictions(), { id: 'reveal' }));
   return h(
     'div',
@@ -1526,9 +1527,13 @@ function predictPanel(f) {
     callout('informative', '먼저 결과를 예측하세요', '예측을 저장해야 실제 결과가 공개됩니다. 저장한 예측은 바꿀 수 없습니다. 틀린 예측도 그대로 PR에 남아 리뷰어에게 도움이 됩니다.'),
     j.questions.length > 5 ? callout('warning', `질문이 ${j.questions.length}개`, '이 변경은 한 번에 이해하기에 클 수 있습니다. 나눌 수 있는지 에이전트와 상의해 보세요.') : null,
     j.setupFailed ? callout('warning', '탐침 준비 명령 실패', '실행 환경을 갖추지 못한 채 탐침이 돌았습니다. 결과가 실행 실패일 수 있습니다.') : null,
+    recheckNotice(j),
     first.map((/** @type {any} */ q) => predictionCard(f, q)),
     later.length
       ? h('section', { class: 'hl-card hl-stack' }, h('h2', { class: 'hl-section-title' }, '결과를 본 뒤 답할 질문'), h('ul', { class: 'hl-files' }, later.map((/** @type {any} */ q) => h('li', {}, badge('neutral', QUESTION_KIND[q.kind] ?? q.kind), ` ${q.prompt}`))))
+      : null,
+    kept.length
+      ? h('section', { class: 'hl-card hl-stack' }, h('h2', { class: 'hl-section-title' }, '이전 판정 유지'), h('p', { class: 'hl-muted hl-small' }, '탐침 출력이 지난 판정 때와 같아 다시 묻지 않습니다.'), h('ul', { class: 'hl-files' }, kept.map((/** @type {any} */ q) => h('li', {}, badge('positive', VERDICT_LABEL[q.carried.verdict] ?? q.carried.verdict), ` ${q.prompt}`))))
       : null,
     h(
       'details',
@@ -1564,8 +1569,34 @@ function observedProbe(task, id) {
 /** @type {Record<string, string>} */
 const TEST_STATUS = { pass: '통과', fail: '실패', skip: '건너뜀', absent: '없음' };
 
+/**
+ * What a recheck says before the questions: which judgment it builds on, and changes no
+ * probe covers.
+ * @param {any} j
+ */
+function recheckNotice(j) {
+  if (!j.basedOn) return null;
+  return callout(
+    j.unlinked.length ? 'warning' : 'informative',
+    `판정 ${j.basedOn} 이후 재확인`,
+    j.unlinked.length ? `출력이 바뀐 질문만 다시 묻습니다. 어느 탐침에도 연결되지 않은 변경이 있습니다: ${j.unlinked.join(', ')}` : '출력이 바뀐 질문만 다시 묻습니다.',
+  );
+}
+
+/** A question whose verdict is kept from the last judgment. @param {any} q */
+function carriedCard(q) {
+  return h(
+    'section',
+    { class: 'hl-card hl-stack', id: `question-${q.id}` },
+    questionHead(q),
+    h('p', { class: 'hl-question' }, q.prompt),
+    h('div', { class: 'hl-row' }, badge('positive', VERDICT_LABEL[q.carried.verdict] ?? q.carried.verdict), badge('neutral', '이전 판정 유지'), q.carried.answer !== null ? h('span', { class: 'hl-muted' }, `답: ${q.carried.answer}`) : null),
+  );
+}
+
 /** @param {JudgeForm} f @param {any} q */
 function judgeCard(f, q) {
+  if (q.carried) return carriedCard(q);
   const j = f.task.judge;
   const observed = j.observed[q.id] ?? { probes: [], tests: [], correct: null };
   const prediction = j.predictions[q.id];
@@ -1664,6 +1695,7 @@ function judgePanel(f) {
             : h('p', { class: 'hl-muted' }, j.tests.comparison === 'tests' ? '없음' : '테스트별 결과를 읽지 못해 종료 코드만 비교했습니다.'),
         )
       : null,
+    recheckNotice(j),
     j.questions.map((/** @type {any} */ q) => judgeCard(f, q)),
     f.status,
     h('div', { class: 'hl-row' }, submit),
@@ -1680,7 +1712,7 @@ function judgeBlockers(f) {
     if (open.length) why.push(`예측하지 않은 질문: ${open.map((/** @type {any} */ q) => q.id).join(', ')}`);
     return why;
   }
-  const undecided = j.questions.filter((/** @type {any} */ q) => !f.verdicts.has(q.id));
+  const undecided = j.questions.filter((/** @type {any} */ q) => !q.carried && !f.verdicts.has(q.id));
   if (undecided.length) why.push(`판정하지 않은 질문: ${undecided.map((/** @type {any} */ q) => q.id).join(', ')}`);
   const noReason = j.questions.filter((/** @type {any} */ q) => RETURNING.has(f.verdicts.get(q.id) ?? '') && !f.reasons.get(q.id)?.trim());
   if (noReason.length) why.push(`이유가 없는 되돌림·분리: ${noReason.map((/** @type {any} */ q) => q.id).join(', ')}`);
@@ -1737,7 +1769,7 @@ async function saveJudgment() {
   const f = judge;
   const returning = [...f.verdicts.values()].some((v) => RETURNING.has(v));
   if (returning && !window.confirm('되돌림이나 분리가 있어 작업이 에이전트에게 되돌아갑니다. PR은 열리지 않습니다. 저장할까요?')) return;
-  const items = f.task.judge.questions.map((/** @type {any} */ q) => {
+  const items = f.task.judge.questions.filter((/** @type {any} */ q) => !q.carried).map((/** @type {any} */ q) => {
     const verdict = /** @type {string} */ (f.verdicts.get(q.id));
     return {
       id: q.id,
@@ -1821,8 +1853,9 @@ function tabLabel(id) {
       const first = j.questions.filter((/** @type {any} */ q) => q.predictFirst);
       return [h('span', {}, `예측 ${first.filter((/** @type {any} */ q) => judge?.predictions.has(q.id)).length}/${first.length}`)];
     }
-    const done = j.questions.filter((/** @type {any} */ q) => judge?.verdicts.has(q.id)).length;
-    return [h('span', {}, `판정 ${done}/${j.questions.length}`), done === j.questions.length ? badge('positive', '완료') : null];
+    const asked = j.questions.filter((/** @type {any} */ q) => !q.carried);
+    const done = asked.filter((/** @type {any} */ q) => judge?.verdicts.has(q.id)).length;
+    return [h('span', {}, `판정 ${done}/${asked.length}`), done === asked.length ? badge('positive', '완료') : null];
   }
   const indexes = form ? openIndexes(form, form.kinds[id]) : [];
   const decided = indexes.filter((i) => form?.decisions.has(i)).length;

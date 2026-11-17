@@ -239,6 +239,15 @@ function recheckSchema() {
 
 const fileStatus = oneOf('A', 'M', 'D');
 
+/** `input.recheck` after a judgment: the probes run again and unchanged outputs keep their verdict. */
+const probeRecheckSchema = object({
+  kind: oneOf('probes'),
+  basedOn: approvalId,
+  mergeBaseChanged: bool,
+  changes: arrayOf(object({ path: nonEmpty, reason: oneOf('edited', 'base_updated', 'added', 'removed') })),
+  unlinked: arrayOf(nonEmpty),
+});
+
 export const inputSchema = object({
   schemaVersion: v1,
   taskId,
@@ -263,7 +272,9 @@ export const inputSchema = object({
   createdAt: timestamp,
 }, {
   optional: {
-    recheck: recheckSchema(),
+    // Recheck after an item approval (schema 1 drafts) or after a judgment (`kind: 'probes'`).
+    recheck: (v, at, errors) =>
+      (typeof v === 'object' && v !== null && /** @type {any} */ (v).kind === 'probes' ? probeRecheckSchema : recheckSchema())(v, at, errors),
   },
 });
 
@@ -410,7 +421,7 @@ export const judgmentSchema = object({
         probeHashes: recordOf(probeHash),
         verdict: oneOf(...VERDICTS),
       },
-      { optional: { reason: nonEmpty } },
+      { optional: { reason: nonEmpty, carried: bool } },
     ),
   ),
   outcome: oneOf('accepted', 'returned'),
@@ -418,7 +429,7 @@ export const judgmentSchema = object({
   judgedAt: timestamp,
   approver: object({ fingerprint: nonEmpty, gitUser: nullable(nonEmpty) }),
   signature: nonEmpty,
-});
+}, { optional: { basedOn: approvalId } });
 
 // ---------------------------------------------------------------- approval (5.5)
 

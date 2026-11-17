@@ -15,6 +15,7 @@ import { appendEvent, deriveState, readEvents } from '../lib/events.mjs';
 import { readJson, writeJsonAtomic } from '../lib/fsx.mjs';
 import { tryGit } from '../lib/git.mjs';
 import { newApprovalId } from '../lib/ids.mjs';
+import { loadApprovalBaseline } from '../lib/baseline.mjs';
 import { approvalFiles, taskPaths } from '../lib/paths.mjs';
 import { ACCEPTING, assertValid, judgmentSchema } from '../lib/schema.mjs';
 import { sign } from '../lib/sign.mjs';
@@ -94,6 +95,50 @@ function testsOf(q, probes) {
 }
 
 /**
+ * Hashes of what a question rests on: base and head output of each probe, and for a
+ * test-lock question the base and head results of its tests.
+ * @param {any} q
+ * @param {any} probes
+ * @returns {Record<string, { base: string, head: string }> | null} null when a probe was not run
+ */
+function hashesFor(q, probes) {
+  /** @type {Record<string, { base: string, head: string }>} */
+  const out = {};
+  for (const id of probeIdsOf(q)) {
+    const p = probes?.probes.find((/** @type {any} */ x) => x.id === id);
+    if (!p) return null;
+    out[id] = { base: p.base.sha256, head: p.head.sha256 };
+  }
+  if (q.kind === 'test-lock') {
+    const tests = testsOf(q, probes);
+    out.tests = { base: sha256Hex(canonicalJson(tests.map((/** @type {any} */ t) => [t.name, t.base]))), head: sha256Hex(canonicalJson(tests.map((/** @type {any} */ t) => [t.name, t.head]))) };
+  }
+  return out;
+}
+
+/**
+ * Verdicts kept from the judgment this round rechecks (pivot 6.3): a question asked the same
+ * way whose probe outputs did not change keeps its accepting verdict and is not asked again.
+ * @param {{ home: string, taskId: string, input: any, draft: any, probes: any }} options
+ * @returns {Promise<{ basedOn: string | null, carried: Map<string, any> }>}
+ */
+async function carriedVerdicts({ home, taskId, input, draft, probes }) {
+  /** @type {Map<string, any>} */
+  const carried = new Map();
+  if (input?.recheck?.kind !== 'probes') return { basedOn: null, carried };
+  const before = await loadApprovalBaseline({ home, taskId, approvalId: input.recheck.basedOn });
+  const asked = new Map(before.draft.questions.map((/** @type {any} */ q) => [q.id, q]));
+  for (const q of draft.questions) {
+    const item = before.approval.items.find((/** @type {any} */ i) => i.id === q.id);
+    const old = asked.get(q.id);
+    if (!item || !old || !ACCEPTING.has(item.verdict) || canonicalJson(old) !== canonicalJson(q)) continue;
+    const now = hashesFor(q, probes);
+    if (now && canonicalJson(now) === canonicalJson(item.probeHashes)) carried.set(q.id, item);
+  }
+  return { basedOn: input.recheck.basedOn, carried };
+}
+
+/**
  * Whether a prediction matches the head result, when that can be told by machine: numbers
  * by value, a choice when exactly one choice appears in the output. Null otherwise; the
  * person decides.
@@ -128,13 +173,19 @@ export function predictionCorrect(q, answer, probes) {
  * @param {{ home: string, taskId: string }} options
  */
 export async function judgeView({ home, taskId }) {
-  const { draft, probes, answers } = await loadTask(home, taskId);
+  const { input, draft, probes, answers } = await loadTask(home, taskId);
   if (!isJudgedDraft(draft)) return null;
   const saved = answersFor(answers, draft);
   const commands = (probes?.probes ?? []).map((/** @type {any} */ p) => ({ id: p.id, title: p.title, run: p.run }));
-  const questions = draft.questions.map((/** @type {any} */ q) => ({ ...q, predictFirst: PREDICTED.has(q.kind) }));
+  const { basedOn, carried } = await carriedVerdicts({ home, taskId, input, draft, probes });
+  const questions = draft.questions.map((/** @type {any} */ q) => {
+    const kept = carried.get(q.id);
+    return { ...q, predictFirst: PREDICTED.has(q.kind) && !kept, carried: kept ? { verdict: kept.verdict, answer: kept.answer, correct: kept.correct, judgedIn: basedOn } : null };
+  });
   const base = {
     revealed: Boolean(saved),
+    basedOn,
+    unlinked: input?.recheck?.kind === 'probes' ? input.recheck.unlinked : [],
     questions,
     commands,
     probeSetHash: draft.probeSetHash,
@@ -186,14 +237,15 @@ function checkAnswer(q, answer) {
  */
 export async function recordPredictions({ home, taskId, request, now = new Date() }) {
   return withTaskLock(home, taskId, async () => {
-    const { paths, draft, answers, state } = await loadTask(home, taskId);
+    const { paths, input, draft, probes, answers, state } = await loadTask(home, taskId);
     if (state !== 'awaiting_approval') throw new HeirloomError('E_CONFLICT', `판정 대기 상태가 아님 (현재: ${state})`);
     if (!isJudgedDraft(draft)) throw new HeirloomError('E_CONFLICT', '예측을 받는 초안이 아님');
+    const { carried } = await carriedVerdicts({ home, taskId, input, draft, probes });
     if (!isObject(request) || typeof request.draftSha256 !== 'string' || !isObject(request.answers)) throw bad('draftSha256과 answers가 필요함');
     const digest = draftDigest(draft);
     if (request.draftSha256 !== digest) throw new HeirloomError('E_CONFLICT', '화면이 보던 초안이 현재와 다름. 화면을 새로 고친다.');
     if (answersFor(answers, draft)) throw new HeirloomError('E_CONFLICT', '이 초안의 예측은 이미 저장되어 결과가 공개됨. 예측은 바꿀 수 없음.');
-    const predicted = draft.questions.filter((/** @type {any} */ q) => PREDICTED.has(q.kind));
+    const predicted = draft.questions.filter((/** @type {any} */ q) => PREDICTED.has(q.kind) && !carried.has(q.id));
     /** @type {Record<string, string>} */
     const saved = {};
     for (const q of predicted) {
@@ -237,7 +289,13 @@ export async function judgeTask({ home, taskId, request, keystore, now = new Dat
       sent.set(item.id, item);
     }
     const probeById = new Map(probes.probes.map((/** @type {any} */ p) => [p.id, p]));
+    const { basedOn, carried } = await carriedVerdicts({ home, taskId, input, draft, probes });
     const items = draft.questions.map((/** @type {any} */ q) => {
+      const kept = carried.get(q.id);
+      if (kept) {
+        if (sent.has(q.id)) throw bad(`${q.id}: 이전 판정이 유지되는 질문은 다시 판정하지 않음`);
+        return { ...kept, carried: true };
+      }
       const item = sent.get(q.id);
       if (!item) throw bad(`${q.id}: 판정이 없음. 모든 질문을 판정해야 함`);
       if (!VERDICTS_OF[q.kind]?.has(item.verdict)) throw bad(`${q.id}: ${q.kind} 질문의 판정은 ${[...VERDICTS_OF[q.kind]].join(', ')} 중 하나여야 함`);
@@ -263,7 +321,7 @@ export async function judgeTask({ home, taskId, request, keystore, now = new Dat
         outputs[id] = { base: p.base.stdout.slice(0, REVEALED_CHARS), head: p.head.stdout.slice(0, REVEALED_CHARS) };
       }
       const tests = q.kind === 'test-lock' ? testsOf(q, probes) : [];
-      if (q.kind === 'test-lock') probeHashes.tests = { base: sha256Hex(canonicalJson(tests.map((/** @type {any} */ t) => [t.name, t.base]))), head: sha256Hex(canonicalJson(tests.map((/** @type {any} */ t) => [t.name, t.head]))) };
+      if (q.kind === 'test-lock') probeHashes.tests = /** @type {any} */ (hashesFor(q, probes)).tests;
       return {
         id: q.id,
         kind: q.kind,
@@ -301,6 +359,7 @@ export async function judgeTask({ home, taskId, request, keystore, now = new Dat
       id: newApprovalId(),
       taskId,
       kind: 'judgment',
+      ...(basedOn ? { basedOn } : {}),
       target: {
         sourceHash: input.source.hash,
         headSha: headSha || null,

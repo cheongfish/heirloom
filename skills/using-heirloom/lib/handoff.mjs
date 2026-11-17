@@ -115,7 +115,8 @@ export function renderHandoff({ input, draft, warnings }) {
   if (review === false) out.push('- 리뷰 이후 소스가 바뀜: 최종 리뷰가 대상으로 삼은 상태와 현재 상태가 다르다. 변경이 잘못됐다는 뜻은 아니다.');
   if (review === true) out.push('- 최종 리뷰 대상 상태와 현재 상태가 같다.');
 
-  if (input.recheck) out.push('', ...renderRecheck(input.recheck, draft));
+  if (input.recheck?.kind === 'probes') out.push('', '## 재확인', '', `- 기준 판정: ${input.recheck.basedOn}. 탐침 출력이 같은 질문은 판정을 유지하고, 달라진 질문만 다시 묻는다.`, ...input.recheck.changes.map((/** @type {any} */ c) => `- ${c.path}: ${CHANGE_REASON[c.reason] ?? c.reason}`), ...input.recheck.unlinked.map((/** @type {string} */ p) => `- 탐침과 연결되지 않은 변경: ${p}`));
+  else if (input.recheck) out.push('', ...renderRecheck(input.recheck, draft));
 
   out.push('', `## 변경 파일 (${input.source.files.length})`, '');
   for (const f of input.source.files) out.push(`- ${f.status} ${f.path}`);

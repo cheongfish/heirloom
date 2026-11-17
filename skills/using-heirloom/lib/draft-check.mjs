@@ -131,6 +131,7 @@ export async function checkDraft({ root, input, draft, records, repoFiles, conve
   if (enriched.inputSourceHash !== input.source.hash) {
     errors.push('$.inputSourceHash: 고정된 입력의 소스 상태와 다름. prepare를 다시 실행하고 그 결과로 초안을 쓴다');
   }
+  if (input.recheck?.kind === 'probes') return { errors: ['$.schemaVersion: 판정 이후의 재확인은 스키마 2 초안으로 쓴다'], warnings, draft: enriched };
   if (!input.recheck && enriched.recheck !== undefined) errors.push('$.recheck: 증분 재확인이 아닌 인계에는 쓸 수 없음');
   if (input.recheck && errors.length === 0) errors.push(...checkRecheckDraft({ recheck: input.recheck, draft: enriched }));
 
@@ -352,6 +353,11 @@ async function checkDraftV2({ root, input, draft, repoFiles, conversation, probe
     }
   }
 
+  if (input.recheck?.kind === 'probes') {
+    const linked = (Array.isArray(enriched.behaviorDiffs) ? enriched.behaviorDiffs : []).flatMap((/** @type {any} */ d) => (Array.isArray(d?.codePaths) ? d.codePaths : []));
+    const open = input.recheck.unlinked.filter((/** @type {string} */ p) => !matchesSome(p, linked) && !linked.some((/** @type {string} */ g) => matchesSome(g, [p])));
+    if (open.length) warnings.push(`재확인: 어느 탐침에도 연결되지 않은 변경 (${open.join(', ')}). 이 파일의 동작을 드러내는 탐침과 behaviorDiffs를 더한다`);
+  }
   if (questions.length > QUESTIONS_MAX) warnings.push(`$.questions: 질문이 ${questions.length}개. 이 변경은 한 번에 이해하기에 클 수 있음(기본 3~${QUESTIONS_MAX}개)`);
   if (!questions.length) warnings.push('$.questions: 질문이 없음. 사람이 예측해 볼 동작이 없는 변경인지 확인한다');
   for (const p of probeById.values()) {

@@ -25,7 +25,7 @@ Read the result:
 - Non-null `previousJudgment`: the last judgment returned these questions (`verdict` `revert`: the behavior is wrong; `split`: move it out of this branch), with the person's `reason`. This round must address each one; ask about the changed behavior again.
 - `ok: false`: report `error.message` and `error.hint`; stop. `E_INPUT` (exit 2) requires clarification, not guessing; `E_CONFLICT` (3) means concurrent processing; `E_TRANSIENT` (75) already retried, so do not rerun.
 - Otherwise use `taskId`, `draftPath`, `source.files`, `materials`, `unknowns`, `relatedRecords`, and `reviewMatchesSource`.
-- Non-null `recheck`: the work was approved before and changed since. Write a full draft for the current state (sections 2 and 3).
+- Non-null `recheck`: the work was judged before and changed since. With `recheck.kind` `probes`: run the probes file of the last round again (add probes for every path in `recheck.unlinked`, the changed code no behavior description pointed at), then write a full draft for the current state. Keep the id and exact wording of each question that still holds: a question asked the same way whose probe outputs did not change keeps its verdict and is not asked again. Rewrite or drop what no longer holds.
 - `relatedRecords`: read them with `recall-context`. If the change contradicts one, say so in a `fork` question and in the report; do not drop the question.
 - `conversation.path` freezes the user's typed messages. If `available: false`, continue with document sources and report `reason`: `no_session` (no recorded session), `ambiguous` (concurrent sessions), `unreadable`, or `empty`.
 
