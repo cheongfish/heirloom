@@ -34,7 +34,7 @@ Only humans approve, through the dashboard.
 - Never create or edit `~/.heirloom/tasks/*/approvals/` or hand-edit `.heirloom/decisions/` and `.heirloom/axioms/`.
 - Only `apply-approval` writes records from verified signed approval. Do not claim approval before verification.
 - Report approved but unapplied handoffs listed at session start; apply when the user asks.
-- When this session's approval wait (`prepare-handoff` step 4) reports `approved`, run `apply-approval` immediately without asking again.
+- When this session's approval wait (`prepare-handoff` step 5) reports `approved`, run `apply-approval` immediately without asking again.
 
 ## Dashboard
 

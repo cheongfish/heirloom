@@ -1,6 +1,7 @@
 // Check and register the agent's draft.
 
 import { access } from 'node:fs/promises';
+import path from 'node:path';
 
 import { readConversation } from './conversation.mjs';
 import { openDashboard } from './dashboard-open.mjs';
@@ -73,7 +74,8 @@ export async function submitDraft({ home, taskId }) {
     const { records } = await readRecords(root);
     const repoFiles = (await git(['ls-files', '-co', '--exclude-standard', '-z'], { cwd: root })).split('\0').filter(Boolean);
     const conversation = await readConversation(paths.conversation);
-    const result = await checkDraft({ root, input, draft, records, repoFiles, conversation });
+    const probes = (await readJson(path.join(paths.probes, 'result.json'))) ?? null;
+    const result = await checkDraft({ root, input, draft, records, repoFiles, conversation, probes });
     const ok = result.errors.length === 0;
     await writeJsonAtomic(paths.check, {
       schemaVersion: 1,
@@ -98,10 +100,10 @@ export async function submitDraft({ home, taskId }) {
     return {
       taskId,
       state: newState,
-      recordIds: result.draft.records.filter((/** @type {any} */ r) => r.op === 'add').map((/** @type {any} */ r) => r.id),
+      recordIds: (result.draft.records ?? []).filter((/** @type {any} */ r) => r.op === 'add').map((/** @type {any} */ r) => r.id),
       warnings: result.warnings,
       handoffPath: paths.handoff,
-      quickApproval: result.draft.records.length === 0,
+      quickApproval: result.draft.schemaVersion === 2 ? false : result.draft.records.length === 0,
       dashboardUrl: null,
     };
   });

@@ -334,6 +334,50 @@ export const draftSchema = object(
   },
 );
 
+// ---------------------------------------------------------------- draft v2 (pivot 5.3)
+
+/** Probe and question ids: lower case, digits and hyphens. */
+export const SHORT_ID = /^[a-z][a-z0-9-]{0,31}$/;
+const shortId = str({ pattern: SHORT_ID });
+/** A spec line range or a conversation message the question rests on. */
+const questionSources = arrayOf(draftSource);
+
+/**
+ * The draft of the agent since the pivot: what the change does, backed by probe runs, and the
+ * questions the human answers before seeing the observed results.
+ */
+export const draftV2Schema = object(
+  {
+    schemaVersion: oneOf(2),
+    taskId,
+    inputSourceHash: stateHash,
+    probeSetHash: stateHash,
+    behaviorDiffs: arrayOf(object({ text: nonEmpty, probes: arrayOf(shortId, { min: 1 }), codePaths: arrayOf(codePath) })),
+    questions: arrayOf(
+      tagged('kind', {
+        predict: object(
+          { id: shortId, kind: oneOf('predict'), probe: shortId, prompt: nonEmpty, answerType: oneOf('number', 'text', 'choice') },
+          {
+            optional: { choices: arrayOf(nonEmpty, { min: 2 }), sources: questionSources },
+            check: (o) => (o.answerType === 'choice') === Array.isArray(o.choices) ? [] : ['answerType이 choice일 때만, 그리고 반드시 choices를 쓴다'],
+          },
+        ),
+        'test-lock': object(
+          { id: shortId, kind: oneOf('test-lock'), test: nonEmpty, plain: nonEmpty, prompt: nonEmpty },
+          { optional: { sources: questionSources } },
+        ),
+        intent: object({ id: shortId, kind: oneOf('intent'), probe: shortId, sources: arrayOf(draftSource, { min: 1 }), prompt: nonEmpty }),
+        fork: object(
+          { id: shortId, kind: oneOf('fork'), probes: arrayOf(shortId, { min: 1 }), codePaths: arrayOf(codePath, { min: 1 }), prompt: nonEmpty, whyOpen: nonEmpty },
+          { optional: { sources: questionSources } },
+        ),
+      }),
+    ),
+    inferences: arrayOf(object({ text: nonEmpty, reason: nonEmpty })),
+    notes: text,
+  },
+);
+
 // ---------------------------------------------------------------- approval (5.5)
 
 export const approvalSchema = object({
@@ -400,7 +444,7 @@ export const probeSpecSchema = object(
   {
     probes: arrayOf(
       object(
-        { id: str({ pattern: /^[a-z][a-z0-9-]{0,31}$/ }), title: nonEmpty, run: argv },
+        { id: shortId, title: nonEmpty, run: argv },
         { optional: { timeoutSeconds: int({ min: 1, max: 600 }) } },
       ),
     ),

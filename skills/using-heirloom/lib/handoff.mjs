@@ -68,6 +68,34 @@ function renderAdd(op, heading) {
   return lines.join('\n');
 }
 
+/** @type {Record<string, string>} */
+const QUESTION_KIND = { predict: '예측', 'test-lock': '테스트가 막는 동작', intent: '의도와 일치', fork: '열린 선택' };
+
+/**
+ * Questions of a schema 2 draft, without observed values: the person predicts before the
+ * dashboard reveals them, so this readable copy shows neither probe outputs nor the
+ * behavior descriptions that quote them.
+ * @param {any} draft
+ * @returns {string[]}
+ */
+function renderQuestions(draft) {
+  const out = ['', `## 질문 (${draft.questions.length})`, ''];
+  if (!draft.questions.length) out.push('- 없음');
+  for (const q of draft.questions) {
+    out.push(`### ${q.id} ${QUESTION_KIND[q.kind] ?? q.kind}`, '', `- ${q.prompt}`);
+    if (q.kind === 'test-lock') out.push(`- 테스트: ${q.test} — ${q.plain}`);
+    if (q.kind === 'fork') out.push(`- 코드: ${q.codePaths.join(', ')}`, `- 열린 이유: ${q.whyOpen}`);
+    if (q.kind === 'predict' && q.choices) out.push(`- 보기: ${q.choices.join(' / ')}`);
+    for (const s of q.sources ?? []) {
+      const where = s.ref === CONVERSATION_REF ? '대화 (사용자 발화)' : s.lines ? `${s.ref} ${s.lines[0]}-${s.lines[1]}행` : s.ref;
+      out.push(`- 근거: ${where}${s.quote ? ` — "${s.quote}"` : ''}`);
+    }
+    out.push('');
+  }
+  out.push(`동작 차이 설명 ${draft.behaviorDiffs.length}개와 탐침 출력은 예측을 받은 뒤 대시보드에서 공개한다. 탐침 묶음 ${short(draft.probeSetHash)}.`, '');
+  return out;
+}
+
 /**
  * @param {{ input: any, draft: any, warnings: string[] }} options
  * @returns {string}
@@ -96,25 +124,29 @@ export function renderHandoff({ input, draft, warnings }) {
   if (!input.materials.length) out.push('- 없음');
   for (const m of input.materials) out.push(`- ${m.role}: ${m.ref} (${m.sha256 ? short(m.sha256) : '파일 없음'})`);
 
-  out.push('', '## PR 요약 초안', '');
-  for (const b of draft.summary) out.push(`- ${b.text} (근거: ${b.codePaths.join(', ') || '없음'})`);
+  if (draft.schemaVersion === 2) out.push(...renderQuestions(draft));
+  else {
+    out.push('', '## PR 요약 초안', '');
+    for (const b of draft.summary) out.push(`- ${b.text} (근거: ${b.codePaths.join(', ') || '없음'})`);
 
-  out.push('', '## decision·axiom 초안', '');
-  if (!draft.records.length) out.push('- 없음. 간이 승인 대상이다.');
-  draft.records.forEach((/** @type {any} */ op, /** @type {number} */ i) => {
-    if (op.op === 'add') out.push(renderAdd(op, `[${i}] 추가 ${op.kind}`), ...(op.evidence ? [`- 근거 decision: ${op.evidence.join(', ')}`] : []), '');
-    else if (op.op === 'relate') out.push(`### [${i}] 관계 추가: ${op.target} → ${op.relation.type} ${op.relation.id}`, '', `- 조건: ${op.relation.condition}`, '');
-    else if (op.op === 'supersede') out.push(`### [${i}] 대체: ${op.target} → [${op.with}] ${draft.records[op.with]?.id ?? ''}`, '', `- 이유: ${op.reason}`, '');
-    else if (op.op === 'deprecate') out.push(`### [${i}] 폐기: ${op.target}`, '', `- 이유: ${op.reason}`, '');
-    else if (op.op === 'update') out.push(`### [${i}] 수정: ${op.target}`, '', `- 이유: ${op.reason}`, '');
-  });
+    out.push('', '## decision·axiom 초안', '');
+    if (!draft.records.length) out.push('- 없음. 간이 승인 대상이다.');
+    draft.records.forEach((/** @type {any} */ op, /** @type {number} */ i) => {
+      if (op.op === 'add') out.push(renderAdd(op, `[${i}] 추가 ${op.kind}`), ...(op.evidence ? [`- 근거 decision: ${op.evidence.join(', ')}`] : []), '');
+      else if (op.op === 'relate') out.push(`### [${i}] 관계 추가: ${op.target} → ${op.relation.type} ${op.relation.id}`, '', `- 조건: ${op.relation.condition}`, '');
+      else if (op.op === 'supersede') out.push(`### [${i}] 대체: ${op.target} → [${op.with}] ${draft.records[op.with]?.id ?? ''}`, '', `- 이유: ${op.reason}`, '');
+      else if (op.op === 'deprecate') out.push(`### [${i}] 폐기: ${op.target}`, '', `- 이유: ${op.reason}`, '');
+      else if (op.op === 'update') out.push(`### [${i}] 수정: ${op.target}`, '', `- 이유: ${op.reason}`, '');
+    });
+  }
 
   /** @param {string} title @param {string[]} items */
   const list = (title, items) => {
     if (items.length) out.push(`## ${title}`, '', ...items.map((x) => `- ${x}`), '');
   };
-  list('자료 누락', draft.missing);
-  list('자료 충돌', draft.conflicts.map((/** @type {any} */ c) => `${c.refs.join(' ↔ ')}: ${c.note}`));
+  list('자료 누락', draft.missing ?? []);
+  list('자료 충돌', (draft.conflicts ?? []).map((/** @type {any} */ c) => `${c.refs.join(' ↔ ')}: ${c.note}`));
+  list('탐침으로 확인하지 못한 주장', (draft.inferences ?? []).map((/** @type {any} */ x) => `${x.text} (확인하지 못한 이유: ${x.reason})`));
   list('미확인 값', input.unknowns);
   list('검사 경고', warnings);
   if (draft.notes) out.push('## 메모', '', draft.notes, '');

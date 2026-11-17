@@ -7,6 +7,7 @@
 ### 추가
 
 - 탐침 실행(`prepare-handoff/scripts/probe.mjs --task <taskId> --file <probes.json>`). 에이전트가 적은 탐침 명령과 테스트 명령을 Heirloom이 base(고정된 merge-base)와 head(인계한 소스 상태, 커밋하지 않은 변경 포함)의 임시 worktree에서 직접 실행합니다. 종료 코드, 출력, 실행 시간과 출력 해시, 탐침 묶음 해시(`probeSetHash`)를 작업의 `probes/`에 남기고, 테스트별 결과가 달라진 테스트를 모읍니다. 테스트 출력은 `node --test --test-reporter=tap`, `pytest -v`, `jest --json`을 읽고, 읽지 못하면 종료 코드만 비교합니다. 프로젝트 설정 `probe.setup`, `probe.maxProbes`(기본 10), `probe.setupTimeoutSeconds`, `probe.testTimeoutSeconds`를 더했습니다.
+- 인계 초안 스키마 2. `summary`와 `records` 대신 탐침을 근거로 한 동작 차이 설명(`behaviorDiffs`)과 사람에게 물을 질문(`questions`: `predict`, `test-lock`, `intent`, `fork`), 탐침으로 확인하지 못한 주장(`inferences`)을 씁니다. 제출할 때 초안이 마지막 탐침 실행(`probeSetHash`)을 가리키는지, 설명 속 숫자와 따옴표 친 문자열이 인용한 탐침의 명령이나 출력에 있는지, `test-lock`이 결과가 달라진 테스트나 이번 변경이 고친 테스트 파일의 줄을 가리키는지, spec과 대화 인용이 원문과 맞는지 검사합니다. 읽기용 인계 파일(`handoff.md`)에는 사람이 예측하기 전에 볼 수 없도록 관측값과 동작 차이 설명을 넣지 않습니다. `prepare-handoff` 스킬은 입력 고정 뒤 탐침을 실행하고 스키마 2로 초안을 쓰도록 바뀌었습니다. 대시보드와 반영 단계가 스키마 2를 읽기 전까지는 스키마 1 초안도 계속 검사합니다.
 
 ### 변경
 

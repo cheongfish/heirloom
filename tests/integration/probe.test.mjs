@@ -14,6 +14,7 @@ import { submittedTask } from '../helpers/handoff-fixture.mjs';
 import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
 import { prepareHandoff } from '../../skills/using-heirloom/lib/prepare.mjs';
 import { runProbes } from '../../skills/using-heirloom/lib/probe.mjs';
+import { submitDraft } from '../../skills/using-heirloom/lib/submit.mjs';
 import { computeSourceState } from '../../skills/using-heirloom/lib/state.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -196,6 +197,42 @@ test('script: prints one JSON object; the probes file path is relative to the wo
   const missing = run(['--task', taskId, '--file', 'nope.json'], repo.dir);
   assert.equal(missing.status, 2);
   assert.match(JSON.parse(missing.stdout).error.message, /탐침 파일을 읽지 못함/);
+});
+
+// ---------------------------------------------------------------- schema 2 draft
+
+test('v2 draft: submit checks it against the last probe run; the readable copy hides observed values', async () => {
+  const { home, taskId, sourceHash } = await nodeTask();
+  const paths = taskPaths(home, taskId);
+  const draft = (/** @type {string} */ probeSetHash) => ({
+    schemaVersion: 2,
+    taskId,
+    inputSourceHash: sourceHash,
+    probeSetHash,
+    behaviorDiffs: [{ text: '12개 구매 결제액이 108에서 120이 된다', probes: ['p1'], codePaths: ['src/cart.mjs'] }],
+    questions: [
+      { id: 'q1', kind: 'predict', probe: 'p1', prompt: '단가 10원으로 12개를 사면 결제액은?', answerType: 'number' },
+      { id: 'q2', kind: 'test-lock', test: 'bulk discount for 12', plain: '12개 구매는 108원이다', prompt: '이 테스트는 이번 변경의 동작을 막나요?' },
+      { id: 'q3', kind: 'intent', probe: 'p1', sources: [{ ref: SPEC, lines: [3, 3], quote: '할인 경계를 100개로 바꾼다.' }], prompt: 'spec의 의도와 같나요?' },
+    ],
+    inferences: [],
+    notes: '',
+  });
+  await writeFile(paths.draft, JSON.stringify(draft(`sha256:${'0'.repeat(64)}`)));
+  const before = await submitDraft({ home, taskId }).then(() => 'ok', (err) => `${err.code}: ${err.message}`);
+  assert.match(before, /^E_VERIFY: .*탐침 실행 기록이 없음/s);
+
+  const probed = /** @type {any} */ (
+    await runProbes({ home, taskId, spec: { probes: [{ id: 'p1', title: '12개 구매 결제액', run: total12 }], tests: { command: ['node', '--test', '--test-reporter=tap'], parser: 'node-tap' } } })
+  );
+  await writeFile(paths.draft, JSON.stringify(draft(probed.probeSetHash)));
+  const out = /** @type {any} */ (await submitDraft({ home, taskId }));
+  assert.equal(out.state, 'awaiting_approval');
+  assert.deepEqual(out.warnings, []);
+  const handoff = await readFile(paths.handoff, 'utf8');
+  assert.match(handoff, /## 질문 \(3\)/);
+  assert.match(handoff, /### q2 테스트가 막는 동작/);
+  assert.doesNotMatch(handoff, /120|108에서/, 'no observed value or behavior description before the person predicts');
 });
 
 // ---------------------------------------------------------------- pytest

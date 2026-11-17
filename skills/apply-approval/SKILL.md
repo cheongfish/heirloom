@@ -7,7 +7,7 @@ description: "Use when the user requests applying an approved handoff, or this s
 
 Verify dashboard approval, write approved records and open the PR. Here PR means GitHub pull request (`gh`) or GitLab merge request (`glab`), selected by `pr.provider`.
 
-Run only on the user's request/agreement, or when this session's wait (`prepare-handoff` step 4) reports `approved`. Session-start notice alone or assumed approval is insufficient.
+Run only on the user's request/agreement, or when this session's wait (`prepare-handoff` step 5) reports `approved`. Session-start notice alone or assumed approval is insufficient.
 
 ## 1. Find the approval
 
