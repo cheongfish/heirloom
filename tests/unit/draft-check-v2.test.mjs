@@ -96,7 +96,7 @@ function draft() {
  * @param {{ probes?: any, conversation?: any }} [o]
  */
 const run = (root, d, o = {}) =>
-  checkDraft({ root, input: input(), draft: d, records: [], repoFiles: ['docs/specs/cart.md', 'src/cart.mjs', 'src/other.mjs', 'test/cart.test.mjs'], conversation: o.conversation ?? null, probes: 'probes' in o ? o.probes : probes() });
+  checkDraft({ root, input: input(), draft: d, repoFiles: ['docs/specs/cart.md', 'src/cart.mjs', 'src/other.mjs', 'test/cart.test.mjs'], conversation: o.conversation ?? null, probes: 'probes' in o ? o.probes : probes() });
 
 test('v2: a draft backed by the probe run passes; spec quotes get their hash', async () => {
   const root = await fixture();
@@ -190,6 +190,35 @@ test('v2: spec and conversation quotes must match exactly what was written', asy
   d.questions[3].sources = [{ ref: '@conversation', quote: '도매 계약 고객에게만' }];
   d.questions[2].sources[0].quote = '10개 이상 구매하면 대량 할인을';
   assert.deepEqual((await run(root, d, { conversation: [{ sha256: sha256Of(typed), text: typed }] })).errors, []);
+});
+
+test('conversation sources: the quote must be part of one message the person typed; its hash is filled', async () => {
+  const root = await fixture();
+  const typed = '할인은\n도매 고객만 받는다. 소매는 정가다.';
+  const conversation = [{ sha256: sha256Of(typed), text: typed }, { sha256: sha256Of('좋아'), text: '좋아' }];
+  /** @param {any[]} sources @param {any} [conv] */
+  const check = (sources, conv = conversation) => {
+    const d = draft();
+    d.questions[3].sources = sources;
+    return run(root, d, { conversation: conv });
+  };
+
+  const ok = await check([{ ref: '@conversation', quote: '할인은 도매 고객만 받는다.' }]);
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.draft.questions[3].sources[0].sha256, sha256Of(typed));
+  assert.deepEqual((await check([{ ref: 'docs/specs/cart.md', lines: [4, 5], quote: '10개 이상 구매하면' }, { ref: '@conversation', quote: '소매는 정가다.' }])).errors, [], 'a document and the conversation together');
+
+  assert.match((await check([{ ref: '@conversation' }])).errors.join('\n'), /sources\[0\]\.quote: .*인용/);
+  assert.match((await check([{ ref: '@conversation', lines: [1, 1], quote: '좋아' }])).errors.join('\n'), /sources\[0\]\.lines: 대화 출처에는 줄 범위를 쓰지 않음/);
+  assert.match((await check([{ ref: '@conversation', quote: '좋아' }], null)).errors.join('\n'), /sources\[0\]\.ref: 이 인계에는 고정된 대화가 없음/);
+  assert.match((await check([{ ref: '@conversation', quote: '좋아' }], [])).errors.join('\n'), /고정된 대화가 없음/);
+});
+
+test('a draft of another schema version is refused (schema 1 drafts are no longer written)', async () => {
+  const root = await fixture();
+  const result = await run(root, { schemaVersion: 1, summary: [], records: [] });
+  assert.deepEqual(result.errors, ['$.schemaVersion: 2여야 함. prepare-handoff 스킬의 스키마 2 형식으로 쓴다']);
+  assert.deepEqual((await run(root, 'nope')).errors, result.errors);
 });
 
 test('v2: schema shape: kinds, choices, ids, code paths', async () => {

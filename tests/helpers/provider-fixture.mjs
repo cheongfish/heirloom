@@ -1,4 +1,4 @@
-// An approved handoff on a remote of a given provider, with the skill scripts run as the agent
+// A judged handoff (every question accepted) on a remote of a given provider, with the skill scripts run as the agent
 // runs them (`node <skill>/scripts/<name>.mjs`). gh and glab are always the fakes from
 // tests/helpers: PATH starts with them, or holds git alone when a tool must be missing, so
 // the real gh or glab on the machine is never reached.
@@ -8,12 +8,9 @@ import { appendFile, readFile, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { submittedTask } from './handoff-fixture.mjs';
+import { approvedTask } from './handoff-fixture.mjs';
 import { tempDir } from './git-fixture.mjs';
-import { approveTask } from '../../skills/using-heirloom/dashboard/approve.mjs';
-import { draftDigest } from '../../skills/using-heirloom/lib/canonical.mjs';
 import { deriveState, readEvents } from '../../skills/using-heirloom/lib/events.mjs';
-import { readJson } from '../../skills/using-heirloom/lib/fsx.mjs';
 import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -44,9 +41,9 @@ async function gitOnlyPath() {
  * }} options `gh`/`glab`: the fake's state, or null when the tool is missing
  */
 export async function providerTask({ remote, gh = {}, glab = {}, templates = {} }) {
-  const t = await submittedTask();
-  // Templates are excluded from git, so adding them after the handoff does not change the
-  // approved source state; template discovery reads the files on disk.
+  const t = await approvedTask();
+  // Templates are excluded from git, so adding them after the judgment does not change the
+  // judged source state; template discovery reads the files on disk.
   for (const [file, text] of Object.entries(templates)) {
     await t.repo.write(file, text);
     await appendFile(path.join(t.repo.dir, '.git', 'info', 'exclude'), `${file}\n`);
@@ -70,13 +67,6 @@ export async function providerTask({ remote, gh = {}, glab = {}, templates = {} 
   pathDirs.push(await gitOnlyPath());
 
   const paths = taskPaths(t.home, t.taskId);
-  const draft = /** @type {any} */ (await readJson(paths.draft));
-  const approval = await approveTask({
-    home: t.home,
-    taskId: t.taskId,
-    keystore: 'file',
-    request: { kind: 'full', draftSha256: draftDigest(draft), sourceHash: t.sourceHash, summary: ['a를 2로 바꿨다', 'spec을 추가했다'], items: [{ index: 0, decision: 'approved' }] },
-  });
 
   const env = {
     ...process.env,
@@ -110,7 +100,6 @@ export async function providerTask({ remote, gh = {}, glab = {}, templates = {} 
 
   return {
     ...t,
-    approval,
     paths,
     files,
     run,

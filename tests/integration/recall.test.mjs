@@ -16,7 +16,7 @@ import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
 import { checkPrExpiry, refreshPrExpiry } from '../../skills/using-heirloom/lib/pr-expiry.mjs';
 import { recall } from '../../skills/using-heirloom/lib/recall.mjs';
 import { recordView } from '../../skills/using-heirloom/lib/record-status.mjs';
-import { renderBody, serializeRecord } from '../../skills/using-heirloom/lib/records.mjs';
+import { serializeRecord } from '../../skills/using-heirloom/lib/records.mjs';
 import { buildSessionContext } from '../../skills/using-heirloom/lib/session-context.mjs';
 import { taskIdFor } from '../../skills/using-heirloom/lib/store.mjs';
 
@@ -76,7 +76,7 @@ function legacyText(id, over = {}) {
     approval: ap('ap-000000000001'),
     ...over,
   };
-  const body = renderBody(kind, kind === 'axiom' ? { property: '성질' } : { problem: '문제', choice: '선택' });
+  const body = kind === 'axiom' ? '\n## 유지할 성질\n\n성질\n' : '\n## 문제\n\n문제\n\n## 선택과 이유\n\n선택\n';
   return serializeRecord({ meta: /** @type {any} */ (meta), body });
 }
 

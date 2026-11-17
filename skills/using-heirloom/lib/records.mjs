@@ -61,31 +61,6 @@ export function serializeRecord({ meta, body }) {
   return `${OPEN}${JSON.stringify(meta, null, 2)}${CLOSE}${body}`;
 }
 
-/** @type {Record<'decision' | 'axiom', [string, string][]>} */
-export const SECTIONS = {
-  decision: [
-    ['problem', '문제'],
-    ['choice', '선택과 이유'],
-    ['alternatives', '버린 대안'],
-    ['scope', '적용 범위'],
-  ],
-  axiom: [
-    ['property', '유지할 성질'],
-    ['scope', '적용 범위와 조건'],
-    ['exceptions', '예외'],
-    ['checks', '점검 지침'],
-  ],
-};
-
-/**
- * Render the Markdown body of a record from draft body fields.
- * @param {'decision' | 'axiom'} kind
- * @param {Record<string, string>} body
- */
-export function renderBody(kind, body) {
-  return `\n${SECTIONS[kind].map(([key, heading]) => `## ${heading}\n\n${(body[key] ?? '').trim()}\n`).join('\n')}`;
-}
-
 /**
  * @param {string} root repository root
  * @param {RecordMeta} meta

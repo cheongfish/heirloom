@@ -18,7 +18,7 @@ import { resolveIds } from './ids.mjs';
 import { approvalFiles, taskPaths } from './paths.mjs';
 import { isMarkdownCodePath } from './schema.mjs';
 import { findProjectRules } from './project-rules.mjs';
-import { affectedItems, buildBaseline, diffStates } from './recheck.mjs';
+import { diffStates } from './recheck.mjs';
 import { readRecords } from './records.mjs';
 import { computeCommitState, computeSourceState, hashMaterial } from './state.mjs';
 import { replaceTaskId, taskIdFor } from './store.mjs';
@@ -119,10 +119,12 @@ export async function prepareHandoff(options) {
     const events = await readEvents(paths.events);
     const state = deriveState(events);
     const existing = /** @type {any} */ (await readJson(paths.input));
-    // A stale task is prepared again even when the content went back to the approved state:
-    // the new round is what takes it out of `stale`.
-    const sameState = state !== 'stale' && existing && existing.source.hash === source.hash && materialKey(existing.materials) === materialKey(materials);
     const approvalId = events.filter((e) => e.type === 'approved').at(-1)?.approvalId;
+    // A stale task is prepared again even when the content went back to the approved state:
+    // the new round is what takes it out of `stale`. So is a task approved item by item before
+    // the pivot: that approval is no longer applied, and the work is judged anew.
+    const legacy = typeof approvalId === 'string' && (state === 'approved' || state === 'applied' || state === 'pr_created') && /** @type {any} */ (await readJson(approvalFiles(paths.approvals, approvalId).record))?.kind !== 'judgment';
+    const sameState = state !== 'stale' && !legacy && existing && existing.source.hash === source.hash && materialKey(existing.materials) === materialKey(materials);
 
     let input = existing;
     let current = state;
@@ -142,10 +144,11 @@ export async function prepareHandoff(options) {
         projectRules,
         createdAt: new Date().toISOString(),
       };
-      if (approvalId !== undefined) input.recheck = await recheckFor({ home, root, taskId, approvalId, base, source, materials });
+      const recheck = typeof approvalId === 'string' ? await recheckFor({ home, root, taskId, approvalId, base, source, materials }) : undefined;
+      if (recheck) input.recheck = recheck;
       // A new state invalidates the previous draft and its derived files (input.json is
       // immutable only within one source/material state).
-      await Promise.all([paths.draft, paths.draftInitial, paths.check, paths.handoff, paths.answers].map((f) => rm(f, { force: true })));
+      await Promise.all([paths.draft, paths.check, paths.handoff, paths.answers].map((f) => rm(f, { force: true })));
       await writeJsonAtomic(paths.input, input);
       current = await appendEvent(paths.events, {
         type: 'prepared',
@@ -159,11 +162,11 @@ export async function prepareHandoff(options) {
     // message must not make the same code a new handoff. It is frozen next to the input.
     const conversation = await freezeConversation({ home, root, file: paths.conversation });
 
-    const { records } = await readRecords(root);
+    const { decisions } = await readRecords(root);
     const changed = input.source.files.map((/** @type {any} */ f) => f.path);
-    const relatedRecords = records
-      .filter((r) => r.meta.active && changed.some((/** @type {string} */ f) => matchesAny(f, r.meta.codePaths)))
-      .map((r) => ({ id: r.meta.id, kind: r.meta.kind, title: r.meta.title, codePaths: r.meta.codePaths }));
+    const relatedRecords = decisions
+      .filter((d) => changed.some((/** @type {string} */ f) => matchesAny(f, d.meta.scope)))
+      .map((d) => ({ id: d.meta.id, choice: d.meta.choice, scope: d.meta.scope }));
 
     return {
       taskId,
@@ -180,7 +183,7 @@ export async function prepareHandoff(options) {
       reviewMatchesSource: reviewMatchesSource(input),
       relatedRecords,
       projectRules: input.projectRules,
-      recheck: input.recheck ? recheckReport(input.recheck) : null,
+      recheck: input.recheck ?? null,
       previousJudgment: await previousJudgment(paths, events),
       openPr: openPr(events),
       conversation: { ...conversation, path: paths.conversation },
@@ -224,27 +227,15 @@ async function previousJudgment(paths, events) {
 }
 
 /**
- * What changed since the last signed approval of this task and which approved items it
- * touches.
- * @param {{ home: string, root: string, taskId: string, approvalId: unknown, base: { mergeBase: string }, source: { files: any[] }, materials: any[] }} options
+ * What changed since the last signed judgment of this task. An item approval from before the
+ * pivot (schema 1) is not rechecked: the new round is a whole new handoff (undefined).
+ * @param {{ home: string, root: string, taskId: string, approvalId: string, base: { mergeBase: string }, source: { files: any[] }, materials: any[] }} options
  */
 async function recheckFor({ home, root, taskId, approvalId, base, source, materials }) {
+  const record = /** @type {any} */ (await readJson(approvalFiles(taskPaths(home, taskId).approvals, approvalId).record));
+  if (record && record.kind !== 'judgment') return undefined;
   const approved = await loadApprovalBaseline({ home, taskId, approvalId });
-  if (approved.approval.kind === 'judgment') return judgmentRecheck({ root, approved, base, source, materials });
-  const baseline = buildBaseline({ draft: approved.draft, approval: approved.approval });
-  const diff = diffStates({
-    before: { files: approved.input.source.files, mergeBase: approved.input.base.mergeBase, materials: approved.approval.target.materials },
-    after: { files: source.files, mergeBase: base.mergeBase, materials: Object.fromEntries(materials.map((m) => [m.ref, m.sha256])) },
-    baseChanged: await filesChangedBetween({ cwd: root, from: approved.input.base.mergeBase, to: base.mergeBase }),
-  });
-  return {
-    basedOn: approved.approval.id,
-    mergeBaseChanged: diff.mergeBaseChanged,
-    changes: diff.changes,
-    materials: diff.materials,
-    affected: affectedItems({ baseline, changes: diff.changes, materials: diff.materials }),
-    baseline: { summary: baseline.summary, records: baseline.records },
-  };
+  return judgmentRecheck({ root, approved, base, source, materials });
 }
 
 /**
@@ -269,22 +260,5 @@ async function judgmentRecheck({ root, approved, base, source, materials }) {
     mergeBaseChanged: diff.mergeBaseChanged,
     changes: diff.changes.map((c) => ({ path: c.path, reason: c.reason })),
     unlinked: code.filter((p) => !matchesAny(p, linked)),
-  };
-}
-
-/**
- * The recheck as the agent needs it from prepare's output. The baseline itself is long and
- * is read from input.json.
- * @param {any} recheck
- */
-function recheckReport(recheck) {
-  if (recheck.kind === 'probes') return recheck;
-  return {
-    basedOn: recheck.basedOn,
-    mergeBaseChanged: recheck.mergeBaseChanged,
-    changes: recheck.changes.map((/** @type {any} */ c) => ({ path: c.path, reason: c.reason })),
-    materials: recheck.materials.map((/** @type {any} */ m) => m.ref),
-    affected: recheck.affected,
-    baseline: { summary: recheck.baseline.summary.length, records: recheck.baseline.records.length, in: 'input.json의 recheck.baseline' },
   };
 }

@@ -7,11 +7,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { submittedTask } from '../helpers/handoff-fixture.mjs';
-import { approveTask } from '../../skills/using-heirloom/dashboard/approve.mjs';
-import { draftDigest } from '../../skills/using-heirloom/lib/canonical.mjs';
+import { judge } from '../helpers/judge-fixture.mjs';
 import { HeirloomError } from '../../skills/using-heirloom/lib/errors.mjs';
 import { appendEvent } from '../../skills/using-heirloom/lib/events.mjs';
-import { readJson } from '../../skills/using-heirloom/lib/fsx.mjs';
 import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
 import { waitForApproval } from '../../skills/using-heirloom/lib/wait-approval.mjs';
 import { tempDir } from '../helpers/git-fixture.mjs';
@@ -19,24 +17,10 @@ import { tempDir } from '../helpers/git-fixture.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SCRIPT = path.join(ROOT, 'skills', 'prepare-handoff', 'scripts', 'wait-approval.mjs');
 
-/** @param {Awaited<ReturnType<typeof submittedTask>>} t */
-async function approve(t) {
-  const draft = /** @type {any} */ (await readJson(taskPaths(t.home, t.taskId).draft));
-  return approveTask({
-    home: t.home,
-    taskId: t.taskId,
-    keystore: 'file',
-    request: {
-      kind: 'full',
-      draftSha256: draftDigest(draft),
-      sourceHash: t.sourceHash,
-      summary: ['a를 2로 바꿨다', 'spec을 추가했다'],
-      items: [{ index: 0, decision: 'approved' }],
-    },
-  });
-}
+/** Judge every question as accepted, as the person does in the dashboard. @param {Awaited<ReturnType<typeof submittedTask>>} t */
+const approve = (t) => judge({ home: t.home, taskId: t.taskId, sourceHash: t.sourceHash });
 
-test('wait: returns when the human approves while waiting', async () => {
+test('wait: returns when the human accepts the judgment while waiting', async () => {
   const t = await submittedTask();
   const waiting = waitForApproval({ home: t.home, taskId: t.taskId, timeoutMs: 10_000, pollMs: 20 });
   await new Promise((r) => setTimeout(r, 100));

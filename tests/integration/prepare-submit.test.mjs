@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 
 import { makeRepo, cloneRepo, tempDir } from '../helpers/git-fixture.mjs';
 import { prepareHandoff } from '../../skills/using-heirloom/lib/prepare.mjs';
+import { runProbes } from '../../skills/using-heirloom/lib/probe.mjs';
+import { serializeRecord } from '../../skills/using-heirloom/lib/records.mjs';
 import { submitDraft } from '../../skills/using-heirloom/lib/submit.mjs';
 import { readEvents, deriveState, appendEvent } from '../../skills/using-heirloom/lib/events.mjs';
 import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
@@ -30,29 +32,29 @@ async function setup() {
   return { upstream, repo, home };
 }
 
-/** @param {string} taskId @param {string} sourceHash */
-function validDraft(taskId, sourceHash) {
+/**
+ * Run the task's one probe (the value of `a` on base and head) and return a schema 2 draft
+ * for it.
+ * @param {string} home
+ * @param {string} taskId
+ * @param {string} sourceHash
+ */
+async function validDraft(home, taskId, sourceHash) {
+  const probes = /** @type {any} */ (
+    await runProbes({ home, taskId, spec: { probes: [{ id: 'p1', title: 'a의 값', run: ['node', '-e', "import('./src/a.mjs').then((m) => console.log(m.a))"] }] } })
+  );
+  const [base, head] = [probes.probes[0].base.stdout.trim(), probes.probes[0].head.stdout.trim()];
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     taskId,
     inputSourceHash: sourceHash,
-    summary: [
-      { text: 'a를 2로 바꿨다', codePaths: ['src/a.mjs'] },
-      { text: 'spec을 추가했다', codePaths: ['src/a.mjs'] },
+    probeSetHash: probes.probeSetHash,
+    behaviorDiffs: [{ text: `a의 값이 ${base}에서 ${head}가 된다`, probes: ['p1'], codePaths: ['src/a.mjs'] }],
+    questions: [
+      { id: 'q1', kind: 'predict', probe: 'p1', prompt: '이제 a의 값은?', answerType: 'number' },
+      { id: 'q2', kind: 'intent', probe: 'p1', sources: [{ ref: SPEC, lines: [4, 4], quote: '변환 결과는 반올림하지 않는다.' }], prompt: 'spec의 의도와 같나요?' },
     ],
-    records: [
-      {
-        op: 'add',
-        kind: 'decision',
-        title: '변환 결과는 반올림하지 않는다',
-        body: { problem: '표시 형식', choice: '반올림하지 않음', alternatives: '소수 둘째 자리 반올림', scope: '변환 함수' },
-        codePaths: ['src/a.mjs'],
-        topics: ['format'],
-        sources: [{ ref: SPEC, lines: [4, 4], quote: '변환 결과는 반올림하지 않는다.' }],
-      },
-    ],
-    missing: ['리뷰 문서 없음'],
-    conflicts: [],
+    inferences: [{ text: '다른 모듈은 a를 읽지 않는다', reason: '호출부를 실행해 보지 않았다' }],
     notes: '',
   };
 }
@@ -110,30 +112,39 @@ test('a held task lock means the same work is in progress (E_CONFLICT)', async (
   await assert.rejects(prepareHandoff({ cwd: repo.dir, home, specs: [SPEC] }), (err) => /** @type {any} */ (err).code === 'E_CONFLICT');
 });
 
-test('submit: valid draft → awaiting approval, handoff.md, initial copy, record ids', async () => {
+test('submit: valid draft → awaiting approval and a handoff.md without observed values', async () => {
   const { repo, home } = await setup();
   const { taskId, source } = await prepareHandoff({ cwd: repo.dir, home, specs: [SPEC] });
-  await writeDraft(home, taskId, validDraft(taskId, source.hash));
+  await writeDraft(home, taskId, await validDraft(home, taskId, source.hash));
 
   const result = await submitDraft({ home, taskId });
   assert.equal(result.state, 'awaiting_approval');
-  assert.equal(result.recordIds.length, 1);
   assert.equal(await stateOf(home, taskId), 'awaiting_approval');
 
   const paths = taskPaths(home, taskId);
   const handoff = await readFile(paths.handoff, 'utf8');
-  assert.match(handoff, /a를 2로 바꿨다/);
-  assert.match(handoff, new RegExp(result.recordIds[0]));
-  assert.match(handoff, /리뷰 문서 없음/);
-  await access(paths.draftInitial);
+  assert.match(handoff, /## 질문 \(2\)/);
+  assert.match(handoff, /이제 a의 값은\?/);
+  assert.match(handoff, /다른 모듈은 a를 읽지 않는다/);
+  assert.doesNotMatch(handoff, /1에서 2가 된다/, 'behavior descriptions are revealed in the dashboard only');
   assert.equal(/** @type {any} */ (await readJson(paths.check)).ok, true);
+});
+
+test('submit: a schema 1 draft is refused (E_VERIFY)', async () => {
+  const { repo, home } = await setup();
+  const { taskId, source } = await prepareHandoff({ cwd: repo.dir, home, specs: [SPEC] });
+  await writeDraft(home, taskId, { schemaVersion: 1, taskId, inputSourceHash: source.hash, summary: [], records: [], missing: [], conflicts: [], notes: '' });
+  await assert.rejects(submitDraft({ home, taskId }), (err) => {
+    const e = /** @type {any} */ (err);
+    return e.code === 'E_VERIFY' && /\$\.schemaVersion: 2여야 함/.test(e.message);
+  });
 });
 
 test('submit: errors keep the task in prepared and are written to check.json (E_VERIFY)', async () => {
   const { repo, home } = await setup();
   const { taskId, source } = await prepareHandoff({ cwd: repo.dir, home, specs: [SPEC] });
-  const bad = validDraft(taskId, source.hash);
-  bad.summary[0].codePaths = [SPEC];
+  const bad = await validDraft(home, taskId, source.hash);
+  bad.behaviorDiffs[0].codePaths = [SPEC];
   await writeDraft(home, taskId, bad);
 
   await assert.rejects(submitDraft({ home, taskId }), (err) => {
@@ -143,7 +154,7 @@ test('submit: errors keep the task in prepared and are written to check.json (E_
   assert.equal(await stateOf(home, taskId), 'prepared');
   const check = /** @type {any} */ (await readJson(taskPaths(home, taskId).check));
   assert.equal(check.ok, false);
-  await assert.rejects(access(taskPaths(home, taskId).draftInitial));
+  await assert.rejects(access(taskPaths(home, taskId).handoff));
 });
 
 test('submit: a missing draft is an input error', async () => {
@@ -155,7 +166,8 @@ test('submit: a missing draft is an input error', async () => {
 test('source changed after prepare: submit refuses; re-prepare starts a new state and drops the old draft', async () => {
   const { repo, home } = await setup();
   const first = await prepareHandoff({ cwd: repo.dir, home, specs: [SPEC] });
-  await writeDraft(home, first.taskId, validDraft(first.taskId, first.source.hash));
+  const stale = await validDraft(home, first.taskId, first.source.hash);
+  await writeDraft(home, first.taskId, stale);
   await repo.write('src/a.mjs', 'export const a = 3;\n');
 
   await assert.rejects(submitDraft({ home, taskId: first.taskId }), (err) => /** @type {any} */ (err).code === 'E_CONFLICT');
@@ -165,8 +177,35 @@ test('source changed after prepare: submit refuses; re-prepare starts a new stat
   assert.equal(second.alreadyPrepared, false);
   assert.notEqual(second.source.hash, first.source.hash);
   await assert.rejects(access(taskPaths(home, first.taskId).draft));
-  await writeDraft(home, first.taskId, validDraft(first.taskId, first.source.hash));
+  await writeDraft(home, first.taskId, stale);
   await assert.rejects(submitDraft({ home, taskId: first.taskId }), /inputSourceHash/);
+});
+
+test('prepare lists the schema 2 decision records whose scope covers a changed file', async () => {
+  const { repo, home } = await setup();
+  const ap = { id: 'ap-000000000001', signer: 'SHA256:x', approvedAt: '2026-11-12T00:00:00Z' };
+  /** @param {string} id @param {string[]} scope */
+  const decision = (id, scope) =>
+    serializeRecord({
+      meta: /** @type {any} */ ({
+        schemaVersion: 2,
+        id,
+        kind: 'decision',
+        choice: `${id} 선택`,
+        question: '질문',
+        scope,
+        anchors: [{ file: 'src/a.mjs', symbol: 'a' }, { file: 'src/a.mjs', test: 'a' }],
+        source: [{ kind: 'fork-answer', approval: ap.id, question: 'q1' }],
+        replaces: null,
+        taskId: 't-20261101-77777777',
+        approval: ap,
+      }),
+      body: '\n## 질문\n\n질문\n',
+    });
+  await repo.write('.heirloom/decisions/d-00000001.md', decision('d-00000001', ['src/**']));
+  await repo.write('.heirloom/decisions/d-00000002.md', decision('d-00000002', ['lib/**']));
+  const result = await prepareHandoff({ cwd: repo.dir, home, specs: [SPEC] });
+  assert.deepEqual(result.relatedRecords, [{ id: 'd-00000001', choice: 'd-00000001 선택', scope: ['src/**'] }]);
 });
 
 test('parallel worktrees get separate tasks', async () => {
@@ -206,7 +245,7 @@ test('reviewed commit: matches the current state until the source changes', asyn
   await repo.write('src/a.mjs', 'export const a = 5;\n');
   const changed = await prepareHandoff({ cwd: repo.dir, home, specs: [SPEC], reviews: ['docs/review.md'], reviewedCommit: head });
   assert.equal(changed.reviewMatchesSource, false);
-  await writeDraft(home, changed.taskId, validDraft(changed.taskId, changed.source.hash));
+  await writeDraft(home, changed.taskId, await validDraft(home, changed.taskId, changed.source.hash));
   await submitDraft({ home, taskId: changed.taskId });
   assert.match(await readFile(taskPaths(home, changed.taskId).handoff, 'utf8'), /리뷰 이후 소스가 바뀜/);
 });

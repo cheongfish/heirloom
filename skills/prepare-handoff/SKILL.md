@@ -30,9 +30,9 @@ Read the result:
   For `spec-wrong` and `defer`, submit refuses the draft while the cited lines are still there word for word: change text inside the cited lines, not only next to them. Cite the edited lines (not the old quote) if a question still rests on that spec part.
 - `ok: false`: report `error.message` and `error.hint`; stop. `E_INPUT` (exit 2) requires clarification, not guessing; `E_CONFLICT` (3) means concurrent processing; `E_TRANSIENT` (75) already retried, so do not rerun.
 - Otherwise use `taskId`, `draftPath`, `source.files`, `materials`, `unknowns`, `relatedRecords`, and `reviewMatchesSource`.
-- Non-null `recheck`: the work was judged before and changed since. With `recheck.kind` `probes`: run the probes file of the last round again (add probes for every path in `recheck.unlinked`, the changed code no behavior description pointed at), then write a full draft for the current state. Keep the id and exact wording of each question that still holds: a question asked the same way whose probe outputs did not change keeps its verdict and is not asked again. Rewrite or drop what no longer holds.
+- Non-null `recheck` (`kind: "probes"`): the work was judged before and changed since. Run the probes file of the last round again (add probes for every path in `recheck.unlinked`, the changed code no behavior description pointed at), then write a full draft for the current state. Keep the id and exact wording of each question that still holds: a question asked the same way whose probe outputs did not change keeps its verdict and is not asked again. Rewrite or drop what no longer holds.
 - Non-null `openPr` with a `recheck`: the PR's judgment no longer covers the code. Before drafting, mark its paragraph: fetch the PR body into a file (`gh pr view <url> --json body -q .body`, or `glab api` for an MR), run `node <apply-approval skill>/scripts/pr-body.mjs --task <taskId> --body-file <file> --rechecking`, and update the PR body with it as `apply-approval` step 4 shows. This changes only Heirloom's paragraph.
-- `relatedRecords`: read them with `recall-context`. If the change contradicts one, say so in a `fork` question and in the report; do not drop the question.
+- `relatedRecords`: decision records (`id`, `choice`, `scope`) whose `scope` covers a changed file. Read them with `recall-context`. If the change contradicts one, say so in a `fork` question and in the report; do not drop the question.
 - `conversation.path` freezes the user's typed messages. If `available: false`, continue with document sources and report `reason`: `no_session` (no recorded session), `ambiguous` (concurrent sessions), `unreadable`, or `empty`.
 
 Only hooks record sessions. Never manufacture conversation input, write `~/.heirloom/` files or call library modules directly. If conversation evidence is needed, the user starts a new session or ends the competing one; then rerun `prepare`.
@@ -181,7 +181,7 @@ On completion, handle `data.state`:
 | `approved` | Run `apply-approval` immediately; approval authorizes it, so do not ask again. |
 | `applied`, `pr_created` | Report already applied elsewhere. |
 | `discarded`, `expired` | Report; do not apply. |
-| `stale` | Report code changed during review. After changes finish, rerun this skill for incremental recheck. |
+| `stale` | Report code changed during review. After changes finish, rerun this skill for a recheck. |
 | `returned` | The person sent the work back; `data.returned` lists the questions and reasons. Report them, change the code (for `split`, move that behavior out of this branch), then rerun this skill. Do not open a PR. |
 | `timedOut: true`, still `awaiting_approval` | Report no approval yet; it remains applicable later. |
 

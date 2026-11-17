@@ -7,12 +7,10 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { globToRegExp } from './glob.mjs';
-import { ID_PATTERNS, newRecordId } from './ids.mjs';
 import { CONVERSATION_REF, findQuote } from './conversation.mjs';
-import { checkRecheckDraft } from './recheck.mjs';
 import { checkDiscussion } from './discussion.mjs';
 import { readRecords } from './records.mjs';
-import { draftSchema, draftV2Schema, isMarkdownCodePath, validate } from './schema.mjs';
+import { draftV2Schema, isMarkdownCodePath, validate } from './schema.mjs';
 import { createHash } from 'node:crypto';
 
 /** @param {string} s */
@@ -105,7 +103,7 @@ function sourceChecker({ root, conversation, errors }) {
  * @typedef {object} CheckResult
  * @property {string[]} errors
  * @property {string[]} warnings
- * @property {any} draft enriched copy: record ids issued, source sha256 filled
+ * @property {any} draft enriched copy: source sha256 and fetched discussions filled
  */
 
 /**
@@ -113,108 +111,15 @@ function sourceChecker({ root, conversation, errors }) {
  * @param {string} options.root repository root
  * @param {any} options.input frozen input.json
  * @param {any} options.draft agent draft
- * @param {{ meta: { id: string, kind: string, active: boolean, supersededBy?: string | null, deprecation?: { taskId: string } } }[]} options.records existing records
  * @param {string[]} options.repoFiles tracked and untracked (non-ignored) repository files
  * @param {import('./conversation.mjs').Utterance[] | null} [options.conversation] the messages
  *   the person typed, frozen for this task; null when the task has none
  * @param {any} [options.probes] the task's last probe run (`probes/result.json`), or null
  * @returns {Promise<CheckResult>}
  */
-export async function checkDraft({ root, input, draft, records, repoFiles, conversation = null, probes = null }) {
+export async function checkDraft({ root, input, draft, repoFiles, conversation = null, probes = null }) {
   if (isObject(draft) && draft.schemaVersion === 2) return checkDraftV2({ root, input, draft, repoFiles, conversation, probes });
-  // Drafts of schema 1 (summary and records) are still read until the dashboard and apply
-  // take schema 2 (pivot steps 4 and 5).
-  const errors = validate(draftSchema, draft);
-  /** @type {string[]} */
-  const warnings = [];
-  const enriched = isObject(draft) ? structuredClone(draft) : {};
-
-  if (enriched.taskId !== input.taskId) errors.push(`$.taskId: 고정된 입력의 작업 ID(${input.taskId})와 다름`);
-  if (enriched.inputSourceHash !== input.source.hash) {
-    errors.push('$.inputSourceHash: 고정된 입력의 소스 상태와 다름. prepare를 다시 실행하고 그 결과로 초안을 쓴다');
-  }
-  if (input.recheck?.kind === 'probes') return { errors: ['$.schemaVersion: 판정 이후의 재확인은 스키마 2 초안으로 쓴다'], warnings, draft: enriched };
-  if (!input.recheck && enriched.recheck !== undefined) errors.push('$.recheck: 증분 재확인이 아닌 인계에는 쓸 수 없음');
-  if (input.recheck && errors.length === 0) errors.push(...checkRecheckDraft({ recheck: input.recheck, draft: enriched }));
-
-  const changed = input.source.files.map((/** @type {{ path: string }} */ f) => f.path);
-  if (Array.isArray(enriched.summary)) {
-    if ((enriched.summary.length < 2 || enriched.summary.length > 5)) {
-      warnings.push(`$.summary: 요약 불릿은 2~5개를 권장함 (현재 ${enriched.summary.length}개)`);
-    }
-    enriched.summary.forEach((/** @type {any} */ bullet, /** @type {number} */ i) => {
-      if (!isObject(bullet) || !Array.isArray(bullet.codePaths)) return;
-      bullet.codePaths.forEach((/** @type {unknown} */ cp, /** @type {number} */ j) => {
-        if (typeof cp !== 'string' || isMarkdownCodePath(cp)) return; // reported by the schema
-        if (!matchesSome(cp, changed)) errors.push(`$.summary[${i}].codePaths[${j}]: 변경 파일 목록에 없음 (${cp})`);
-      });
-    });
-  }
-
-  if (!Array.isArray(enriched.records)) return { errors, warnings, draft: enriched };
-
-  const byId = new Map(records.map((r) => [r.meta.id, r.meta]));
-  // Records this task already wrote in an earlier round keep their ids, and the records it
-  // already superseded or deprecated may still be targeted.
-  const own = new Set(
-    (input.recheck?.baseline.records ?? []).filter((/** @type {any} */ r) => r.op === 'add').map((/** @type {any} */ r) => r.id),
-  );
-  const usedIds = new Set([...byId.keys()].filter((id) => !own.has(id)));
-  const checkSource = sourceChecker({ root, conversation, errors });
-
-  /** @param {any} op @param {string} at */
-  const checkTarget = (op, at) => {
-    if (typeof op.target !== 'string') return;
-    const target = byId.get(op.target);
-    if (!target) errors.push(`${at}.target: 대상 기록이 없음 (${op.target})`);
-    else if (!target.active && !(target.deprecation?.taskId === input.taskId || (target.supersededBy && own.has(target.supersededBy)))) {
-      errors.push(`${at}.target: 이미 비활성인 기록임 (${op.target})`);
-    }
-  };
-
-  for (let i = 0; i < enriched.records.length; i += 1) {
-    const op = enriched.records[i];
-    const at = `$.records[${i}]`;
-    if (!isObject(op)) continue;
-    const sources = Array.isArray(op.sources) ? op.sources : [];
-
-    if (op.op === 'add') {
-      for (let k = 0; k < sources.length; k += 1) await checkSource(sources[k], `${at}.sources[${k}]`, true);
-      if (Array.isArray(op.codePaths)) {
-        op.codePaths.forEach((/** @type {unknown} */ cp, /** @type {number} */ j) => {
-          if (typeof cp === 'string' && !isMarkdownCodePath(cp) && !matchesSome(cp, repoFiles)) {
-            warnings.push(`${at}.codePaths[${j}]: 저장소에 맞는 파일이 없음 (${cp})`);
-          }
-        });
-      }
-      const kind = op.kind === 'axiom' ? 'axiom' : 'decision';
-      const pattern = kind === 'axiom' ? ID_PATTERNS.axiom : ID_PATTERNS.decision;
-      if (typeof op.id !== 'string' || !pattern.test(op.id) || usedIds.has(op.id)) {
-        let id;
-        do id = newRecordId(kind);
-        while (usedIds.has(id));
-        op.id = id;
-      }
-      usedIds.add(op.id);
-    } else if (op.op === 'update' || op.op === 'deprecate') {
-      checkTarget(op, at);
-      for (let k = 0; k < sources.length; k += 1) await checkSource(sources[k], `${at}.sources[${k}]`, false);
-    } else if (op.op === 'relate') {
-      checkTarget(op, at);
-      const id = op.relation?.id;
-      if (typeof id === 'string') {
-        const other = byId.get(id);
-        if (id === op.target) errors.push(`${at}.relation.id: 대상 기록 자신과는 관계를 맺을 수 없음`);
-        else if (!other) errors.push(`${at}.relation.id: 관계 대상 기록이 없음 (${id})`);
-        else if (!other.active) errors.push(`${at}.relation.id: 이미 비활성인 기록임 (${id})`);
-      }
-    } else if (op.op === 'supersede') {
-      checkTarget(op, at);
-      const replacement = Number.isInteger(op.with) ? enriched.records[op.with] : undefined;
-      if (!isObject(replacement) || replacement.op !== 'add') errors.push(`${at}.with: 같은 초안의 add 항목 번호를 가리켜야 함`);
-    }
-  }
-  return { errors, warnings, draft: enriched };
+  return { errors: ['$.schemaVersion: 2여야 함. prepare-handoff 스킬의 스키마 2 형식으로 쓴다'], warnings: [], draft: isObject(draft) ? structuredClone(draft) : {} };
 }
 
 // ---------------------------------------------------------------- schema 2 (pivot 5.3)

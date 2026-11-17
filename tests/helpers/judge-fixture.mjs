@@ -75,7 +75,7 @@ export async function judgedTask({ commit = true, config, baseFiles = {}, editDr
   editDraft(draft);
   await writeFile(taskPaths(home, taskId).draft, JSON.stringify(draft));
   await submitDraft({ home, taskId });
-  return { repo, home, taskId, sourceHash: prepared.source.hash, probeSetHash: probes.probeSetHash };
+  return { upstream, repo, home, taskId, sourceHash: prepared.source.hash, probeSetHash: probes.probeSetHash };
 }
 
 /**

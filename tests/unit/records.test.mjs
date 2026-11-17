@@ -6,7 +6,6 @@ import { tempDir } from '../helpers/git-fixture.mjs';
 import {
   parseRecord,
   serializeRecord,
-  renderBody,
   isMarkdownCodePath,
   writeRecord,
   readRecords,
@@ -49,14 +48,6 @@ test('parseRecord accepts CRLF and rejects missing or broken frontmatter', () =>
   }
 });
 
-test('renderBody produces the PLAN 14.1 / 15.1 sections', () => {
-  const decision = renderBody('decision', { problem: 'P', choice: 'C', alternatives: 'A', scope: 'S' });
-  assert.equal(decision, '\n## 문제\n\nP\n\n## 선택과 이유\n\nC\n\n## 버린 대안\n\nA\n\n## 적용 범위\n\nS\n');
-  const axiom = renderBody('axiom', { property: 'P', scope: 'S', exceptions: 'E', checks: 'K' });
-  assert.match(axiom, /## 유지할 성질\n\nP/);
-  assert.match(axiom, /## 점검 지침\n\nK\n$/);
-});
-
 test('isMarkdownCodePath catches markdown files and markdown-only globs', () => {
   for (const p of ['README.md', 'docs/specs/a.md', 'x/Y.MDX', 'notes.markdown', 'docs/**/*.md', 'docs/*.{md,mdx}']) {
     assert.equal(isMarkdownCodePath(p), true, p);
@@ -69,11 +60,8 @@ test('isMarkdownCodePath catches markdown files and markdown-only globs', () => 
 test('writeRecord/readRecords use .heirloom/decisions and .heirloom/axioms', async (t) => {
   const root = await tempDir('records');
   t.after(() => rm(root, { recursive: true, force: true }));
-  const decision = { meta: meta(), body: renderBody('decision', { problem: 'P', choice: 'C', alternatives: 'A', scope: 'S' }) };
-  const axiom = {
-    meta: { ...meta(), id: 'a-2n5v8c1r', kind: /** @type {const} */ ('axiom') },
-    body: renderBody('axiom', { property: 'P', scope: 'S', exceptions: 'E', checks: 'K' }),
-  };
+  const decision = { meta: meta(), body: '\n## 문제\n\nP\n\n## 선택과 이유\n\nC\n' };
+  const axiom = { meta: { ...meta(), id: 'a-2n5v8c1r', kind: /** @type {const} */ ('axiom') }, body: '\n## 유지할 성질\n\nP\n' };
   const file = await writeRecord(root, decision);
   assert.ok(file.endsWith('.heirloom/decisions/d-7k3q9m2x.md'));
   await writeRecord(root, axiom);

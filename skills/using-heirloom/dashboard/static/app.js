@@ -174,10 +174,6 @@ const button = (cls, label, onclick, props = {}) => h('button', { type: 'button'
 const short = (hash) => (hash ? hash.replace(/^sha256:/, '').slice(0, 12) : '없음');
 /** @param {string | null | undefined} iso */
 const when = (iso) => (iso ? new Date(iso).toLocaleString('ko-KR') : '알 수 없음');
-/** @param {string[] | undefined} paths */
-const pathList = (paths) =>
-  paths?.length ? h('div', { class: 'hl-paths' }, paths.map((p) => h('span', { class: 'hl-path' }, p))) : h('span', { class: 'hl-muted' }, '없음');
-
 /**
  * A text input or textarea in SEED's outline style. Focus is mirrored to data-focus on the
  * root because the focus ring is drawn by the root. `oneLine` is a textarea that wraps long
@@ -219,56 +215,6 @@ const fieldBlock = (label, control, description) =>
     description ? h('div', { class: 'seed-field__footer' }, h('span', { class: 'seed-field__description' }, description)) : null,
   );
 
-/**
- * Approve / reject / hold control: a radio group styled as a SEED segmented control.
- * Starts with nothing selected; the human must choose.
- * @param {{ label: string, value: Decision | null, onchange: (value: Decision) => void }} o
- */
-function decisionControl({ label, value, onchange }) {
-  /** @type {[Decision, string][]} */
-  const options = [
-    ['approved', '승인'],
-    ['rejected', '거절'],
-    ['pending', '보류'],
-  ];
-  const root = h('div', { class: 'seed-segmented-control__root hl-decision', role: 'radiogroup', 'aria-label': label });
-  root.style.setProperty('--segment-count', String(options.length));
-  root.append(h('div', { class: 'seed-segmented-control__indicator', 'aria-hidden': 'true' }));
-  /** @type {HTMLButtonElement[]} */
-  const items = options.map(([v, text]) => h('button', { type: 'button', role: 'radio', class: 'seed-segmented-control__item', 'data-value': v }, text));
-  root.append(...items);
-
-  /** @param {Decision | null} v */
-  const set = (v) => {
-    const index = options.findIndex(([o]) => o === v);
-    items.forEach((item, i) => {
-      item.setAttribute('aria-checked', String(i === index));
-      item.toggleAttribute('data-checked', i === index);
-      item.tabIndex = i === (index < 0 ? 0 : index) ? 0 : -1;
-    });
-    root.toggleAttribute('data-has-value', index >= 0);
-    root.style.setProperty('--segment-index', String(Math.max(index, 0)));
-  };
-  /** @param {number} i */
-  const choose = (i) => {
-    set(options[i][0]);
-    onchange(options[i][0]);
-  };
-  items.forEach((item, i) => {
-    item.addEventListener('click', () => choose(i));
-    item.addEventListener('keydown', (ev) => {
-      const step = ev.key === 'ArrowRight' || ev.key === 'ArrowDown' ? 1 : ev.key === 'ArrowLeft' || ev.key === 'ArrowUp' ? -1 : 0;
-      if (!step) return;
-      ev.preventDefault();
-      const next = (i + step + items.length) % items.length;
-      items[next].focus();
-      choose(next);
-    });
-  });
-  set(value);
-  return { root, set };
-}
-
 // ------------------------------------------------------------------ API
 
 class ApiError extends Error {
@@ -304,8 +250,6 @@ const post = (path, body) =>
 
 // ------------------------------------------------------------------ labels
 
-/** @typedef {'approved' | 'rejected' | 'pending'} Decision */
-
 /** @type {Record<string, [Tone, string]>} */
 const STATE = {
   prepared: ['neutral', '준비됨'],
@@ -326,38 +270,9 @@ const stateBadge = (state) => {
   return badge(tone, label);
 };
 
-/**
- * Screen names of the record kinds. The README calls them 결정(decision) and 규칙(axiom);
- * the original word is shown once where a kind is introduced (section titles).
- * @type {Record<string, string>}
- */
-const KIND = { decision: '결정', axiom: '규칙' };
-/** @param {string} kind */
-const kindName = (kind) => KIND[kind] ?? kind;
-
-/** @type {Record<string, string>} */
-const OP = { add: '추가', update: '수정', supersede: '대체', deprecate: '폐기', relate: '관계 추가' };
-/** @type {Record<string, string>} */
-const RELATION = { exception: '예외', coexist: '병존' };
 const FINISHED = new Set(['pr_created', 'discarded', 'expired']);
 /** Approved, waiting for the agent to write the records and open the PR. */
 const APPLYING = new Set(['approved', 'applied']);
-
-/** @type {Record<string, [string, string][]>} */
-const BODY_FIELDS = {
-  decision: [
-    ['problem', '문제'],
-    ['choice', '선택과 이유'],
-    ['alternatives', '버린 대안'],
-    ['scope', '적용 범위'],
-  ],
-  axiom: [
-    ['property', '유지할 성질'],
-    ['scope', '적용 범위와 조건'],
-    ['exceptions', '예외'],
-    ['checks', '점검 지침'],
-  ],
-};
 
 /** @param {string} taskId @param {string | null} repoId @param {string | null} worktreeId */
 const taskHref = (taskId, repoId, worktreeId) => `/r/${repoId ?? '-'}/w/${worktreeId ?? '-'}/t/${taskId}`;
@@ -490,24 +405,6 @@ async function renderOverview() {
 
 // ------------------------------------------------------------------ task screen
 
-/**
- * @typedef {object} Form
- * @property {any} task the task the form was built from (its draftSha256 and sourceHash are sent)
- * @property {string} summary PR summary as one text, one bullet per line (see summaryLines)
- * @property {Map<number, Decision>} decisions
- * @property {Map<number, { title: string, body: Record<string, string> }>} edits
- * @property {Map<number, (d: Decision) => void>} setters
- * @property {{ decision: number[], axiom: number[] }} kinds record indexes per tab
- * @property {Set<number>} carriedRecords record indexes that keep their approval (incremental handoff)
- * @property {Set<number>} carriedSummary draft summary indexes that keep their approval
- * @property {Set<number>} reopened carried records the human opened for review again
- * @property {Set<number>} editing added records shown as an edit form (others are a read view)
- * @property {boolean} dirty
- * @property {boolean} busy
- */
-
-/** @type {Form | null} */
-let form = null;
 /** @type {any} */
 let latest = null;
 
@@ -529,8 +426,8 @@ function titleBlock(task) {
       'div',
       { class: 'hl-spread' },
       input ? h('p', {}, h('code', {}, input.branch ?? '(분리된 HEAD)'), ' → ', h('code', {}, input.base.ref)) : h('span'),
-      // Discard is rare and cannot be undone: it sits by the title, not in the sticky approval bar.
-      (form ?? judge)?.task.taskId === task.taskId ? discardButton : null,
+      // Discard is rare and cannot be undone: it sits by the title, away from the judgment.
+      judge?.task.taskId === task.taskId ? discardButton : null,
     ),
   );
 }
@@ -610,117 +507,12 @@ function boundaryCard(task) {
   );
 }
 
-/** @type {Record<string, string>} */
-const CHANGE_REASON = { edited: '수정', base_updated: '기준 브랜치 갱신으로 인한 변경', added: '추가', removed: '빠짐' };
-
-/** @param {string} reason */
-const reasonText = (reason) =>
-  reason === 'unlinked'
-    ? '연결 없는 변경(불확실)'
-    : reason === 'pending'
-      ? '지난 승인에서 보류'
-      : reason.startsWith('material:')
-        ? `자료 변경 ${reason.slice(9)}`
-        : reason.startsWith('with:')
-          ? '대체하는 항목이 다시 확인 대상'
-          : `${reason} 변경`;
-
-/**
- * Why a draft item is up for recheck: the affected reasons of its baseline item, the
- * agent's extra reason, or "new" for an item that was not in the last approval.
- * @param {any} task
- * @param {'summary' | 'record'} kind
- * @param {any} item draft bullet or record
- * @returns {string[]}
- */
-function recheckReasons(task, kind, item) {
-  const recheck = task.input?.recheck;
-  if (!recheck) return [];
-  if (!Number.isInteger(item.baseIndex)) return ['지난 승인 뒤에 새로 생긴 항목'];
-  const affected = kind === 'summary' ? recheck.affected.summary : recheck.affected.records;
-  const hit = affected.find((/** @type {any} */ a) => a.index === item.baseIndex);
-  const extra = (task.draft?.recheck?.extra ?? []).filter((/** @type {any} */ e) => e.kind === kind && e.baseIndex === item.baseIndex);
-  return [...(hit ? hit.reasons.map(reasonText) : []), ...extra.map((/** @type {any} */ e) => `에이전트 추가: ${e.reason}`)];
-}
-
-/** @param {any} task */
-function recheckCard(task) {
-  const recheck = task.input?.recheck;
-  if (!recheck) return null;
-  const carried = task.carried ?? { summary: [], records: [] };
-  return h(
-    'section',
-    { class: 'hl-card' },
-    h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, '증분 재확인'), h('code', { class: 'hl-muted' }, `기준 ${recheck.basedOn}`)),
-    h(
-      'p',
-      { class: 'hl-muted hl-small' },
-      '지난 승인 뒤에 바뀐 부분과 연결된 항목만 다시 확인합니다. 나머지는 지난 승인을 유지합니다. 구현이 적절한지 다시 심사하는 절차가 아닙니다.',
-    ),
-    recheck.mergeBaseChanged ? callout('informative', '대상 브랜치가 갱신됨', 'merge-base가 바뀌었습니다. 이 작업이 바꾼 파일의 내용만 비교했고, 대상 브랜치에서 들어온 다른 변경은 보지 않았습니다.') : null,
-    recheck.affected.unlinked.length
-      ? callout('warning', '연결 없는 변경 (불확실)', h('span', {}, '어느 요약·기록에도 연결되지 않은 변경입니다. 요약 전체를 다시 확인하세요: ', recheck.affected.unlinked.join(', ')))
-      : null,
-    h(
-      'dl',
-      { class: 'hl-meta' },
-      h('dt', {}, '바뀐 파일'),
-      h(
-        'dd',
-        {},
-        recheck.changes.length
-          ? h('ul', { class: 'hl-files' }, recheck.changes.map((/** @type {any} */ c) => h('li', {}, h('code', {}, c.path), h('span', { class: 'hl-muted' }, ` ${CHANGE_REASON[c.reason] ?? c.reason}`))))
-          : h('span', { class: 'hl-muted' }, '없음'),
-      ),
-      h('dt', {}, '바뀐 자료'),
-      h('dd', {}, recheck.materials.length ? recheck.materials.map((/** @type {any} */ m) => m.ref).join(', ') : h('span', { class: 'hl-muted' }, '없음')),
-      h('dt', {}, '승인 유지'),
-      h('dd', {}, `요약 ${carried.summary.length}개, 기록 ${carried.records.length}개`),
-    ),
-  );
-}
-
-/** @param {any} task @param {string} id */
-const recordLine = (task, id) => {
-  const t = task.targets?.[id];
-  return h('li', {}, h('code', {}, id), ' ', t ? t.title : h('span', { class: 'hl-muted' }, '(기록을 찾지 못함)'), h('span', { class: 'hl-muted hl-small' }, ` .heirloom/${id.startsWith('a-') ? 'axioms' : 'decisions'}/${id}.md`));
-};
-
 /**
  * Number of notices that need attention (critical or warning), shown on the overview tab.
  * @param {any} task
  */
 function attentionCount(task) {
-  const draft = task?.draft;
-  return (
-    (task?.input && reviewMatch(task.input) === false ? 1 : 0) +
-    (draft?.conflicts?.length ? 1 : 0) +
-    (draft?.missing?.length ? 1 : 0) +
-    (task?.check?.warnings?.length ? 1 : 0)
-  );
-}
-
-/** @type {Record<string, string>} */
-const DRAFT_FIELD = { codePaths: '연관 코드 경로', topics: '주제', sources: '출처', title: '제목', body: '본문' };
-
-/**
- * A draft check warning for people. The check writes JSON paths for the agent
- * (`$.records[0].codePaths[1]: …`); the screen names the item and field instead.
- * @param {any} task
- * @param {string} warning
- */
-function warningText(task, warning) {
-  const m = /^\$\.(summary|records\[(\d+)\])(?:\.(\w+)(?:\[\d+\])?)?: (.*)$/s.exec(warning);
-  if (!m) return warning;
-  const [, where, index, field, message] = m;
-  const fieldText = field ? ` ${DRAFT_FIELD[field] ?? field}` : '';
-  if (where === 'summary') return `PR 요약${fieldText}: ${message}`;
-  const records = task.draft?.records ?? [];
-  const r = records[Number(index)];
-  if (!r) return warning;
-  const full = String((r.op === 'add' ? r.title : r.target) ?? '').trim();
-  const title = full.length > 40 ? `${full.slice(0, 40)}…` : full;
-  return `${kindName(kindOf(r, records))} #${Number(index) + 1}${title ? ` '${title}'` : ''}${fieldText}: ${message}`;
+  return (task?.input && reviewMatch(task.input) === false ? 1 : 0) + (task?.check?.warnings?.length ? 1 : 0);
 }
 
 /** @param {any} task */
@@ -732,18 +524,8 @@ function noticesBlock(task) {
   if (input && reviewMatch(input) === false) {
     items.push(callout('critical', '리뷰 대상 불일치', '최종 리뷰가 다룬 소스 상태와 인계한 소스 상태가 다릅니다. 리뷰 이후의 변경을 직접 확인하세요.'));
   }
-  if (draft?.conflicts?.length) {
-    items.push(
-      callout(
-        'critical',
-        '자료 충돌',
-        h('span', {}, draft.conflicts.map((/** @type {any} */ c, /** @type {number} */ i) => [i ? h('br') : null, `${c.refs.join(' ↔ ')}: ${c.note}`])),
-      ),
-    );
-  }
-  if (draft?.missing?.length) items.push(callout('warning', '누락된 자료', draft.missing.join(' · ')));
   if (task.check?.warnings?.length) {
-    const lines = task.check.warnings.map((/** @type {string} */ w) => warningText(task, w));
+    const lines = /** @type {string[]} */ (task.check.warnings);
     items.push(callout('warning', '검사 경고', h('span', {}, lines.map((/** @type {string} */ l, /** @type {number} */ i) => [i ? h('br') : null, l]))));
   }
   if (input?.unknowns?.length) items.push(callout('neutral', '확인하지 못한 값', input.unknowns.join(', ')));
@@ -751,627 +533,14 @@ function noticesBlock(task) {
   return items.length ? h('section', { class: 'hl-stack' }, items) : null;
 }
 
-/**
- * @param {any} record draft op
- * @returns {'decision' | 'axiom'}
- */
-function kindOf(record, records = /** @type {any[]} */ ([])) {
-  if (record.op === 'add') return record.kind;
-  if (record.op === 'supersede' && records[record.with]?.kind === 'axiom') return 'axiom';
-  return String(record.target).startsWith('a-') ? 'axiom' : 'decision';
-}
-
-/** @param {any[]} sources */
-function sourcesBlock(sources) {
-  if (!sources?.length) return null;
-  return h(
-    'div',
-    { class: 'hl-stack-tight' },
-    h('span', { class: 'hl-muted hl-small' }, '출처'),
-    sources.map((/** @type {any} */ s) =>
-      h(
-        'div',
-        { class: 'hl-stack-tight' },
-        // `@conversation` quotes what the person typed in the session, not a file.
-        s.ref === '@conversation'
-          ? h('span', { class: 'hl-small' }, '대화 (사용자 발화)')
-          : h('span', { class: 'hl-small' }, h('code', {}, s.ref), s.lines ? (s.lines[0] === s.lines[1] ? ` ${s.lines[0]}행` : ` ${s.lines[0]}–${s.lines[1]}행`) : ''),
-        s.quote ? h('blockquote', { class: 'hl-quote hl-small' }, s.quote) : null,
-      ),
-    ),
-  );
-}
-
-/** @param {any} task @param {string} id */
-function targetLabel(task, id) {
-  const t = task.targets?.[id];
-  return t ? `${id} ${t.title}${t.active ? '' : ' (비활성)'}` : `${id} (기록을 찾지 못함)`;
-}
-
-/**
- * @param {Form} f
- * @param {number} index
- */
-function recordCard(f, index) {
-  if (f.carriedRecords.has(index) && !f.reopened.has(index)) return carriedRecordCard(f, index);
-  const task = f.task;
-  const records = task.draft.records;
-  const r = records[index];
-  const kind = kindOf(r, records);
-  const editable = r.op === 'add';
-  const card = h('article', { class: 'hl-card', id: `record-${index}`, 'aria-label': `${kindName(kind)} 항목 ${index + 1}` });
-  const current = f.decisions.get(index);
-  if (current) card.setAttribute('data-decision', current);
-  /** Redraw this card in place (read view ↔ edit form), keeping the decision and edits. */
-  const redraw = () => {
-    const next = recordCard(f, index);
-    card.replaceWith(next);
-    return next;
-  };
-
-  /** @type {Child[]} */
-  const content = [];
-  if (editable) {
-    const edit = /** @type {{ title: string, body: Record<string, string> }} */ (f.edits.get(index));
-    const editing = f.editing.has(index);
-    const edited = edit.title.trim() !== String(r.title ?? '').trim() || Object.keys(edit.body).some((k) => (edit.body[k] ?? '').trim() !== String(r.body[k] ?? '').trim());
-    const toggle = button(BUTTON.smallWeak, editing ? '편집 닫기' : '편집', () => {
-      if (editing) f.editing.delete(index);
-      else f.editing.add(index);
-      const next = redraw();
-      /** @type {HTMLElement | null} */ (next.querySelector(editing ? '.hl-edit-toggle' : 'textarea'))?.focus();
-    });
-    toggle.classList.add('hl-edit-toggle');
-    toggle.setAttribute('aria-expanded', String(editing));
-    if (editing) {
-      content.push(
-        fieldBlock(
-          '제목',
-          textInput({
-            value: edit.title,
-            oneLine: true,
-            label: `항목 ${index + 1} 제목`,
-            oninput: (v) => {
-              edit.title = v;
-              markDirty();
-            },
-          }),
-        ),
-        h(
-          'div',
-          { class: 'hl-fields' },
-          BODY_FIELDS[kind].map(([key, label]) =>
-            fieldBlock(
-              label,
-              textInput({
-                value: edit.body[key] ?? '',
-                multiline: true,
-                label: `항목 ${index + 1} ${label}`,
-                oninput: (v) => {
-                  edit.body[key] = v;
-                  markDirty();
-                },
-              }),
-            ),
-          ),
-        ),
-        h('div', {}, toggle),
-      );
-    } else {
-      const filled = BODY_FIELDS[kind].filter(([key]) => (edit.body[key] ?? '').trim());
-      const blank = BODY_FIELDS[kind].filter(([key]) => !(edit.body[key] ?? '').trim());
-      content.push(
-        h('div', { class: 'hl-spread hl-record-head' }, h('h3', { class: 'hl-record-title' }, edit.title.trim() || h('span', { class: 'hl-muted' }, '(제목 없음)')), h('div', { class: 'hl-row' }, edited ? badge('informative', '고침') : null, toggle)),
-        filled.length
-          ? h('dl', { class: 'hl-meta' }, filled.map(([key, label]) => [h('dt', {}, label), h('dd', { class: 'hl-field-text' }, edit.body[key])]))
-          : null,
-        blank.length ? h('p', { class: 'hl-muted hl-small' }, `비어 있음: ${blank.map(([, label]) => label).join(', ')}`) : null,
-      );
-    }
-    content.push(
-      h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, '연관 코드 경로'), pathList(r.codePaths)),
-      r.topics?.length ? h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, '주제'), pathList(r.topics)) : null,
-      Array.isArray(r.evidence)
-        ? h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, `근거 결정 ${r.evidence.length}개 (원문은 저장소의 기록 파일)`), h('ul', { class: 'hl-files' }, r.evidence.map((/** @type {string} */ id) => recordLine(task, id))))
-        : null,
-      sourcesBlock(r.sources),
-    );
-  } else {
-    content.push(h('p', {}, h('span', { class: 'hl-muted' }, '대상 '), h('code', {}, targetLabel(task, r.target))));
-    if (r.op === 'relate') {
-      content.push(
-        h('p', {}, h('span', { class: 'hl-muted' }, `${RELATION[r.relation.type] ?? r.relation.type} 관계 `), h('code', {}, targetLabel(task, r.relation.id))),
-        h('p', { class: 'hl-field-text' }, h('span', { class: 'hl-muted' }, '조건 '), r.relation.condition),
-      );
-    }
-    if (r.op === 'supersede') {
-      const by = records[r.with];
-      content.push(h('p', {}, h('span', { class: 'hl-muted' }, '대체하는 항목 '), `#${r.with + 1} ${by?.id ?? ''} ${by?.title ?? ''}`));
-    }
-    if (r.reason) content.push(h('p', { class: 'hl-field-text' }, h('span', { class: 'hl-muted' }, '이유 '), r.reason));
-    if (r.op === 'update') {
-      if (r.title) content.push(h('p', {}, h('span', { class: 'hl-muted' }, '새 제목 '), r.title));
-      if (r.body) {
-        content.push(
-          h(
-            'dl',
-            { class: 'hl-meta' },
-            Object.entries(r.body).map(([key, value]) => [
-              h('dt', {}, (BODY_FIELDS[kind].find(([k]) => k === key) ?? [key, key])[1]),
-              h('dd', { class: 'hl-field-text' }, String(value)),
-            ]),
-          ),
-        );
-      }
-      if (r.codePaths) content.push(h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, '새 연관 코드 경로'), pathList(r.codePaths)));
-      if (r.topics) content.push(h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, '새 주제'), pathList(r.topics)));
-    }
-    content.push(sourcesBlock(r.sources));
-  }
-
-  const control = decisionControl({
-    label: `항목 ${index + 1} 결정`,
-    value: current ?? null,
-    onchange: (d) => {
-      f.decisions.set(index, d);
-      card.setAttribute('data-decision', d);
-      markDirty();
-    },
-  });
-  f.setters.set(index, (d) => {
-    control.set(d);
-    f.decisions.set(index, d);
-    card.setAttribute('data-decision', d);
-  });
-
-  const reasons = f.reopened.has(index) ? ['사람이 다시 검토하기로 함'] : recheckReasons(task, 'record', r);
-  const before = Number.isInteger(r.baseIndex) ? task.input.recheck?.baseline.records[r.baseIndex] : undefined;
-  append(
-    card,
-    [
-      h(
-        'div',
-        { class: 'hl-spread' },
-        h(
-          'div',
-          { class: 'hl-row' },
-          badge(r.op === 'deprecate' ? 'critical' : r.op === 'add' ? 'positive' : 'informative', OP[r.op] ?? r.op),
-          badge(kind === 'axiom' ? 'warning' : 'neutral', kindName(kind)),
-          h('code', { class: 'hl-muted' }, `#${index + 1}${r.id ? ` ${r.id}` : ''}`),
-        ),
-        control.root,
-      ),
-      reasons.length ? callout('warning', '다시 확인할 이유', reasons.join(' · ')) : null,
-      before ? previousRecord(before, kind) : null,
-      editable ? null : h('h3', { class: 'hl-section-title' }, r.op === 'update' ? '기존 기록 수정' : r.op === 'supersede' ? '기존 기록 대체' : r.op === 'relate' ? '기존 기록에 관계 추가' : '기존 기록 폐기'),
-      content,
-    ],
-  );
-  return card;
-}
-
-/**
- * The approved version of a record, shown next to the new draft.
- * @param {any} before baseline record
- * @param {'decision' | 'axiom'} kind
- */
-function previousRecord(before, kind) {
-  return h(
-    'details',
-    {},
-    h('summary', {}, '지난 승인 내용'),
-    h(
-      'dl',
-      { class: 'hl-meta' },
-      before.title ? [h('dt', {}, '제목'), h('dd', {}, before.title)] : null,
-      before.op === 'add'
-        ? BODY_FIELDS[kind].map(([key, label]) => [h('dt', {}, label), h('dd', { class: 'hl-field-text' }, before.body?.[key] || '(없음)')])
-        : [h('dt', {}, '이유'), h('dd', { class: 'hl-field-text' }, before.reason ?? '')],
-      before.codePaths ? [h('dt', {}, '연관 코드 경로'), h('dd', {}, pathList(before.codePaths))] : null,
-    ),
-  );
-}
-
-/**
- * A record that keeps its approval: shown folded, with a way to review it again when the
- * human thinks the change does touch it.
- * @param {Form} f
- * @param {number} index
- */
-function carriedRecordCard(f, index) {
-  const records = f.task.draft.records;
-  const r = records[index];
-  const kind = kindOf(r, records);
-  const title = r.op === 'add' ? r.title : `${OP[r.op] ?? r.op}: ${targetLabel(f.task, r.target)}`;
-  /** @type {HTMLElement} */
-  const card = h(
-    'article',
-    { class: 'hl-card', id: `record-${index}`, 'aria-label': `${kindName(kind)} 항목 ${index + 1} (승인 유지)`, 'data-decision': 'approved' },
-    h(
-      'div',
-      { class: 'hl-spread' },
-      h('div', { class: 'hl-row' }, badge('positive', '승인 유지'), badge(kind === 'axiom' ? 'warning' : 'neutral', kindName(kind)), h('code', { class: 'hl-muted' }, `#${index + 1}${r.id ? ` ${r.id}` : ''}`)),
-      button(BUTTON.smallWeak, '다시 검토', () => {
-        f.reopened.add(index);
-        card.replaceWith(recordCard(f, index));
-        markDirty();
-      }),
-    ),
-    h('p', {}, title),
-    h('p', { class: 'hl-muted hl-small' }, '바뀐 파일·자료와 연결되지 않아 지난 승인을 유지합니다. 영향이 있다고 보면 다시 검토하세요.'),
-  );
-  return card;
-}
-
-/** @param {Form} f */
-function summaryCard(f) {
-  const editor = textInput({
-    value: f.summary,
-    multiline: true,
-    label: 'PR 요약 내용',
-    placeholder: '- 한 줄에 불릿 하나씩 적습니다',
-    oninput: (v) => {
-      f.summary = v;
-      markDirty();
-    },
-  });
-  editor.classList.add('hl-summary-editor');
-  const field = /** @type {HTMLTextAreaElement} */ (editor.querySelector('textarea'));
-
-  const fill = button(BUTTON.smallWeak, '초안 생성', () => {
-    const text = draftSummaryText(f.task);
-    if (f.summary === text) return;
-    if (f.summary.trim() && !window.confirm('입력한 요약을 에이전트가 쓴 초안으로 바꿀까요? 지금 고친 내용은 사라집니다.')) return;
-    f.summary = text;
-    field.value = text;
-    markDirty();
-    field.focus();
-  });
-
-  return h(
-    'section',
-    { class: 'hl-card' },
-    h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, 'PR 요약'), fill),
-    editor,
-    summaryRecheck(f),
-  );
-}
-
-/**
- * Incremental handoff: which draft bullets keep their approval and which are up for recheck,
- * with the reasons and the approved text, under the one summary box.
- * @param {Form} f
- */
-function summaryRecheck(f) {
-  const task = f.task;
-  if (!task.input?.recheck) return null;
-  const rows = task.draft.summary.map((/** @type {any} */ b, /** @type {number} */ i) => {
-    if (f.carriedSummary.has(i)) return h('li', {}, badge('positive', '승인 유지'), ` ${b.text}`);
-    const reasons = recheckReasons(task, 'summary', b);
-    const before = Number.isInteger(b.baseIndex) ? task.input.recheck.baseline.summary[b.baseIndex]?.text : null;
-    return h(
-      'li',
-      {},
-      h(
-        'div',
-        { class: 'hl-stack-tight' },
-        h('span', {}, badge('warning', '다시 확인'), ` ${b.text}`),
-        reasons.length ? h('span', { class: 'hl-muted hl-small' }, `이유: ${reasons.join(' · ')}`) : null,
-        before ? h('span', { class: 'hl-muted hl-small' }, `지난 승인: ${before}`) : null,
-      ),
-    );
-  });
-  return h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, '초안 불릿별 재확인'), h('ul', { class: 'hl-files hl-stack' }, rows));
-}
-
-/**
- * The agent's draft summary as the editor text: one "- " bullet per line.
- * @param {any} task
- */
-function draftSummaryText(task) {
-  return (task.draft?.summary ?? []).map((/** @type {any} */ b) => `- ${String(b.text).replace(/\s*[\r\n]+\s*/g, ' ').trim()}`).join('\n');
-}
-
-/**
- * Bullets of the editor text: one per non-empty line, a leading "-", "*", "•" or "1." dropped.
- * @param {string} text
- * @returns {string[]}
- */
-function summaryLines(text) {
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').trim())
-    .filter(Boolean);
-}
-
-/**
- * Draft bullet each final line came from, so the next incremental handoff keeps its code
- * paths: an unchanged line matches its draft bullet by text; an edited line takes the draft
- * bullet at the same position if that one is not used yet; anything else counts as added.
- * @param {string[]} lines
- * @param {any[]} draft draft summary bullets
- * @returns {(number | null)[]}
- */
-function summaryOrigins(lines, draft) {
-  const used = new Set();
-  /** @type {(number | null | undefined)[]} */
-  const origins = lines.map((line) => {
-    const i = draft.findIndex((b, j) => !used.has(j) && String(b.text).trim() === line);
-    if (i < 0) return undefined;
-    used.add(i);
-    return i;
-  });
-  return origins.map((o, i) => {
-    if (o !== undefined) return o;
-    if (i < draft.length && !used.has(i)) {
-      used.add(i);
-      return i;
-    }
-    return null;
-  });
-}
-
-/**
- * Record indexes the human decides: everything except carried records not reopened.
- * @param {Form} f
- * @param {number[]} [indexes]
- */
-function openIndexes(f, indexes = f.task.draft.records.map((/** @type {any} */ _r, /** @type {number} */ i) => i)) {
-  return indexes.filter((i) => !f.carriedRecords.has(i) || f.reopened.has(i));
-}
-
-/**
- * Contents of the decision or axiom tab.
- * @param {Form} f
- * @param {'decision' | 'axiom'} kind
- */
-function recordsPanel(f, kind) {
-  const indexes = f.kinds[kind];
-  if (kind === 'axiom') {
-    return [
-      h('h2', { class: 'hl-section-title' }, `규칙(axiom) 변경 ${indexes.length}건`),
-      callout('warning', '규칙은 항목마다 따로 확인합니다', '규칙(axiom)은 이후 모든 작업에 적용됩니다. 일괄 승인에 포함되지 않습니다.'),
-      indexes.map((i) => recordCard(f, i)),
-    ];
-  }
-  return [
-    h(
-      'div',
-      { class: 'hl-spread' },
-      h('h2', { class: 'hl-section-title' }, `결정(decision) 변경 ${indexes.length}건`),
-      button(BUTTON.smallWeak, '남은 결정 모두 승인', () => {
-        // Only items without a choice yet: a reject or hold the human already picked stays.
-        const undecided = openIndexes(f, indexes).filter((i) => !f.decisions.has(i));
-        if (!undecided.length) return;
-        const ok = window.confirm(
-          [
-            `아직 고르지 않은 결정 ${undecided.length}건(${undecided.map((i) => `#${i + 1}`).join(', ')})을 모두 승인으로 표시할까요?`,
-            '',
-            '이미 거절·보류로 고른 항목은 그대로 둡니다. 승인 저장 전에는 항목마다 다시 바꿀 수 있습니다.',
-          ].join('\n'),
-        );
-        if (!ok) return;
-        for (const i of undecided) f.setters.get(i)?.('approved');
-        markDirty();
-      }),
-    ),
-    indexes.map((i) => recordCard(f, i)),
-  ];
-}
-
-const actionsBar = h('section', { class: 'hl-actions hl-stack' });
-const actionsStatus = h('div', { class: 'hl-stack' });
-const progress = h('span', { class: 'hl-muted' });
-const approveButton = h('button', { type: 'button', class: BUTTON.primary }, '승인 저장');
-approveButton.addEventListener('click', () => void submitApproval());
 const discardButton = button(BUTTON.smallOutline, '작업 폐기', () => void discardTask());
-/** Why the approval cannot be saved yet, next to the disabled button. */
-const blocked = h('span', { class: 'hl-small hl-blocked', id: 'approve-blocked', 'aria-live': 'polite' });
-approveButton.setAttribute('aria-describedby', 'approve-blocked');
-/** @type {number | null} first record that still needs the human, target of the jump button */
-let nextOpen = null;
-const jumpButton = button(BUTTON.smallWeak, '다음 미처리 항목으로', () => {
-  if (!form || nextOpen === null) return;
-  const index = nextOpen;
-  selectTab(kindOf(form.task.draft.records[index], form.task.draft.records));
-  window.requestAnimationFrame(() => {
-    const card = document.getElementById(`record-${index}`);
-    card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    /** @type {HTMLElement | null | undefined} */ (card?.querySelector('[role="radio"][tabindex="0"]'))?.focus({ preventScroll: true });
-  });
-});
-append(actionsBar, [
-  actionsStatus,
-  h('div', { class: 'hl-spread' }, h('div', { class: 'hl-stack-tight' }, progress, blocked), h('div', { class: 'hl-row hl-actions-buttons' }, jumpButton, approveButton)),
-]);
-
-function refreshActions() {
-  if (!form) return;
-  const f = form;
-  const open = openIndexes(f);
-  const total = open.length;
-  const quick = total === 0;
-  const undecided = open.filter((i) => !f.decisions.has(i));
-  const decided = total - undecided.length;
-  const hasSummary = summaryLines(form.summary).length > 0;
-  approveButton.textContent = quick ? '요약 확인하고 간이 승인' : '승인 저장';
-  const carriedNote = f.carriedRecords.size ? ` · 승인 유지 ${f.carriedRecords.size - f.reopened.size}건` : '';
-  progress.textContent = (quick ? (f.carriedRecords.size ? '다시 확인할 결정·규칙 항목이 없습니다.' : '결정·규칙 변경이 없는 작업입니다.') : `처리한 항목 ${decided}/${total}`) + carriedNote;
-  /** @param {number[]} list */
-  const nums = (list) => list.map((i) => `#${i + 1}`).join(', ');
-  /** @type {string[]} */
-  const why = [];
-  if (!hasSummary) why.push('PR 요약이 비어 있습니다');
-  if (undecided.length) why.push(`승인·거절·보류를 고르지 않은 항목: ${nums(undecided)}`);
-  blocked.textContent = why.length ? `승인 저장 전에 필요: ${why.join(' · ')}` : '';
-  nextOpen = undecided[0] ?? null;
-  jumpButton.hidden = nextOpen === null;
-  const ready = !why.length && !form.busy;
-  approveButton.disabled = !ready;
-  approveButton.toggleAttribute('data-disabled', !ready);
-  discardButton.disabled = form.busy;
-  refreshTabLabels();
-}
-
-function markDirty() {
-  if (!form) return;
-  form.dirty = true;
-  refreshActions();
-}
-
-/** @param {any} task @returns {Form} */
-function newForm(task) {
-  const records = task.draft?.records ?? [];
-  /** @type {Form['edits']} */
-  const edits = new Map();
-  records.forEach((/** @type {any} */ r, /** @type {number} */ i) => {
-    if (r.op === 'add') edits.set(i, { title: r.title, body: { ...r.body } });
-  });
-  /** @type {Form['kinds']} */
-  const kinds = { decision: [], axiom: [] };
-  records.forEach((/** @type {any} */ r, /** @type {number} */ i) => kinds[kindOf(r, records)].push(i));
-  const carriedSummary = new Set(/** @type {number[]} */ (task.carried?.summary ?? []));
-  return {
-    task,
-    kinds,
-    carriedRecords: new Set(task.carried?.records ?? []),
-    carriedSummary,
-    reopened: new Set(),
-    editing: new Set(),
-    summary: draftSummaryText(task),
-    decisions: new Map(),
-    edits,
-    setters: new Map(),
-    dirty: false,
-    busy: false,
-  };
-}
-
-/** @param {Form} f */
-function approvalRequest(f) {
-  const records = f.task.draft.records;
-  const open = openIndexes(f);
-  const items = open.map((index) => {
-    const r = records[index];
-    /** @type {{ index: number, decision: Decision | undefined, edited?: Record<string, unknown>, reopen?: true }} */
-    const item = { index, decision: f.decisions.get(index) };
-    if (f.reopened.has(index)) item.reopen = true;
-    const edit = f.edits.get(index);
-    if (r.op === 'add' && edit) {
-      /** @type {Record<string, unknown>} */
-      const edited = {};
-      if (edit.title.trim() !== r.title) edited.title = edit.title.trim();
-      const changed = Object.keys(edit.body).some((k) => (edit.body[k] ?? '') !== (r.body[k] ?? ''));
-      if (changed) edited.body = Object.fromEntries(Object.entries(edit.body).map(([k, v]) => [k, v.trim()]));
-      if (Object.keys(edited).length) item.edited = edited;
-    }
-    return item;
-  });
-  const lines = summaryLines(f.summary);
-  return {
-    kind: open.length ? 'full' : 'quick',
-    draftSha256: f.task.draftSha256,
-    sourceHash: f.task.input.source.hash,
-    summary: lines,
-    summaryOrigins: summaryOrigins(lines, f.task.draft.summary),
-    items,
-  };
-}
-
-async function submitApproval() {
-  if (!form) return;
-  const f = form;
-  const emptyTitle = [...f.edits.entries()].find(([i, e]) => f.decisions.get(i) === 'approved' && !e.title.trim());
-  if (emptyTitle) {
-    replace(actionsStatus, callout('critical', '제목이 비어 있음', `항목 #${emptyTitle[0] + 1}의 제목을 입력하세요.`));
-    return;
-  }
-  f.busy = true;
-  refreshActions();
-  replace(actionsStatus);
-  try {
-    await post(`/api/tasks/${encodeURIComponent(f.task.taskId)}/approve`, approvalRequest(f));
-    f.dirty = false;
-    clearBanner();
-    // The screen switches to the approved state.
-    await loadTask(f.task.taskId, { force: true });
-  } catch (err) {
-    const e = /** @type {ApiError} */ (err);
-    replace(
-      actionsStatus,
-      callout(
-        'critical',
-        e.status === 409 ? '승인할 수 없음' : '승인 실패',
-        e.status === 409 ? h('span', {}, e.message, ' ', button(BUTTON.smallWeak, '새로 불러오기', () => void loadTask(f.task.taskId, { force: true }))) : e.message,
-      ),
-    );
-  } finally {
-    f.busy = false;
-    refreshActions();
-  }
-}
 
 async function discardTask() {
-  if (judge) {
-    const j = judge;
-    if (!window.confirm('이 인계를 폐기할까요? 폐기한 작업은 판정하거나 반영할 수 없습니다.')) return;
-    await judgeStep(j, '폐기 실패', () => post(`/api/tasks/${encodeURIComponent(j.task.taskId)}/discard`, { reason: 'user' }));
-    return;
-  }
-  if (!form) return;
-  const f = form;
-  if (!window.confirm('이 인계를 폐기할까요? 폐기한 작업은 승인하거나 반영할 수 없습니다.')) return;
-  f.busy = true;
-  refreshActions();
-  try {
-    await post(`/api/tasks/${encodeURIComponent(f.task.taskId)}/discard`, { reason: 'user' });
-    f.dirty = false;
-    await loadTask(f.task.taskId, { force: true });
-  } catch (err) {
-    replace(actionsStatus, callout('critical', '폐기 실패', /** @type {Error} */ (err).message));
-  } finally {
-    f.busy = false;
-    refreshActions();
-  }
+  if (!judge) return;
+  const j = judge;
+  if (!window.confirm('이 인계를 폐기할까요? 폐기한 작업은 판정하거나 반영할 수 없습니다.')) return;
+  await judgeStep(j, '폐기 실패', () => post(`/api/tasks/${encodeURIComponent(j.task.taskId)}/discard`, { reason: 'user' }));
 }
-
-/** @param {any} task */
-function approvalSummaryCard(task) {
-  const a = task.latestApproval;
-  if (!a) return null;
-  const records = task.draft?.records ?? [];
-  /** @type {Record<string, [Tone, string]>} */
-  const label = { approved: ['positive', '승인'], rejected: ['critical', '거절'], pending: ['warning', '보류'] };
-  return h(
-    'section',
-    { class: 'hl-card' },
-    h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, APPROVAL_TITLE[a.kind] ?? '승인 내용'), h('code', { class: 'hl-muted' }, a.id)),
-    a.basedOn ? h('p', { class: 'hl-muted hl-small' }, `지난 승인 ${a.basedOn}에서 바뀐 부분만 다시 확인했습니다. '유지'는 지난 승인을 그대로 이어받은 항목입니다.`) : null,
-    h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, '최종 요약'), h('ul', { class: 'hl-files' }, a.summary.final.map((/** @type {string} */ s) => h('li', {}, s)))),
-    a.items.length
-      ? h(
-          'ul',
-          { class: 'hl-files' },
-          a.items.map((/** @type {any} */ item) => {
-            const r = records[item.index] ?? {};
-            const [tone, text] = label[item.decision] ?? ['neutral', item.decision];
-            return h(
-              'li',
-              {},
-              badge(tone, text),
-              item.carried ? [' ', badge('neutral', '유지')] : null,
-              ` #${item.index + 1} ${OP[r.op] ?? ''} ${r.id ?? r.target ?? ''} ${item.edited?.title ?? r.title ?? ''}`,
-              item.edited ? h('span', { class: 'hl-muted' }, ' (사람이 고침)') : null,
-              item.reason ? h('span', { class: 'hl-muted' }, ` · 이유: ${item.reason}`) : null,
-            );
-          }),
-        )
-      : null,
-  );
-}
-
-/** @type {Record<string, string>} */
-const APPROVAL_TITLE = { full: '승인 내용', quick: '간이 승인 내용', incremental: '증분 승인 내용', judgment: '판정 내용' };
 
 /** @param {any} task */
 function prLink(task) {
@@ -1380,7 +549,7 @@ function prLink(task) {
   return h('section', { class: 'hl-card' }, h('p', {}, 'PR: ', h('a', { href: event.url, rel: 'noreferrer noopener', target: '_blank' }, event.url)));
 }
 
-// ------------------------------------------------------------------ prediction and judgment (schema 2)
+// ------------------------------------------------------------------ prediction and judgment
 
 /**
  * A radio group styled as a SEED segmented control, with any options. Starts empty.
@@ -1998,10 +1167,10 @@ function judgmentSummaryCard(task) {
   );
 }
 
-// Task screen layout: title, tabs (one panel per tab), and the approval bar fixed at the
-// bottom of every tab. The selected tab is kept in the URL hash.
+// Task screen layout: title and tabs (one panel per tab). The selected tab is kept in the
+// URL hash.
 
-/** @typedef {'overview' | 'summary' | 'decision' | 'axiom' | 'judge' | 'approval'} TabId */
+/** @typedef {'overview' | 'judge' | 'approval'} TabId */
 
 const titleSlot = h('div');
 const tabList = h('div', { class: TABS.list, role: 'tablist', 'aria-label': '인계 검토 화면' });
@@ -2009,9 +1178,6 @@ const tabIndicator = h('div', { class: TABS.indicator, 'aria-hidden': 'true' });
 /** @type {Record<TabId, HTMLElement>} */
 const panels = {
   overview: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-overview', 'aria-labelledby': 'tab-overview' }),
-  summary: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-summary', 'aria-labelledby': 'tab-summary' }),
-  decision: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-decision', 'aria-labelledby': 'tab-decision' }),
-  axiom: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-axiom', 'aria-labelledby': 'tab-axiom' }),
   judge: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-judge', 'aria-labelledby': 'tab-judge' }),
   approval: h('div', { class: TABS.content, role: 'tabpanel', id: 'panel-approval', 'aria-labelledby': 'tab-approval' }),
 };
@@ -2029,22 +1195,16 @@ function tabLabel(id) {
     const n = attentionCount(latest);
     return [h('span', {}, '개요'), n ? badge('warning', `확인 ${n}`) : null];
   }
-  if (id === 'summary') return 'PR 요약';
-  if (id === 'approval') return APPROVAL_TITLE[latest?.latestApproval?.kind] ?? '승인 내용';
-  if (id === 'judge') {
-    const j = judge?.task.judge;
-    if (!j) return '질문';
-    if (!j.revealed) {
-      const first = j.questions.filter((/** @type {any} */ q) => q.predictFirst);
-      return [h('span', {}, `예측 ${first.filter((/** @type {any} */ q) => judge?.predictions.has(q.id)).length}/${first.length}`)];
-    }
-    const asked = j.questions.filter((/** @type {any} */ q) => !q.carried);
-    const done = asked.filter((/** @type {any} */ q) => judge?.verdicts.has(q.id)).length;
-    return [h('span', {}, `판정 ${done}/${asked.length}`), done === asked.length ? badge('positive', '완료') : null];
+  if (id === 'approval') return '판정 내용';
+  const j = judge?.task.judge;
+  if (!j) return '질문';
+  if (!j.revealed) {
+    const first = j.questions.filter((/** @type {any} */ q) => q.predictFirst);
+    return [h('span', {}, `예측 ${first.filter((/** @type {any} */ q) => judge?.predictions.has(q.id)).length}/${first.length}`)];
   }
-  const indexes = form ? openIndexes(form, form.kinds[id]) : [];
-  const decided = indexes.filter((i) => form?.decisions.has(i)).length;
-  return [h('span', {}, `${kindName(id)} ${decided}/${indexes.length}`), decided === indexes.length ? badge('positive', '완료') : null];
+  const asked = j.questions.filter((/** @type {any} */ q) => !q.carried);
+  const done = asked.filter((/** @type {any} */ q) => judge?.verdicts.has(q.id)).length;
+  return [h('span', {}, `판정 ${done}/${asked.length}`), done === asked.length ? badge('positive', '완료') : null];
 }
 
 function positionIndicator() {
@@ -2103,60 +1263,29 @@ function refreshTabLabels() {
 /** @param {any} task */
 function drawStatic(task) {
   replace(titleSlot, titleBlock(task));
-  replace(panels.overview, recheckCard(task), boundaryCard(task), noticesBlock(task));
+  replace(panels.overview, boundaryCard(task), noticesBlock(task));
   refreshTabLabels();
 }
 
 /** @param {any} task */
 function drawForm(task) {
-  if (task.judge) {
-    form = null;
-    actionsBar.remove();
-    for (const id of /** @type {TabId[]} */ (['summary', 'decision', 'axiom'])) replace(panels[id]);
-    if (task.state === 'awaiting_approval' && task.input) {
-      const f = newJudgeForm(task);
-      judge = f;
-      replace(panels.judge, task.judge.revealed ? judgePanel(f) : predictPanel(f));
-      replace(panels.approval);
-      drawTabs(['overview', 'judge']);
-      if (!activeTabChosen) selectTab('judge');
-      refreshJudge();
-      return;
-    }
-    judge = null;
-    replace(panels.judge);
-    const card = judgmentSummaryCard(task);
-    const pr = prLink(task);
-    replace(panels.approval, pr, card);
-    drawTabs(card || pr ? ['overview', 'approval'] : ['overview']);
+  if (task.judge && task.state === 'awaiting_approval' && task.input) {
+    const f = newJudgeForm(task);
+    judge = f;
+    replace(panels.judge, task.judge.revealed ? judgePanel(f) : predictPanel(f));
+    replace(panels.approval);
+    drawTabs(['overview', 'judge']);
+    if (!activeTabChosen) selectTab('judge');
+    refreshJudge();
     return;
   }
+  // A judged task, or a draft from before the pivot, which is no longer judged here.
   judge = null;
   replace(panels.judge);
-  if (task.state === 'awaiting_approval' && task.draft && task.input) {
-    const f = newForm(task);
-    form = f;
-    replace(panels.summary, summaryCard(f));
-    replace(panels.decision, f.kinds.decision.length ? recordsPanel(f, 'decision') : null);
-    replace(panels.axiom, f.kinds.axiom.length ? recordsPanel(f, 'axiom') : null);
-    replace(panels.approval);
-    /** @type {TabId[]} */
-    const ids = ['overview', 'summary'];
-    if (f.kinds.decision.length) ids.push('decision');
-    if (f.kinds.axiom.length) ids.push('axiom');
-    drawTabs(ids);
-    if (!main.contains(actionsBar)) main.append(actionsBar);
-    replace(actionsStatus);
-    refreshActions();
-  } else {
-    form = null;
-    for (const id of /** @type {TabId[]} */ (['summary', 'decision', 'axiom'])) replace(panels[id]);
-    const approval = approvalSummaryCard(task);
-    const pr = prLink(task);
-    replace(panels.approval, pr, approval);
-    actionsBar.remove();
-    drawTabs(approval || pr ? ['overview', 'approval'] : ['overview']);
-  }
+  const card = judgmentSummaryCard(task);
+  const pr = prLink(task);
+  replace(panels.approval, pr, card);
+  drawTabs(card || pr ? ['overview', 'approval'] : ['overview']);
 }
 
 /**
@@ -2169,7 +1298,7 @@ async function loadTask(taskId, { force = false } = {}) {
   const task = await api(`/api/tasks/${encodeURIComponent(taskId)}`);
   latest = task;
   if (!main.contains(tabsRoot)) replace(main, h('p', {}, h('a', { href: '/', class: 'hl-back' }, '← 전체 목록')), titleSlot, tabsRoot);
-  const active = form ?? judge;
+  const active = judge;
   const shown = active?.task;
   const changed = !shown || shown.draftSha256 !== task.draftSha256 || shown.state !== task.state || shown.judge?.revealed !== task.judge?.revealed;
   if (force || !active || !active.dirty) {
@@ -2228,7 +1357,7 @@ events.addEventListener('open', () => {
   if (!disconnected) return;
   disconnected = false;
   // A restarted server has a new session token: reload unless the human is editing.
-  if (!(form ?? judge)?.dirty) {
+  if (!judge?.dirty) {
     window.location.reload();
     return;
   }

@@ -13,11 +13,9 @@ import { taskIdFor } from '../../skills/using-heirloom/lib/store.mjs';
 import { appendEvent } from '../../skills/using-heirloom/lib/events.mjs';
 import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
 import { computeSourceState } from '../../skills/using-heirloom/lib/state.mjs';
-import { writeRecord, renderBody } from '../../skills/using-heirloom/lib/records.mjs';
-import { submittedTask } from '../helpers/handoff-fixture.mjs';
-import { approveTask } from '../../skills/using-heirloom/dashboard/approve.mjs';
-import { draftDigest } from '../../skills/using-heirloom/lib/canonical.mjs';
-import { readJson } from '../../skills/using-heirloom/lib/fsx.mjs';
+import { writeRecord } from '../../skills/using-heirloom/lib/records.mjs';
+import { approvedTask } from '../helpers/handoff-fixture.mjs';
+import { CART_HEAD } from '../helpers/judge-fixture.mjs';
 
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -129,22 +127,14 @@ test('stop: spec and plan documents alone are not work changes (brainstorming/pl
   assert.equal((await evaluateStop({ cwd: repo.dir, home, stopHookActive: false })).remind, true);
 });
 
-test('stop: an approved task whose code changed is reminded of the incremental recheck, once per state', async () => {
-  const t = await submittedTask();
-  const paths = taskPaths(t.home, t.taskId);
-  const draft = /** @type {any} */ (await readJson(paths.draft));
-  await approveTask({
-    home: t.home,
-    taskId: t.taskId,
-    keystore: 'file',
-    request: { kind: 'full', draftSha256: draftDigest(draft), sourceHash: t.sourceHash, summary: ['s'], items: [{ index: 0, decision: 'approved' }] },
-  });
+test('stop: a judged task whose code changed is reminded of the recheck, once per state', async () => {
+  const t = await approvedTask();
   assert.equal((await evaluateStop({ cwd: t.repo.dir, home: t.home, stopHookActive: false })).reason, 'handoff_requested', 'the approved state itself');
 
   await t.repo.write('docs/notes.md', 'only a document\n');
   assert.deepEqual(await evaluateStop({ cwd: t.repo.dir, home: t.home, stopHookActive: false }), { remind: false, reason: 'recheck_not_needed' }, 'a document alone does not ask for a recheck');
 
-  await t.repo.write('src/a.mjs', 'export const a = 3;\n');
+  await t.repo.write('src/cart.mjs', `${CART_HEAD}// changed\n`);
   const first = await evaluateStop({ cwd: t.repo.dir, home: t.home, stopHookActive: false });
   assert.equal(first.reason, 'recheck');
   assert.equal(first.remind, true);
@@ -170,10 +160,7 @@ test('stop: respects project specGlobs', async () => {
  * @param {string[]} codePaths
  */
 async function record(root, id, kind, title, codePaths, active = true) {
-  const body =
-    kind === 'axiom'
-      ? renderBody('axiom', { property: 'P', scope: 'S', exceptions: '', checks: '' })
-      : renderBody('decision', { problem: 'P', choice: 'C', alternatives: '', scope: '' });
+  const body = kind === 'axiom' ? '\n## 유지할 성질\n\nP\n' : '\n## 문제\n\nP\n\n## 선택과 이유\n\nC\n';
   await writeRecord(root, {
     meta: {
       schemaVersion: 1,

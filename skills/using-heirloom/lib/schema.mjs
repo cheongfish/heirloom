@@ -1,4 +1,4 @@
-// Hand-written validators for Heirloom's data formats (records, input, draft, approval,
+// Hand-written validators for Heirloom's data formats (records, input, draft, judgment,
 // events, index, config).
 // A validator pushes "<json path>: <message>" strings into `errors`.
 
@@ -186,6 +186,9 @@ const recordSource = object({ ref: nonEmpty, sha256 }, { optional: { lines: line
 
 // ---------------------------------------------------------------- records (5.1)
 
+// Records from before the pivot (decisions and axioms): no longer written, still read as past
+// records.
+
 const recordApproval = object({ id: approvalId, signer: nonEmpty, approvedAt: timestamp });
 
 export const recordMetaSchema = object(
@@ -278,23 +281,6 @@ export const decisionSchema = object({
 
 // ---------------------------------------------------------------- input (5.2)
 
-/** `input.recheck` of an incremental handoff. */
-function recheckSchema() {
-  const digest = nullable(str({ pattern: /^([0-9a-f]{64}|deleted)$/ }));
-  const affected = arrayOf(object({ index: int({ min: 0 }), reasons: arrayOf(nonEmpty, { min: 1 }) }));
-  return object({
-    basedOn: approvalId,
-    mergeBaseChanged: bool,
-    changes: arrayOf(object({ path: nonEmpty, before: digest, after: digest, reason: oneOf('edited', 'base_updated', 'added', 'removed') })),
-    materials: arrayOf(object({ ref: nonEmpty, before: nullable(sha256), after: nullable(sha256) })),
-    affected: object({ summary: affected, records: affected, unlinked: arrayOf(nonEmpty) }),
-    baseline: object({
-      summary: arrayOf(object({ text: nonEmpty, codePaths: arrayOf(nonEmpty) })),
-      records: arrayOf(object({}, { extra: true })),
-    }),
-  });
-}
-
 const fileStatus = oneOf('A', 'M', 'D');
 
 /** `input.recheck` after a judgment: the probes run again and unchanged outputs keep their verdict. */
@@ -330,78 +316,10 @@ export const inputSchema = object({
   createdAt: timestamp,
 }, {
   optional: {
-    // Recheck after an item approval (schema 1 drafts) or after a judgment (`kind: 'probes'`).
-    recheck: (v, at, errors) =>
-      (typeof v === 'object' && v !== null && /** @type {any} */ (v).kind === 'probes' ? probeRecheckSchema : recheckSchema())(v, at, errors),
+    // Recheck after a judgment.
+    recheck: probeRecheckSchema,
   },
 });
-
-// ---------------------------------------------------------------- draft (5.3)
-
-const decisionBody = object({ problem: nonEmpty, choice: nonEmpty, alternatives: text, scope: text });
-const axiomBody = object({ property: nonEmpty, scope: text, exceptions: text, checks: text });
-
-const addOp = object(
-  {
-    op: oneOf('add'),
-    kind: oneOf('decision', 'axiom'),
-    title: nonEmpty,
-    body: object({}, { extra: true }),
-    codePaths: arrayOf(codePath),
-    topics: arrayOf(nonEmpty),
-    sources: arrayOf(draftSource, { min: 1 }),
-  },
-  {
-    optional: {
-      id: recordId,
-      relations: arrayOf(object({ type: oneOf('exception', 'coexist'), id: recordId }, { optional: { condition: text } })),
-      evidence: arrayOf(recordId),
-      baseIndex: int({ min: 0 }),
-    },
-    check: (o) => {
-      /** @type {string[]} */
-      const errors = [];
-      (o.kind === 'axiom' ? axiomBody : decisionBody)(o.body, '$.body', errors);
-      return errors;
-    },
-  },
-);
-
-const baseIndex = int({ min: 0 });
-
-const updateOp = object(
-  { op: oneOf('update'), target: recordId, reason: nonEmpty, sources: arrayOf(draftSource) },
-  { optional: { title: nonEmpty, body: object({}, { extra: true }), codePaths: arrayOf(codePath), topics: arrayOf(nonEmpty), baseIndex } },
-);
-
-export const draftSchema = object(
-  {
-    schemaVersion: v1,
-    taskId,
-    inputSourceHash: stateHash,
-    summary: arrayOf(object({ text: nonEmpty, codePaths: arrayOf(codePath) }, { optional: { baseIndex } })),
-    records: arrayOf(
-      tagged('op', {
-        add: addOp,
-        update: updateOp,
-        supersede: object({ op: oneOf('supersede'), target: recordId, reason: nonEmpty, with: int({ min: 0 }) }, { optional: { baseIndex } }),
-        deprecate: object({ op: oneOf('deprecate'), target: recordId, reason: nonEmpty, sources: arrayOf(draftSource) }, { optional: { baseIndex } }),
-        relate: object(
-          { op: oneOf('relate'), target: recordId, relation: object({ type: oneOf('exception', 'coexist'), id: recordId, condition: nonEmpty }) },
-          { optional: { baseIndex } },
-        ),
-      }),
-    ),
-    missing: arrayOf(nonEmpty),
-    conflicts: arrayOf(object({ refs: arrayOf(nonEmpty, { min: 2 }), note: nonEmpty })),
-    notes: text,
-  },
-  {
-    optional: {
-      recheck: object({ extra: arrayOf(object({ kind: oneOf('summary', 'record'), baseIndex, reason: nonEmpty })) }),
-    },
-  },
-);
 
 // ---------------------------------------------------------------- draft v2 (pivot 5.3)
 
@@ -520,26 +438,6 @@ export const judgmentSchema = object({
   approver: object({ fingerprint: nonEmpty, gitUser: nullable(nonEmpty) }),
   signature: nonEmpty,
 }, { optional: { basedOn: approvalId, specAfterMerge, discussions: arrayOf(object({ id: str({ pattern: SHORT_ID }), confirmed: bool }, { optional: { recordId: decisionId } })) } });
-
-// ---------------------------------------------------------------- approval (5.5)
-
-export const approvalSchema = object({
-  schemaVersion: v1,
-  id: approvalId,
-  taskId,
-  kind: oneOf('full', 'quick', 'incremental'),
-  target: object({ sourceHash: stateHash, materials: recordOf(nullable(sha256)), draftSha256: sha256 }),
-  summary: object({ initial: arrayOf(nonEmpty), final: arrayOf(nonEmpty, { min: 1 }) }, { optional: { origins: arrayOf(nullable(int({ min: 0 }))) } }),
-  items: arrayOf(
-    object(
-      { index: int({ min: 0 }), decision: oneOf('approved', 'rejected', 'pending') },
-      { optional: { edited: object({}, { extra: true }), carried: bool, reason: nonEmpty } },
-    ),
-  ),
-  approver: object({ fingerprint: nonEmpty, gitUser: nullable(nonEmpty) }),
-  approvedAt: timestamp,
-  signature: str({ pattern: /^[A-Za-z0-9+/]+={0,2}$/ }),
-}, { optional: { basedOn: approvalId } });
 
 // ---------------------------------------------------------------- events (5.6)
 

@@ -106,7 +106,7 @@ async function projectSection(cwd, home) {
         if (await prImpossible(home, taskId)) pending.push(`- ${taskId}: 기록 파일을 썼고 PR·MR은 만들 수 없음(지원하지 않는 원격) → 사용자가 직접 머지한다. 대상 브랜치에 머지되면 이 목록에서 빠진다.`);
         else pending.push(`- ${taskId}: 기록 파일을 썼지만 PR이 아직 없음 → apply-approval 스킬로 이어서 처리한다.`);
       }
-      else if (state === 'stale') pending.push(`- ${taskId}: 승인 이후 소스나 자료가 바뀜(재확인 필요) → prepare-handoff를 다시 실행하면 바뀐 부분과 연결된 항목만 다시 승인받는다. 기존 승인은 보존된다.`);
+      else if (state === 'stale') pending.push(`- ${taskId}: 판정 이후 코드가 바뀜(재확인 필요) → prepare-handoff를 다시 실행하면 탐침 출력이 달라진 질문만 다시 판정받는다. 기존 판정은 보존된다.`);
       else if (state === 'awaiting_approval') pending.push(`- ${taskId}: 대시보드에서 사람의 승인을 기다리는 중.`);
       else if (state === 'pr_created') {
         if (await appliedTaskMerged({ home, taskId })) continue;

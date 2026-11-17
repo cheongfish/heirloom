@@ -17,11 +17,8 @@ import { findUnhandedChanges, isStaleTask } from '../lib/overview.mjs';
 import { ensureDir, homePaths, taskPaths } from '../lib/paths.mjs';
 import { refreshPrExpiry } from '../lib/pr-expiry.mjs';
 import { appliedTaskMerged } from '../lib/record-status.mjs';
-import { carriedItems } from '../lib/recheck.mjs';
-import { readRecords } from '../lib/records.mjs';
 import { PATTERNS } from '../lib/schema.mjs';
 import { VERSION } from '../lib/version.mjs';
-import { approveTask } from './approve.mjs';
 import { isJudgedDraft, judgeTask, judgeView, recordPredictions, redactedDraft } from './judge.mjs';
 
 const MAX_BODY = 1024 * 1024;
@@ -223,45 +220,6 @@ export async function createDashboardServer(options) {
     return { tasks, unhanded: changes, unchecked, staleDays };
   }
 
-  /**
-   * Existing records the draft points at (targets, relations, axiom evidence), for display.
-   * @param {string} root
-   * @param {any[]} ops
-   */
-  async function targetsOf(root, ops) {
-    const wanted = new Set([
-      ...ops.filter((op) => op.op !== 'add').map((op) => op.target),
-      ...ops.filter((op) => op.op === 'relate').map((op) => op.relation?.id),
-      ...ops.flatMap((op) => (Array.isArray(op.evidence) ? op.evidence : [])),
-    ]);
-    /** @type {Record<string, { kind: string, title: string, active: boolean }>} */
-    const out = {};
-    if (!wanted.size) return out;
-    try {
-      for (const r of (await readRecords(root)).records) {
-        if (wanted.has(r.meta.id)) out[r.meta.id] = { kind: r.meta.kind, title: r.meta.title, active: r.meta.active };
-      }
-    } catch {
-      // repository gone: show ids only
-    }
-    return out;
-  }
-
-  /**
-   * Draft indexes that keep their approval in an incremental handoff, for the screen. Null
-   * when the task is not a recheck or the draft is not in shape yet (not submitted).
-   * @param {any} input
-   * @param {any} draft
-   */
-  function carriedOf(input, draft) {
-    if (!input?.recheck || !draft) return null;
-    try {
-      return carriedItems({ recheck: input.recheck, draft });
-    } catch {
-      return null;
-    }
-  }
-
   /** @param {string} taskId */
   async function taskDetail(taskId) {
     const paths = taskPaths(home, taskId);
@@ -287,15 +245,12 @@ export async function createDashboardServer(options) {
       state: deriveState(events),
       input: input ?? null,
       draft: draft === undefined ? null : hidden ? redactedDraft(draft) : draft,
-      draftInitial: judge ? null : (await readJson(paths.draftInitial)) ?? null,
       judge,
       check: (await readJson(paths.check)) ?? null,
       draftSha256: draft === undefined ? null : draftDigest(draft),
       events,
       approvals,
       latestApproval: latest ?? null,
-      targets: input && !judge ? await targetsOf(input.repo.root, /** @type {any} */ (draft)?.records ?? []) : {},
-      carried: carriedOf(input, draft),
     };
   }
 
@@ -350,7 +305,7 @@ export async function createDashboardServer(options) {
       if (!String(req.headers['content-type'] ?? '').startsWith('application/json')) {
         return fail(res, 415, 'E_INPUT', 'application/json 본문만 받음');
       }
-      const action = /^\/api\/tasks\/([^/]+)\/(approve|discard|predict|judge)$/.exec(pathname);
+      const action = /^\/api\/tasks\/([^/]+)\/(discard|predict|judge)$/.exec(pathname);
       if (!action) return fail(res, 404, 'E_NOT_FOUND', '경로가 없음');
       const taskId = decodeURIComponent(action[1]);
       if (!(await exists(taskPaths(home, taskId).dir))) return fail(res, 404, 'E_NOT_FOUND', '작업이 없음');
@@ -363,11 +318,6 @@ export async function createDashboardServer(options) {
         log(`judge ${taskId} ua=${JSON.stringify(req.headers['user-agent'] ?? '')} sec-fetch-site=${req.headers['sec-fetch-site'] ?? '-'} origin=${req.headers.origin ?? '-'}`);
         const judgment = await judgeTask({ home, taskId, request: body, keystore });
         return json(res, 200, { ok: true, judgment });
-      }
-      if (action[2] === 'approve') {
-        log(`approve ${taskId} ua=${JSON.stringify(req.headers['user-agent'] ?? '')} sec-fetch-site=${req.headers['sec-fetch-site'] ?? '-'} origin=${req.headers.origin ?? '-'}`);
-        const approval = await approveTask({ home, taskId, request: body, keystore });
-        return json(res, 200, { ok: true, approval });
       }
       const state = await appendEvent(taskPaths(home, taskId).events, {
         type: 'discarded',

@@ -13,7 +13,7 @@ body {
 }
 
 a { color: inherit; }
-code, .hl-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
 h1, h2, h3, p { margin: 0; }
 
 .hl-topbar {
@@ -59,9 +59,6 @@ h1, h2, h3, p { margin: 0; }
   padding: var(--seed-dimension-x5);
   display: flex; flex-direction: column; gap: var(--seed-dimension-x4);
 }
-.hl-card[data-decision="approved"] { border-color: var(--seed-color-stroke-positive-solid); }
-.hl-card[data-decision="rejected"] { border-color: var(--seed-color-stroke-critical-solid); }
-.hl-card[data-decision="pending"] { border-color: var(--seed-color-stroke-warning-solid); }
 .hl-list-card { padding: var(--seed-dimension-x2) 0; gap: 0; }
 
 .hl-meta { display: grid; grid-template-columns: max-content 1fr; gap: var(--seed-dimension-x1_5) var(--seed-dimension-x4); }
@@ -73,40 +70,10 @@ h1, h2, h3, p { margin: 0; }
   .hl-meta dd + dt { margin-top: var(--seed-dimension-x2); }
 }
 
-.hl-fields { display: grid; gap: var(--seed-dimension-x3); }
-.hl-field-text { white-space: pre-wrap; overflow-wrap: anywhere; }
-.hl-quote {
-  margin: 0; padding: var(--seed-dimension-x2) var(--seed-dimension-x3);
-  border-left: 3px solid var(--seed-color-stroke-neutral-weak);
-  background: var(--seed-color-bg-neutral-weak);
-  border-radius: var(--seed-radius-r1);
-  white-space: pre-wrap; overflow-wrap: anywhere;
-}
-.hl-paths { display: flex; flex-wrap: wrap; gap: var(--seed-dimension-x1_5); }
-.hl-path {
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  padding: 1px var(--seed-dimension-x1_5);
-  border-radius: var(--seed-radius-r1);
-  background: var(--seed-color-bg-neutral-weak);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: var(--seed-font-size-t3);
-}
-
 textarea.seed-text-input__value { min-height: 4.5em; padding-block: var(--seed-dimension-x2_5); field-sizing: content; }
 /* A title: wraps like text, starts one line high, never takes a line break (app.js). */
 textarea.seed-text-input__value.hl-one-line { min-height: 0; resize: none; }
 .hl-textarea-root { align-items: stretch; }
-/* The PR summary is one box with a bullet per line. */
-.hl-summary-editor textarea.seed-text-input__value { min-height: 8em; line-height: var(--seed-line-height-t5); }
-
-/* Added record, read view: title, filled fields, and an edit button. */
-.hl-record-head { align-items: flex-start; flex-wrap: nowrap; }
-.hl-record-title {
-  margin: 0; min-width: 0; overflow-wrap: anywhere;
-  font-size: var(--seed-font-size-t6); line-height: var(--seed-line-height-t6); font-weight: var(--seed-font-weight-bold);
-}
-.hl-record-head > .hl-row { flex-shrink: 0; }
 
 .hl-blocked { color: var(--seed-color-fg-warning); }
 .hl-blocked:empty { display: none; }
@@ -118,22 +85,6 @@ textarea.seed-text-input__value.hl-one-line { min-height: 0; resize: none; }
 @media (max-width: 480px) { .hl-choice .seed-segmented-control__item { white-space: normal; } }
 .hl-decision .seed-segmented-control__item { border: 0; background: transparent; font-family: inherit; min-width: 0; padding-inline: var(--seed-dimension-x3); }
 .hl-decision:not([data-has-value]) > .seed-segmented-control__indicator { display: none; }
-
-.hl-actions {
-  position: sticky; bottom: 0;
-  background: var(--seed-color-bg-layer-default);
-  border-top: 1px solid var(--seed-color-stroke-neutral-muted);
-  margin: 0 calc(-1 * var(--seed-dimension-x4));
-  padding: var(--seed-dimension-x3) var(--seed-dimension-x4);
-}
-.hl-actions-buttons { margin-left: auto; }
-/* Narrow windows: keep the bar short. Status text is small, the two buttons share one row. */
-@media (max-width: 560px) {
-  .hl-actions { gap: var(--seed-dimension-x2); padding-block: var(--seed-dimension-x2_5); }
-  .hl-actions .hl-stack-tight { font-size: var(--seed-font-size-t3); line-height: var(--seed-line-height-t3); }
-  .hl-actions-buttons { width: 100%; flex-wrap: nowrap; }
-  .hl-actions-buttons > button:last-child { flex: 1; }
-}
 
 /* Small text links and fold rows still get a 24px target. */
 .hl-back { display: inline-block; padding-block: var(--seed-dimension-x0_5); }

@@ -6,8 +6,6 @@ import {
   assertValid,
   recordMetaSchema,
   inputSchema,
-  draftSchema,
-  approvalSchema,
   eventSchema,
   indexSchema,
   projectConfigSchema,
@@ -51,50 +49,9 @@ function input() {
   };
 }
 
-function draft() {
-  return {
-    schemaVersion: 1,
-    taskId: 't-20261112-3h7k2p9m',
-    inputSourceHash: `sha256:${H}`,
-    summary: [{ text: 's', codePaths: ['src/a.mjs'] }],
-    records: [
-      {
-        op: 'add',
-        kind: 'decision',
-        title: 't',
-        body: { problem: 'p', choice: 'c', alternatives: 'a', scope: 's' },
-        codePaths: ['src/a.mjs'],
-        topics: [],
-        sources: [{ ref: 'docs/spec.md', lines: [1, 2], quote: 'q' }],
-      },
-      { op: 'supersede', target: 'd-2b8n4k1q', reason: 'r', with: 0 },
-      { op: 'deprecate', target: 'd-2b8n4k1q', reason: 'r', sources: [] },
-    ],
-    missing: [],
-    conflicts: [],
-    notes: '',
-  };
-}
-
 test('valid documents pass', () => {
   assert.deepEqual(validate(recordMetaSchema, recordMeta()), []);
   assert.deepEqual(validate(inputSchema, input()), []);
-  assert.deepEqual(validate(draftSchema, draft()), []);
-  assert.deepEqual(
-    validate(approvalSchema, {
-      schemaVersion: 1,
-      id: 'ap-000000000000',
-      taskId: 't-20261112-3h7k2p9m',
-      kind: 'quick',
-      target: { sourceHash: `sha256:${H}`, materials: { 'docs/spec.md': H }, draftSha256: H },
-      summary: { initial: ['a'], final: ['b'] },
-      items: [{ index: 0, decision: 'approved', edited: { title: 'x' } }],
-      approver: { fingerprint: 'SHA256:x', gitUser: 'T <t@e>' },
-      approvedAt: '2026-11-12T00:00:00Z',
-      signature: 'c2ln',
-    }),
-    [],
-  );
   assert.deepEqual(validate(eventSchema, { at: '2026-11-12T00:00:00Z', type: 'approved', approvalId: 'ap-000000000000' }), []);
   assert.deepEqual(validate(indexSchema, { schemaVersion: 1, worktrees: {}, tasks: {}, reminders: {}, lastFetch: {} }), []);
   assert.deepEqual(validate(projectConfigSchema, { schemaVersion: 1, baseBranch: 'main' }), []);
@@ -115,21 +72,6 @@ test('record meta: id prefix must match kind, unknown fields rejected', () => {
   assert.match(validate(recordMetaSchema, { ...recordMeta(), kind: 'axiom' }).join('\n'), /\$\.id/);
   assert.match(validate(recordMetaSchema, { ...recordMeta(), extra: 1 }).join('\n'), /\$\.extra: 허용되지 않는 필드/);
   assert.match(validate(recordMetaSchema, { ...recordMeta(), schemaVersion: 2 }).join('\n'), /\$\.schemaVersion/);
-});
-
-test('draft: markdown in summary code paths is rejected', () => {
-  const d = draft();
-  d.summary[0].codePaths = ['README.md'];
-  assert.match(validate(draftSchema, d).join('\n'), /\$\.summary\[0\]\.codePaths\[0\]: .*마크다운/);
-});
-
-test('draft: unknown op and missing fields are reported with paths', () => {
-  const d = /** @type {any} */ (draft());
-  d.records.push({ op: 'explode' });
-  delete d.records[0].title;
-  const errors = validate(draftSchema, d).join('\n');
-  assert.match(errors, /\$\.records\[0\]\.title: 필수 필드/);
-  assert.match(errors, /\$\.records\[3\]/);
 });
 
 test('input: unknown trigger and bad hash are rejected', () => {

@@ -77,7 +77,6 @@ test('before the predictions are saved, the screen gets questions and commands b
   for (const value of [OBSERVED.base, OBSERVED.head, 'behaviorDiffs', 'stdout', '다른 통화', 'changed']) {
     assert.ok(!visible.includes(value), `no ${value} before the reveal`);
   }
-  assert.equal(before.body.draftInitial, null);
 
   const task = before.body;
   assert.equal((await post(taskId, 'judge', judgeBody(task))).status, 409, 'no judgment before the predictions');
@@ -116,7 +115,7 @@ test('judgment: verdicts are checked, then signed; all accepted approves the tas
   assert.match(await refused({ items: items.slice(0, 3) }), /q4: 판정이 없음/);
   assert.match(await refused({ behaviorDiffs: ['12개를 사면 결제액이 108에서 130으로 오른다'] }), /관측값.*고칠 수 없음/);
   assert.match(await refused({ behaviorDiffs: [] }), /개수가 같은/);
-  assert.equal((await post(taskId, 'approve', { kind: 'full', draftSha256: task.draftSha256, sourceHash: task.input.source.hash, summary: ['x'], items: [] })).status, 409, 'item approval does not take a schema 2 draft');
+  assert.equal((await post(taskId, 'approve', { kind: 'full', draftSha256: task.draftSha256, sourceHash: task.input.source.hash, summary: ['x'], items: [] })).status, 404, 'item approval is no longer a route');
 
   const ok = await post(taskId, 'judge', judgeBody(task));
   assert.equal(ok.status, 200, ok.text);

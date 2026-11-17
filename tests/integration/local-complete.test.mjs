@@ -1,4 +1,4 @@
-// A task whose PR cannot be opened (the remote is neither GitHub nor GitLab) ends when its approval reaches
+// A task whose PR cannot be opened (the remote is neither GitHub nor GitLab) ends when its branch reaches
 // the target branch (decision 2026-11-12, MVP-PLAN 2절 'PR 없이 끝나는 작업').
 
 import { test } from 'node:test';
@@ -6,49 +6,27 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { submittedTask } from '../helpers/handoff-fixture.mjs';
-import { approveTask } from '../../skills/using-heirloom/dashboard/approve.mjs';
+import { approvedTask } from '../helpers/handoff-fixture.mjs';
 import { applyApproval, listPendingApprovals } from '../../skills/using-heirloom/lib/apply.mjs';
-import { draftDigest } from '../../skills/using-heirloom/lib/canonical.mjs';
-import { readJson } from '../../skills/using-heirloom/lib/fsx.mjs';
 import { isStaleTask } from '../../skills/using-heirloom/lib/overview.mjs';
-import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
 import { appliedTaskMerged } from '../../skills/using-heirloom/lib/record-status.mjs';
 import { buildSessionContext } from '../../skills/using-heirloom/lib/session-context.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-/** A local-remote task, approved and applied (records written, PR unavailable). */
-async function appliedLocalTask({ records = true } = {}) {
-  const t = await submittedTask({ records });
-  const draft = /** @type {any} */ (await readJson(taskPaths(t.home, t.taskId).draft));
-  await approveTask({
-    home: t.home,
-    taskId: t.taskId,
-    keystore: 'file',
-    request: {
-      kind: records ? 'full' : 'quick',
-      draftSha256: draftDigest(draft),
-      sourceHash: t.sourceHash,
-      summary: ['a를 2로 바꿨다', 'spec을 추가했다'],
-      items: records ? [{ index: 0, decision: 'approved' }] : [],
-    },
-  });
+/** A local-remote task, judged and applied (spec removal staged and committed, PR unavailable). */
+async function appliedLocalTask() {
+  const t = await approvedTask();
   const applied = /** @type {any} */ (await applyApproval({ home: t.home, taskId: t.taskId }));
   assert.equal(applied.pr.reason, 'unsupported_remote');
-  t.repo.commitAll('feat: a를 2로 바꿈');
+  t.repo.commitAll('chore: spec 정리');
   return t;
 }
 
 /** Merge the task branch into upstream main and fetch it, as merge-local.sh does. */
-function mergeUpstream(/** @type {Awaited<ReturnType<typeof appliedLocalTask>>} */ t, { squash = false } = {}) {
+function mergeUpstream(/** @type {Awaited<ReturnType<typeof appliedLocalTask>>} */ t) {
   t.repo.git('push', '-q', 'origin', 'feat');
-  if (squash) {
-    t.upstream.git('merge', '-q', '--squash', 'feat');
-    t.upstream.git('commit', '-q', '-m', 'squash feat');
-  } else {
-    t.upstream.git('merge', '-q', '--no-ff', '-m', 'merge feat', 'feat');
-  }
+  t.upstream.git('merge', '-q', '--no-ff', '-m', 'merge feat', 'feat');
   t.repo.git('fetch', '-q', 'origin');
 }
 
@@ -72,17 +50,4 @@ test('local remote, after merge: the task is finished (session start, pending li
   const old = { state: 'applied', updatedAt: '2026-01-01T00:00:00.000Z' };
   assert.equal(isStaleTask(old, Date.parse('2026-11-12T00:00:00Z'), 7), true);
   assert.equal(isStaleTask({ ...old, merged: true }, Date.parse('2026-11-12T00:00:00Z'), 7), false);
-});
-
-test('squash merge counts: the approved records are on the target branch', async () => {
-  const t = await appliedLocalTask();
-  mergeUpstream(t, { squash: true });
-  assert.equal(await appliedTaskMerged({ home: t.home, taskId: t.taskId }), true);
-});
-
-test('quick approval (no records): finished once the branch is merged', async () => {
-  const t = await appliedLocalTask({ records: false });
-  assert.equal(await appliedTaskMerged({ home: t.home, taskId: t.taskId }), false);
-  mergeUpstream(t);
-  assert.equal(await appliedTaskMerged({ home: t.home, taskId: t.taskId }), true);
 });

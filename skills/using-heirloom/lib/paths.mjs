@@ -44,7 +44,6 @@ export function taskPaths(home, taskId) {
     dir,
     input: path.join(dir, 'input.json'),
     draft: path.join(dir, 'draft.json'),
-    draftInitial: path.join(dir, 'draft.initial.json'),
     check: path.join(dir, 'check.json'),
     handoff: path.join(dir, 'handoff.md'),
     approvals: path.join(dir, 'approvals'),
