@@ -11,5 +11,11 @@
   },
   "testCadence": {
     "mode": "off"
+  },
+  "probe": {
+    "setup": [],
+    "maxProbes": 10,
+    "setupTimeoutSeconds": 600,
+    "testTimeoutSeconds": 600
   }
 }
