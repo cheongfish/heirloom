@@ -218,6 +218,64 @@ export const recordMetaSchema = object(
   },
 );
 
+// ---------------------------------------------------------------- decision records 2 (pivot 7)
+
+/** A decision record id (`d-…`). Axioms belong to the records before the pivot. */
+const decisionId = str({ pattern: /^d-[0-9a-hjkmnp-tv-z]{8}$/ });
+
+/**
+ * Where the code holds a decision now: a symbol in a file, or a test that locks it (by the
+ * name the test results report). The file is a repository file, never a glob or Markdown.
+ * @type {Validator}
+ */
+export const decisionAnchor = object(
+  { file: codePath },
+  {
+    optional: { symbol: nonEmpty, test: nonEmpty },
+    check: (o) => {
+      const problems = [];
+      if (('symbol' in o) === ('test' in o)) problems.push('symbol과 test 중 정확히 하나를 쓴다');
+      if (typeof o.file === 'string' && /[*?[{]/.test(o.file)) problems.push('file은 glob이 아닌 파일 하나여야 함');
+      return problems;
+    },
+  },
+);
+
+/**
+ * Anchors of a decision: at least one, and at least one test that locks it (pivot 7.2).
+ * @type {Validator}
+ */
+const anchorList = (v, at, errors) => {
+  arrayOf(decisionAnchor, { min: 1 })(v, at, errors);
+  if (Array.isArray(v) && v.length && !v.some((a) => typeof a === 'object' && a !== null && 'test' in a)) {
+    errors.push(`${at}: 결정을 잠그는 테스트 앵커({ file, test })가 하나 이상 필요함. 없으면 그 테스트를 먼저 쓴다`);
+  }
+};
+
+/** What the agent proposes to keep when the person answers a fork question (pivot 7.1). */
+export const decisionProposal = object({ scope: arrayOf(codePath, { min: 1 }), anchors: anchorList }, { optional: { replaces: decisionId } });
+
+/** The narrow decision record since the pivot (pivot 7.2). */
+export const decisionSchema = object({
+  schemaVersion: oneOf(2),
+  id: decisionId,
+  kind: oneOf('decision'),
+  choice: nonEmpty,
+  question: nonEmpty,
+  scope: arrayOf(codePath, { min: 1 }),
+  anchors: anchorList,
+  source: arrayOf(
+    tagged('kind', {
+      'fork-answer': object({ kind: oneOf('fork-answer'), approval: approvalId, question: str({ pattern: /^[a-z][a-z0-9-]{0,31}$/ }) }),
+      discussion: object({ kind: oneOf('discussion'), approval: approvalId, url: nonEmpty, quote: nonEmpty, author: nullable(nonEmpty) }),
+    }),
+    { min: 1 },
+  ),
+  replaces: nullable(decisionId),
+  taskId,
+  approval: recordApproval,
+});
+
 // ---------------------------------------------------------------- input (5.2)
 
 /** `input.recheck` of an incremental handoff. */
@@ -380,7 +438,9 @@ export const draftV2Schema = object(
         intent: object({ id: shortId, kind: oneOf('intent'), probe: shortId, sources: arrayOf(draftSource, { min: 1 }), prompt: nonEmpty }),
         fork: object(
           { id: shortId, kind: oneOf('fork'), probes: arrayOf(shortId, { min: 1 }), codePaths: arrayOf(codePath, { min: 1 }), prompt: nonEmpty, whyOpen: nonEmpty },
-          { optional: { sources: questionSources } },
+          // `decision`: what to keep if the person keeps the answer in the repository;
+          // `retires`: a decision record this question asks whether it still holds (pivot 7.4).
+          { optional: { sources: questionSources, decision: decisionProposal, retires: decisionId } },
         ),
       }),
     ),
@@ -439,7 +499,7 @@ export const judgmentSchema = object({
         probeHashes: recordOf(probeHash),
         verdict: oneOf(...VERDICTS),
       },
-      { optional: { reason: nonEmpty, carried: bool, spec: specChoice } },
+      { optional: { reason: nonEmpty, carried: bool, spec: specChoice, keep: object({ action: oneOf('record', 'retire'), id: decisionId }) } },
     ),
   ),
   outcome: oneOf('accepted', 'returned'),

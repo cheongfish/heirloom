@@ -1460,6 +1460,7 @@ const AFTER_MERGE_HELP = {
  * @property {Map<string, string>} reasons
  * @property {Map<string, string>} answers fork answers
  * @property {string[]} diffs behavior descriptions as the person edits them
+ * @property {Map<string, string>} keeps where a fork answer is kept: pr, repo or retire
  * @property {Map<string, string>} specChoices what the spec becomes, per sent-back question citing it
  * @property {string} afterMerge the spec's lifetime when every question is accepted
  * @property {string} owner who owns a kept spec
@@ -1482,6 +1483,7 @@ function newJudgeForm(task) {
     reasons: new Map(),
     answers: new Map(),
     diffs: (task.judge.behaviorDiffs ?? []).map((/** @type {any} */ d) => d.text),
+    keeps: new Map(),
     specChoices: new Map(),
     afterMerge: task.judge.specAfterMergeDefault ?? 'delete',
     owner: '',
@@ -1664,6 +1666,7 @@ function judgeCard(f, q) {
         ? fieldBlock('이유 (필수)', textInput({ value: f.reasons.get(q.id) ?? '', multiline: true, label: `${q.id} 이유`, oninput: (x) => { f.reasons.set(q.id, x); f.dirty = true; refreshJudge(); } }), '에이전트가 이 이유를 받아 코드를 고칩니다.')
         : null,
       v && RETURNING.has(v) && q.citesSpec ? specChoiceBlock(f, q) : null,
+      q.kind === 'fork' && v === 'answered' && (q.decision || q.retires) ? keepBlock(f, q) : null,
     );
   };
   drawExtra();
@@ -1685,6 +1688,50 @@ function judgeCard(f, q) {
     extra,
   );
   return h('section', { class: 'hl-card hl-stack', id: `question-${q.id}` }, body);
+}
+
+/** @param {any} a an anchor of a decision record */
+const anchorText = (a) => (a.test ? `테스트 ${a.test} (${a.file})` : `${a.file}의 ${a.symbol}`);
+
+/** Where an answered fork question is kept (pivot 7.1, 7.4). @param {JudgeForm} f @param {any} q */
+function keepBlock(f, q) {
+  /** @type {[string, string][]} */
+  const options = [['pr', '이 PR에서만']];
+  if (q.decision) options.push(['repo', '저장소에 계속 유지']);
+  if (q.retires) options.push(['retire', `${q.retires} 지우기`]);
+  /** @type {Record<string, string>} */
+  const help = {
+    pr: '답은 PR 본문에만 남습니다.',
+    repo: '답이 결정 기록이 되어, 이 범위를 고치는 다음 작업이 읽습니다. 아래 테스트가 이 결정을 잠급니다.',
+    retire: `결정 기록 ${q.retires}가 더 이상 맞지 않습니다. 이 PR에서 지웁니다.`,
+  };
+  const note = h('span', { class: 'seed-field__description' }, help[f.keeps.get(q.id) ?? 'pr']);
+  return fieldBlock(
+    '답을 남길 곳',
+    h(
+      'div',
+      { class: 'hl-stack-tight' },
+      choiceControl({
+        label: `${q.id} 남길 곳`,
+        options,
+        value: f.keeps.get(q.id) ?? 'pr',
+        onchange: (v) => {
+          f.keeps.set(q.id, v);
+          f.dirty = true;
+          note.textContent = help[v] ?? '';
+          refreshJudge();
+        },
+      }),
+      note,
+      q.decision
+        ? h(
+            'span',
+            { class: 'hl-muted hl-small' },
+            `범위 ${q.decision.scope.join(', ')} · 앵커 ${q.decision.anchors.map(anchorText).join(', ')}${q.decision.replaces ? ` · ${q.decision.replaces} 대체` : ''}`,
+          )
+        : null,
+    ),
+  );
 }
 
 /** What to do with the spec lines a sent-back question cites. @param {JudgeForm} f @param {any} q */
@@ -1877,6 +1924,7 @@ async function saveJudgment() {
       ...(RETURNING.has(verdict) ? { reason: f.reasons.get(q.id)?.trim() } : {}),
       ...(verdict === 'answered' ? { answer: f.answers.get(q.id)?.trim() } : {}),
       ...(RETURNING.has(verdict) && q.citesSpec ? { spec: f.specChoices.get(q.id) } : {}),
+      ...(verdict === 'answered' && (f.keeps.get(q.id) ?? 'pr') !== 'pr' ? { keep: f.keeps.get(q.id) } : {}),
     };
   });
   const lifetime = !returning && f.task.judge.specs?.length ? { specAfterMerge: { action: f.afterMerge, ...(f.afterMerge === 'keep' ? { owner: f.owner.trim() } : {}) } } : {};
@@ -1910,6 +1958,7 @@ function judgmentSummaryCard(task) {
           i.answer !== null ? h('span', { class: 'hl-muted' }, ` · 답: ${i.answer}${i.correct === false ? ' (틀림)' : i.correct === true ? ' (맞음)' : ''}`) : null,
           i.reason ? h('span', { class: 'hl-muted' }, ` · 이유: ${i.reason}`) : null,
           i.spec ? h('span', { class: 'hl-muted' }, ` · spec: ${SPEC_CHOICE_OPTIONS.find(([v]) => v === i.spec.choice)?.[1] ?? i.spec.choice}`) : null,
+          i.keep ? h('span', { class: 'hl-muted' }, i.keep.action === 'record' ? ` · 결정 기록 ${i.keep.id}로 남김` : ` · 결정 기록 ${i.keep.id} 지움`) : null,
         ),
       ),
     ),

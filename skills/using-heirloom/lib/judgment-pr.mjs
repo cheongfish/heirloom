@@ -120,7 +120,14 @@ export function renderSection({ judgment, draft, sha, rechecking = null, specDec
     } else if (item.kind === 'intent') {
       lines.push(`- ${oneLine(item.prompt)} → ${item.verdict === 'as-expected' ? '의도와 같음' : '의도와 달라도 맞는 동작으로 확인함'}${kept}`);
     } else {
-      lines.push(`- 결정: ${oneLine(item.prompt)} — "${oneLine(String(item.answer))}"${kept}`);
+      const replaces = item.keep?.action === 'record' ? q.decision?.replaces : null;
+      const where =
+        item.keep?.action === 'record'
+          ? ` (저장소에 결정 기록 ${item.keep.id}로 남김${replaces ? `, ${replaces} 대체` : ''})`
+          : item.keep?.action === 'retire'
+            ? ` (결정 기록 ${item.keep.id}는 더 이상 맞지 않아 지움)`
+            : '';
+      lines.push(`- 결정: ${oneLine(item.prompt)} — "${oneLine(String(item.answer))}"${where}${kept}`);
     }
   }
   for (const x of draft?.inferences ?? []) lines.push(`- 실행 증거 없음: ${oneLine(x.text)} (${oneLine(x.reason)})`);

@@ -23,7 +23,7 @@ Without `--task`, lists this worktree's approved unfinished handoffs in `data.pe
 node <this skill>/scripts/apply.mjs --task <taskId>
 ```
 
-Success `data`. A judgment (`kind: "judgment"`, from a schema 2 draft) has no `summary` or `records`: its PR paragraph comes from `pr-body.mjs` (step 4), and `status` is the commit the `heirloom/understood` status will go on (`sha`), or why there is none yet (`reason`: `uncommitted` means commit the judged work first).
+Success `data`. A judgment (`kind: "judgment"`, from a schema 2 draft) has no `summary` or `records`: `files` are the decision records the person kept (`.heirloom/decisions/d-….md`) and `removed` the records they replace or retire, its PR paragraph comes from `pr-body.mjs` (step 4), and `status` is the commit the `heirloom/understood` status will go on (`sha`), or why there is none yet (`reason`: `uncommitted` means commit the judged work first).
 
 | Field | Meaning |
 | --- | --- |

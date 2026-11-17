@@ -14,7 +14,7 @@ import { HeirloomError } from '../lib/errors.mjs';
 import { appendEvent, deriveState, readEvents } from '../lib/events.mjs';
 import { readJson, writeJsonAtomic } from '../lib/fsx.mjs';
 import { tryGit } from '../lib/git.mjs';
-import { newApprovalId } from '../lib/ids.mjs';
+import { newApprovalId, newRecordId } from '../lib/ids.mjs';
 import { loadApprovalBaseline } from '../lib/baseline.mjs';
 import { loadProjectConfig } from '../lib/config.mjs';
 import { approvalFiles, taskPaths } from '../lib/paths.mjs';
@@ -316,6 +316,7 @@ export async function judgeTask({ home, taskId, request, keystore, now = new Dat
         if (typeof item.answer !== 'string' || !item.answer.trim() || item.answer.length > MAX_TEXT) throw bad(`${q.id}: 열린 선택에 대한 답이 필요함`);
         answer = item.answer.trim();
       }
+      const keep = keptAs(q, item);
       const cited = specSourcesOf(q, input);
       const specChoice = item.spec === undefined || item.spec === null ? null : item.spec;
       if (specChoice !== null && (ACCEPTING.has(item.verdict) || !cited.length)) throw bad(`${q.id}: spec 처리는 spec을 인용한 질문을 되돌리거나 분리할 때만 고름`);
@@ -348,6 +349,7 @@ export async function judgeTask({ home, taskId, request, keystore, now = new Dat
         verdict: item.verdict,
         ...(reason ? { reason } : {}),
         ...(specChoice !== null ? { spec: { choice: specChoice, cited } } : {}),
+        ...(keep ? { keep } : {}),
       };
     });
     const extra = [...sent.keys()].filter((id) => !draft.questions.some((/** @type {any} */ q) => q.id === id));
@@ -439,4 +441,26 @@ async function chosenAfterMerge(request, root, specs) {
   const owner = typeof chosen?.owner === 'string' ? chosen.owner.trim() : '';
   if (!owner || owner.length > MAX_TEXT) throw bad('spec을 유지하려면 소유자(owner)를 적어야 함');
   return { action, specs, owner };
+}
+
+/**
+ * Whether the person keeps a fork answer in the repository as a decision record, or retires the
+ * record the question asked about (pivot 7.1, 7.4). Without a choice the answer stays in the PR
+ * only.
+ * @param {any} q
+ * @param {any} item
+ * @returns {{ action: 'record' | 'retire', id: string } | null}
+ */
+function keptAs(q, item) {
+  if (item.keep === undefined || item.keep === null || item.keep === 'pr') return null;
+  if (q.kind !== 'fork' || item.verdict !== 'answered') throw bad(`${q.id}: 저장소에 남기거나 기록을 지우는 것은 답한 열린 선택에서만 고름`);
+  if (item.keep === 'repo') {
+    if (!q.decision) throw bad(`${q.id}: 에이전트가 결정 기록안(decision)을 붙이지 않은 질문은 저장소에 남길 수 없음`);
+    return { action: 'record', id: newRecordId('decision') };
+  }
+  if (item.keep === 'retire') {
+    if (!q.retires) throw bad(`${q.id}: 지울 결정 기록(retires)을 묻는 질문이 아님`);
+    return { action: 'retire', id: q.retires };
+  }
+  throw bad(`${q.id}: keep은 pr, repo, retire 중 하나여야 함`);
 }

@@ -28,6 +28,7 @@ import { readIndex, tasksForWorktree } from './store.mjs';
 import { withTaskLock } from './task-lock.mjs';
 import { STATUS_CONTEXT, codeMatches, statusCommit } from './judgment-pr.mjs';
 import { applySpecLifecycle } from './spec-handling.mjs';
+import { writeDecisions } from './decisions.mjs';
 import { postCommitStatus as postGithubStatus } from './github.mjs';
 import { postCommitStatus as postGitlabStatus } from './gitlab.mjs';
 
@@ -230,9 +231,11 @@ export async function applyApproval({ home, taskId }) {
     if (already) {
       files = /** @type {string[]} */ (lastOf(events, 'records_written')?.files ?? []);
     } else if (approval.kind === 'judgment') {
-      // A judgment writes no records yet (pivot 7); the event moves the task to the PR step.
-      files = [];
-      await appendEvent(paths.events, { type: 'records_written', approvalId: approval.id, files });
+      // Decision records the person kept (pivot 7). Earlier rounds' files go back first.
+      const prior = [...new Set(events.filter((e) => e.type === 'records_written' && e.approvalId !== approval.id).flatMap((e) => [...(/** @type {string[]} */ (e.files ?? [])), ...(/** @type {string[]} */ (e.removed ?? []))]))];
+      const { written, removed } = await writeDecisions({ root, mergeBase: input.base.mergeBase, judgment: approval, draft, prior });
+      files = written;
+      await appendEvent(paths.events, { type: 'records_written', approvalId: approval.id, files, ...(removed.length ? { removed } : {}) });
     } else {
       const { written, removed } = await writeApprovedRecords({ root, input, draft, approval, events });
       files = written;
@@ -323,7 +326,7 @@ async function judgmentResult({ home, taskId, input, approval, files, already, s
     alreadyApplied: already,
     root: input.repo.root,
     files: [...files, ...(spec?.files ?? [])],
-    removed: spec?.removed ?? [],
+    removed: [...(/** @type {string[]} */ (after.filter((e) => e.type === 'records_written' && e.approvalId === approval.id).at(-1)?.removed ?? [])), ...(spec?.removed ?? [])],
     spec: spec ? { action: spec.action, ...(spec.owner ? { owner: spec.owner } : {}), specs: spec.specs, pending: spec.pending } : null,
     status: await statusCommit({ input, judgedFiles: input.source.files }),
     prUrl: state === 'pr_created' && typeof prEvent?.url === 'string' ? prEvent.url : null,

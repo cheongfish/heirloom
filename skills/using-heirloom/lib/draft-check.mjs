@@ -10,6 +10,7 @@ import { globToRegExp } from './glob.mjs';
 import { ID_PATTERNS, newRecordId } from './ids.mjs';
 import { CONVERSATION_REF, findQuote } from './conversation.mjs';
 import { checkRecheckDraft } from './recheck.mjs';
+import { readRecords } from './records.mjs';
 import { draftSchema, draftV2Schema, isMarkdownCodePath, validate } from './schema.mjs';
 import { createHash } from 'node:crypto';
 
@@ -308,6 +309,7 @@ async function checkDraftV2({ root, input, draft, repoFiles, conversation, probe
     if (typeof id === 'string' && ids.indexOf(id) !== i) errors.push(`$.questions[${i}].id: 질문 id가 중복됨 (${id})`);
   });
 
+  const decisionCheck = decisionChecker({ root, repoFiles, probes, errors });
   const changedTests = probes?.tests?.changed ?? [];
   const changedTestNames = new Set(changedTests.map((/** @type {any} */ t) => t.name));
   const changedTestFiles = new Set(changedTests.map((/** @type {any} */ t) => (t.location ? String(t.location).replace(/:\d+$/, '') : null)).filter(Boolean));
@@ -331,6 +333,8 @@ async function checkDraftV2({ root, input, draft, repoFiles, conversation, probe
       (Array.isArray(q.codePaths) ? q.codePaths : []).forEach((/** @type {unknown} */ cp, /** @type {number} */ j) => {
         if (typeof cp === 'string' && !isMarkdownCodePath(cp) && !matchesSome(cp, repoFiles)) errors.push(`${at}.codePaths[${j}]: 저장소에 맞는 파일이 없음 (${cp})`);
       });
+      if (isObject(q.decision)) await checkProposal(q.decision, `${at}.decision`, decisionCheck);
+      if (typeof q.retires === 'string') await decisionCheck.existing(q.retires, `${at}.retires`);
     } else if (q.kind === 'test-lock' && typeof q.test === 'string') {
       // A test whose result changed, or a place in a test file this change touched.
       if (changedTestNames.has(q.test)) continue;
@@ -364,4 +368,66 @@ async function checkDraftV2({ root, input, draft, repoFiles, conversation, probe
     if (p.base.sha256 !== p.head.sha256 && !explained.has(p.id)) warnings.push(`탐침 ${p.id}: base와 head의 출력이 다르지만 어느 behaviorDiffs에도 쓰이지 않음`);
   }
   return { errors, warnings, draft: enriched };
+}
+
+/** @param {string} s */
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Whether a symbol appears in a text as a whole name, not as part of a longer identifier.
+ * @param {string} text
+ * @param {string} symbol
+ */
+export const hasSymbol = (text, symbol) => new RegExp(`(^|[^\\p{L}\\p{N}_$])${escapeRe(symbol)}(?=$|[^\\p{L}\\p{N}_$])`, 'u').test(text);
+
+/**
+ * Checks of what a decision record would rest on (pivot 7.2): its scope matches repository
+ * files, its anchor files and symbols exist, its test anchors passed on head in the recorded
+ * test run, and a replaced or retired record exists.
+ * @param {{ root: string, repoFiles: string[], probes: any, errors: string[] }} options
+ */
+function decisionChecker({ root, repoFiles, probes, errors }) {
+  const files = new Set(repoFiles);
+  /** @type {Set<string> | null} */
+  let known = null;
+  const results = probes?.tests?.head?.parsed ? probes.tests.head.results : null;
+  return {
+    /** @param {any} a @param {string} at */
+    async anchor(a, at) {
+      if (!isObject(a) || typeof a.file !== 'string') return;
+      if (!files.has(a.file)) return void errors.push(`${at}.file: 저장소에 없는 파일 (${a.file})`);
+      if (typeof a.symbol === 'string') {
+        const text = await readFile(path.join(root, a.file), 'utf8').catch(() => '');
+        if (!hasSymbol(text, a.symbol)) errors.push(`${at}.symbol: ${a.file}에 없는 이름 (${a.symbol})`);
+      }
+      if (typeof a.test === 'string') {
+        if (!results) return void errors.push(`${at}.test: 테스트별 결과가 기록된 탐침 실행이 없음. probes.json의 tests로 테스트를 함께 돌린다`);
+        const r = results[a.test];
+        if (!r) return void errors.push(`${at}.test: head 테스트 결과에 없는 테스트 (${a.test})`);
+        if (r.location && String(r.location).replace(/:\d+$/, '') !== a.file) errors.push(`${at}.file: 테스트 ${a.test}의 위치(${r.location})와 다른 파일`);
+        if (r.status !== 'pass') errors.push(`${at}.test: head에서 통과하지 않은 테스트 (${a.test}: ${r.status})`);
+      }
+    },
+    /** @param {string} id @param {string} at */
+    async existing(id, at) {
+      known ??= new Set((await readRecords(root)).decisions.map((d) => d.meta.id));
+      if (!known.has(id)) errors.push(`${at}: 저장소에 없는 결정 기록 (${id}). 이전 형식의 기록은 대체하거나 지울 수 없음`);
+    },
+    /** @param {unknown} glob @param {string} at */
+    scope(glob, at) {
+      if (typeof glob === 'string' && !matchesSome(glob, repoFiles)) errors.push(`${at}: 저장소에 맞는 파일이 없음 (${glob})`);
+    },
+  };
+}
+
+/**
+ * @param {any} p a decision proposal or discussion candidate
+ * @param {string} at
+ * @param {ReturnType<typeof decisionChecker>} check
+ */
+async function checkProposal(p, at, check) {
+  (Array.isArray(p.scope) ? p.scope : []).forEach((/** @type {unknown} */ g, /** @type {number} */ j) => check.scope(g, `${at}.scope[${j}]`));
+  const anchors = Array.isArray(p.anchors) ? p.anchors : [];
+  for (let j = 0; j < anchors.length; j += 1) await check.anchor(anchors[j], `${at}.anchors[${j}]`);
+  if (typeof p.replaces === 'string') await check.existing(p.replaces, `${at}.replaces`);
 }

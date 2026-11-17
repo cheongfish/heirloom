@@ -112,6 +112,28 @@ Ask 3 to 5 questions about what the person most likely does not know yet. The pe
 - Ask a `fork` question only for a choice the change makes without a stated reason. A document or typed user message that states both the choice and the reason settles it: cite it in an `intent` question instead.
 - If `reviewMatchesSource` is false, report that code changed after review without judging it an error.
 
+### Decision records
+
+A `fork` answer stays in the PR body unless the person keeps it in the repository. They can only do that when the question carries a `decision` proposal:
+
+```json
+"decision": {
+  "scope": ["src/cart/**"],
+  "anchors": [
+    { "file": "src/cart.mjs", "symbol": "total" },
+    { "file": "test/cart.test.mjs", "test": "small orders pay full price" }
+  ],
+  "replaces": "d-…"
+}
+```
+
+- Propose one only for a choice later work on that code must keep. Most answers belong in the PR alone; a record every few PRs at most is normal.
+- `anchors` say where the code holds the choice now: a `symbol` in a file, and at least one `test` that locks it, named as the probe run's test results name it and passing on head. If no test locks the choice yet, write that test first, run the probes again, then draft.
+- `scope`: code globs whose changes must respect the decision. Never Markdown.
+- `replaces`: an existing decision record (`d-…`, schema 2) this choice replaces; it is removed in the same PR.
+- To ask whether a `possibly-stale` record (see `recall-context`) still holds, set `"retires": "d-…"` on the `fork` question. The person may retire it; it is then removed in this PR.
+- Records written before 0.4 (schema 1 decisions, axioms) cannot be replaced or retired this way.
+
 ## 4. Submit
 
 ```sh

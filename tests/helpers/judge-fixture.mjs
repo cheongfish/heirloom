@@ -30,11 +30,13 @@ test('bulk discount for 12', () => {
 export const OBSERVED = { base: '108', head: '120' };
 
 /**
- * @param {{ commit?: boolean, config?: object }} [options] commit: false leaves the judged change
- *   uncommitted; config is written as the project's .heirloom/config.json
+ * @param {{ commit?: boolean, config?: object, baseFiles?: Record<string, string>, editDraft?: (draft: any) => void }} [options]
+ *   commit: false leaves the judged change uncommitted; config is written as the project's
+ *   .heirloom/config.json; baseFiles are added to the target branch; editDraft changes the
+ *   draft before it is submitted
  */
-export async function judgedTask({ commit = true, config } = {}) {
-  const upstream = await makeRepo({ 'package.json': '{ "type": "module" }\n', 'src/cart.mjs': CART_BASE, 'test/cart.test.mjs': CART_TEST });
+export async function judgedTask({ commit = true, config, baseFiles = {}, editDraft = () => {} } = {}) {
+  const upstream = await makeRepo({ 'package.json': '{ "type": "module" }\n', 'src/cart.mjs': CART_BASE, 'test/cart.test.mjs': CART_TEST, ...baseFiles });
   const repo = await cloneRepo(upstream);
   repo.git('checkout', '-q', '-b', 'feat');
   await repo.write(SPEC, '# cart\n\n할인 경계를 100개로 바꾼다.\n');
@@ -69,6 +71,7 @@ export async function judgedTask({ commit = true, config } = {}) {
     inferences: [{ text: '다른 통화에서도 같다', reason: '통화별 탐침이 없다' }],
     notes: '',
   };
+  editDraft(draft);
   await writeFile(taskPaths(home, taskId).draft, JSON.stringify(draft));
   await submitDraft({ home, taskId });
   return { repo, home, taskId, sourceHash: prepared.source.hash, probeSetHash: probes.probeSetHash };
@@ -78,7 +81,7 @@ export async function judgedTask({ commit = true, config } = {}) {
  * Predict and judge the fixture's questions as the dashboard would, every verdict accepting
  * unless `verdicts` says otherwise. `lifetime` is the spec lifetime sent with the judgment.
  * Predictions already saved for the draft are kept, so a refused judgment can be sent again.
- * @param {{ home: string, taskId: string, sourceHash: string, verdicts?: Record<string, { verdict: string, reason?: string, answer?: string, spec?: string }>, lifetime?: { action: string, owner?: string } }} options
+ * @param {{ home: string, taskId: string, sourceHash: string, verdicts?: Record<string, { verdict: string, reason?: string, answer?: string, spec?: string, keep?: string }>, lifetime?: { action: string, owner?: string } }} options
  */
 export async function judge({ home, taskId, sourceHash, verdicts = {}, lifetime }) {
   const draft = /** @type {any} */ (await readJson(taskPaths(home, taskId).draft));
