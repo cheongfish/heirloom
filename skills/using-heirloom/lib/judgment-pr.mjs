@@ -130,6 +130,11 @@ export function renderSection({ judgment, draft, sha, rechecking = null, specDec
       lines.push(`- 결정: ${oneLine(item.prompt)} — "${oneLine(String(item.answer))}"${where}${kept}`);
     }
   }
+  for (const c of judgment.discussions ?? []) {
+    const d = (draft?.discussions ?? []).find((/** @type {any} */ x) => x.id === c.id);
+    if (!c.confirmed || !d) continue;
+    lines.push(`- 토론에서 확정한 결정: ${oneLine(d.choice)} — ${d.url} (저장소에 결정 기록 ${c.recordId}로 남김${d.replaces ? `, ${d.replaces} 대체` : ''})`);
+  }
   for (const x of draft?.inferences ?? []) lines.push(`- 실행 증거 없음: ${oneLine(x.text)} (${oneLine(x.reason)})`);
   lines.push(...specLines(specDecisions, judgment.specAfterMerge));
   const probes = [...new Set(judgment.items.flatMap((/** @type {any} */ i) => Object.keys(i.probeHashes).filter((k) => k !== 'tests')))];

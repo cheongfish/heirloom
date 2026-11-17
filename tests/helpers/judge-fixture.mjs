@@ -30,15 +30,16 @@ test('bulk discount for 12', () => {
 export const OBSERVED = { base: '108', head: '120' };
 
 /**
- * @param {{ commit?: boolean, config?: object, baseFiles?: Record<string, string>, editDraft?: (draft: any) => void }} [options]
+ * @param {{ commit?: boolean, config?: object, baseFiles?: Record<string, string>, editDraft?: (draft: any) => void, remote?: string }} [options]
  *   commit: false leaves the judged change uncommitted; config is written as the project's
  *   .heirloom/config.json; baseFiles are added to the target branch; editDraft changes the
- *   draft before it is submitted
+ *   draft before it is submitted; remote replaces the origin URL before the handoff
  */
-export async function judgedTask({ commit = true, config, baseFiles = {}, editDraft = () => {} } = {}) {
+export async function judgedTask({ commit = true, config, baseFiles = {}, editDraft = () => {}, remote } = {}) {
   const upstream = await makeRepo({ 'package.json': '{ "type": "module" }\n', 'src/cart.mjs': CART_BASE, 'test/cart.test.mjs': CART_TEST, ...baseFiles });
   const repo = await cloneRepo(upstream);
   repo.git('checkout', '-q', '-b', 'feat');
+  if (remote) repo.git('remote', 'set-url', 'origin', remote);
   await repo.write(SPEC, '# cart\n\n할인 경계를 100개로 바꾼다.\n');
   await repo.write('src/cart.mjs', CART_HEAD);
   if (config) await repo.write('.heirloom/config.json', `${JSON.stringify(config)}\n`);

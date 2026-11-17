@@ -107,3 +107,18 @@ export async function postCommitStatus({ cwd, repo, sha, context, description })
     gh(['api', '-X', 'POST', `repos/${repo}/statuses/${sha}`, '-f', 'state=success', '-f', `context=${context}`, '-f', `description=${description}`], { cwd }),
   );
 }
+
+/**
+ * GET a REST API path (`repos/<owner>/<repo>/…`) and parse the JSON. Network errors are
+ * retried once.
+ * @param {{ cwd: string, path: string }} options
+ * @returns {Promise<any>}
+ */
+export async function ghApiGet({ cwd, path }) {
+  const text = await withRetry(() => gh(['api', path], { cwd }));
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new HeirloomError('E_INTERNAL', `gh api ${path} 출력이 JSON이 아님`);
+  }
+}

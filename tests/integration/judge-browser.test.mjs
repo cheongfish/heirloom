@@ -5,14 +5,18 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import { tempDir } from '../helpers/git-fixture.mjs';
 
 import { OBSERVED, judgedTask } from '../helpers/judge-fixture.mjs';
 import { createDashboardServer } from '../../skills/using-heirloom/dashboard/server.mjs';
 import { deriveState, readEvents } from '../../skills/using-heirloom/lib/events.mjs';
 import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
 
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const { PLAYWRIGHT_CORE, CHROMIUM } = process.env;
 const skip = PLAYWRIGHT_CORE && CHROMIUM ? false : 'PLAYWRIGHT_CORE와 CHROMIUM이 없음';
 
@@ -79,5 +83,58 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   assert.match(done, /모두 수용/);
   assert.match(done, /머지할 때 spec: 유지 \(소유자: 결제팀\)/);
   assert.equal(deriveState(await readEvents(taskPaths(home, taskId).events)), 'approved');
+  assert.deepEqual(errors, []);
+});
+
+test('browser: keep a fork answer in the repository and confirm a discussion', { skip, timeout: 120_000 }, async (t) => {
+  const pw = await import(pathToFileURL(path.join(/** @type {string} */ (PLAYWRIGHT_CORE), 'index.mjs')).href);
+  const { chromium } = pw.default ?? pw;
+  const fakes = await tempDir('fakes');
+  const state = path.join(fakes, 'gh.json');
+  await writeFile(state, JSON.stringify({ api: { 'repos/acme/widgets/issues/comments/5': { body: '작은 주문은 할인하지 않는다.', user: { login: 'kim' } } } }));
+  process.env.PATH = [path.join(ROOT, 'tests', 'helpers', 'fake-gh'), process.env.PATH].join(path.delimiter);
+  process.env.FAKE_GH_STATE = state;
+  const anchors = [{ file: 'test/small.test.mjs', test: 'small orders pay full price' }];
+  const { home, taskId } = await judgedTask({
+    remote: 'https://github.com/acme/widgets.git',
+    baseFiles: { 'test/small.test.mjs': "import { test } from 'node:test';\ntest('small orders pay full price', () => {});\n" },
+    editDraft: (d) => {
+      d.questions[3].decision = { scope: ['src/cart.mjs'], anchors };
+      d.discussions = [{ id: 'x1', url: 'https://github.com/acme/widgets/pull/3#issuecomment-5', quote: '작은 주문은 할인하지 않는다.', choice: '작은 주문은 할인하지 않는다', scope: ['src/cart.mjs'], anchors }];
+    },
+  });
+  const server = await createDashboardServer({ home, port: 0, version: '0.0.0-test', codeHash: 'test', keystore: 'file' });
+  t.after(() => server.close());
+  const browser = await chromium.launch({ executablePath: CHROMIUM, headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  /** @type {string[]} */
+  const errors = [];
+  page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
+  page.on('dialog', (/** @type {any} */ d) => d.accept());
+
+  await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
+  await page.getByLabel('q1 예측').fill(OBSERVED.base);
+  await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
+  await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
+  await page.getByText('동작 차이').first().waitFor();
+  await page.getByRole('radiogroup', { name: 'q1 판정' }).getByRole('radio', { name: '잘못 알았음' }).click();
+  await page.getByRole('radiogroup', { name: 'q2 판정' }).getByRole('radio', { name: '예상대로' }).click();
+  await page.getByRole('radiogroup', { name: 'q3 판정' }).getByRole('radio', { name: '의도와 같음' }).click();
+  await page.getByRole('radiogroup', { name: 'q4 판정' }).getByRole('radio', { name: '답함' }).click();
+  await page.getByLabel('q4 답').fill('100으로 한다');
+  const keep = page.getByRole('radiogroup', { name: 'q4 남길 곳' });
+  assert.equal(await keep.getByRole('radio', { name: '이 PR에서만' }).getAttribute('aria-checked'), 'true', 'kept in the PR only by default');
+  await keep.getByRole('radio', { name: '저장소에 계속 유지' }).click();
+  const submit = page.getByRole('button', { name: /^판정 저장/ });
+  assert.match(await page.locator('main').innerText(), /확인하지 않은 토론 결정: x1/);
+  assert.equal(await submit.isDisabled(), true);
+  await page.getByRole('radiogroup', { name: 'x1 확인' }).getByRole('radio', { name: '확정된 결정이 맞다' }).click();
+  await submit.click();
+  await page.getByText('판정 내용').first().waitFor();
+  assert.match(await page.locator('main').innerText(), /결정 기록 d-[0-9a-z]{8}로 남김/);
+  const judgment = JSON.parse(await readFile(path.join(taskPaths(home, taskId).approvals, `${(await readEvents(taskPaths(home, taskId).events)).find((e) => e.type === 'approved')?.approvalId}.json`), 'utf8'));
+  assert.equal(judgment.items.find((/** @type {any} */ i) => i.id === 'q4').keep.action, 'record');
+  assert.equal(judgment.discussions[0].confirmed, true);
   assert.deepEqual(errors, []);
 });

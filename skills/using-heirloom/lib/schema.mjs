@@ -447,6 +447,18 @@ export const draftV2Schema = object(
     inferences: arrayOf(object({ text: nonEmpty, reason: nonEmpty })),
     notes: text,
   },
+  {
+    optional: {
+      // Decisions settled in a PR or issue discussion, for the person to confirm (pivot 7.1).
+      // `fetched` is filled by the check: who wrote the comment and a hash of its text.
+      discussions: arrayOf(
+        object(
+          { id: shortId, url: nonEmpty, quote: nonEmpty, choice: nonEmpty, scope: arrayOf(codePath, { min: 1 }), anchors: anchorList },
+          { optional: { replaces: decisionId, fetched: object({ author: nullable(nonEmpty), bodySha256: sha256 }) } },
+        ),
+      ),
+    },
+  },
 );
 
 // ---------------------------------------------------------------- judgment (pivot 5.4)
@@ -507,7 +519,7 @@ export const judgmentSchema = object({
   judgedAt: timestamp,
   approver: object({ fingerprint: nonEmpty, gitUser: nullable(nonEmpty) }),
   signature: nonEmpty,
-}, { optional: { basedOn: approvalId, specAfterMerge } });
+}, { optional: { basedOn: approvalId, specAfterMerge, discussions: arrayOf(object({ id: str({ pattern: SHORT_ID }), confirmed: bool }, { optional: { recordId: decisionId } })) } });
 
 // ---------------------------------------------------------------- approval (5.5)
 

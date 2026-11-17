@@ -134,6 +134,25 @@ A `fork` answer stays in the PR body unless the person keeps it in the repositor
 - To ask whether a `possibly-stale` record (see `recall-context`) still holds, set `"retires": "d-…"` on the `fork` question. The person may retire it; it is then removed in this PR.
 - Records written before 0.4 (schema 1 decisions, axioms) cannot be replaced or retired this way.
 
+A decision settled in a PR review or issue discussion, with no trace in code, tests or commits, can be offered as a top-level `discussions` entry:
+
+```json
+"discussions": [
+  {
+    "id": "x1",
+    "url": "https://github.com/<owner>/<repo>/pull/42#discussion_r123",
+    "quote": "<exact sentence from that comment>",
+    "choice": "<the decision in one line>",
+    "scope": ["src/cart/**"],
+    "anchors": [{ "file": "test/cart.test.mjs", "test": "small orders pay full price" }]
+  }
+]
+```
+
+- Only a decision the discussion actually settled, quoted from a human comment. Never your own inference, and never a bare agreement to a proposal.
+- `url`: a comment (`#issuecomment-…`, `#discussion_r…`, `#pullrequestreview-…`, GitLab `#note_…`) or the PR, MR or issue description, in this repository. Submit fetches it with `gh` or `glab` and refuses a quote it does not contain, so those CLIs must be logged in.
+- `anchors`, `scope`, `replaces` follow the same rules as a `decision` proposal. The person confirms each entry; an unconfirmed one is dropped without sending the work back.
+
 ## 4. Submit
 
 ```sh

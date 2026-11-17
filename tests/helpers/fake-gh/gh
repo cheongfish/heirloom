@@ -88,6 +88,14 @@ if (args[0] === '--version') {
     process.exit(1);
   }
   process.stdout.write(JSON.stringify({ state: pr.state }));
+} else if (args[0] === 'api' && !args.includes('-X')) {
+  // GET of a REST path, answered from state.api: { "<path>": <response> }.
+  const found = state.api?.[args[1]];
+  if (!found) {
+    process.stderr.write('gh: Not Found (HTTP 404)\n');
+    process.exit(1);
+  }
+  process.stdout.write(JSON.stringify(found));
 } else {
   process.stderr.write(`fake gh: unsupported ${args.join(' ')}\n`);
   process.exit(2);

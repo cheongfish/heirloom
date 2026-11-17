@@ -10,6 +10,7 @@ import { globToRegExp } from './glob.mjs';
 import { ID_PATTERNS, newRecordId } from './ids.mjs';
 import { CONVERSATION_REF, findQuote } from './conversation.mjs';
 import { checkRecheckDraft } from './recheck.mjs';
+import { checkDiscussion } from './discussion.mjs';
 import { readRecords } from './records.mjs';
 import { draftSchema, draftV2Schema, isMarkdownCodePath, validate } from './schema.mjs';
 import { createHash } from 'node:crypto';
@@ -355,6 +356,19 @@ async function checkDraftV2({ root, input, draft, repoFiles, conversation, probe
         if (Number(m[2]) < 1 || Number(m[2]) > lines) errors.push(`${at}.test: ${file}에 ${m[2]}행이 없음`);
       }
     }
+  }
+
+  const discussions = Array.isArray(enriched.discussions) ? enriched.discussions : [];
+  for (let i = 0; i < discussions.length; i += 1) {
+    const d = discussions[i];
+    const at = `$.discussions[${i}]`;
+    if (!isObject(d)) continue;
+    if (discussions.findIndex((/** @type {any} */ x) => x?.id === d.id) !== i) errors.push(`${at}.id: 토론 id가 중복됨 (${d.id})`);
+    await checkProposal(d, at, decisionCheck);
+    delete d.fetched;
+    if (typeof d.url !== 'string' || typeof d.quote !== 'string') continue;
+    const fetched = await checkDiscussion({ cwd: root, remote: input.repo.remote, url: d.url, quote: d.quote, at, errors });
+    if (fetched) d.fetched = fetched;
   }
 
   if (input.recheck?.kind === 'probes') {

@@ -1461,6 +1461,7 @@ const AFTER_MERGE_HELP = {
  * @property {Map<string, string>} answers fork answers
  * @property {string[]} diffs behavior descriptions as the person edits them
  * @property {Map<string, string>} keeps where a fork answer is kept: pr, repo or retire
+ * @property {Map<string, boolean>} discussions whether each discussion candidate is a settled decision
  * @property {Map<string, string>} specChoices what the spec becomes, per sent-back question citing it
  * @property {string} afterMerge the spec's lifetime when every question is accepted
  * @property {string} owner who owns a kept spec
@@ -1484,6 +1485,7 @@ function newJudgeForm(task) {
     answers: new Map(),
     diffs: (task.judge.behaviorDiffs ?? []).map((/** @type {any} */ d) => d.text),
     keeps: new Map(),
+    discussions: new Map(),
     specChoices: new Map(),
     afterMerge: task.judge.specAfterMergeDefault ?? 'delete',
     owner: '',
@@ -1734,6 +1736,30 @@ function keepBlock(f, q) {
   );
 }
 
+/** A decision the agent found settled in a PR or issue discussion. @param {JudgeForm} f @param {any} d */
+function discussionCard(f, d) {
+  return h(
+    'section',
+    { class: 'hl-card hl-stack', id: `discussion-${d.id}` },
+    h('div', { class: 'hl-row' }, badge('neutral', '토론에서 정한 결정'), h('code', { class: 'hl-muted' }, d.id)),
+    h('p', { class: 'hl-question' }, d.choice),
+    h('blockquote', {}, d.quote),
+    h('p', { class: 'hl-muted hl-small' }, h('a', { href: d.url, target: '_blank', rel: 'noopener noreferrer' }, d.url), d.fetched?.author ? ` · 작성자 ${d.fetched.author}` : ''),
+    h('span', { class: 'hl-muted hl-small' }, `범위 ${d.scope.join(', ')} · 앵커 ${d.anchors.map(anchorText).join(', ')}${d.replaces ? ` · ${d.replaces} 대체` : ''}`),
+    choiceControl({
+      label: `${d.id} 확인`,
+      options: [['yes', '확정된 결정이 맞다'], ['no', '기록하지 않음']],
+      value: f.discussions.has(d.id) ? (f.discussions.get(d.id) ? 'yes' : 'no') : null,
+      onchange: (v) => {
+        f.discussions.set(d.id, v === 'yes');
+        f.dirty = true;
+        refreshJudge();
+      },
+    }),
+    h('span', { class: 'hl-muted hl-small' }, '맞다고 하면 이 작업을 모두 수용할 때 결정 기록이 됩니다. 기록하지 않아도 작업은 되돌아가지 않습니다.'),
+  );
+}
+
 /** What to do with the spec lines a sent-back question cites. @param {JudgeForm} f @param {any} q */
 function specChoiceBlock(f, q) {
   const help = h('span', { class: 'seed-field__description' }, SPEC_CHOICE_HELP[f.specChoices.get(q.id) ?? ''] ?? '이 질문은 spec을 인용했습니다. spec을 어떻게 할지 고릅니다.');
@@ -1838,6 +1864,7 @@ function judgePanel(f) {
       : null,
     recheckNotice(j),
     j.questions.map((/** @type {any} */ q) => judgeCard(f, q)),
+    (j.discussions ?? []).map((/** @type {any} */ d) => discussionCard(f, d)),
     f.lifecycle,
     f.status,
     h('div', { class: 'hl-row' }, submit),
@@ -1860,6 +1887,8 @@ function judgeBlockers(f) {
   if (noReason.length) why.push(`이유가 없는 되돌림·분리: ${noReason.map((/** @type {any} */ q) => q.id).join(', ')}`);
   const noAnswer = j.questions.filter((/** @type {any} */ q) => f.verdicts.get(q.id) === 'answered' && !f.answers.get(q.id)?.trim());
   if (noAnswer.length) why.push(`답이 없는 열린 선택: ${noAnswer.map((/** @type {any} */ q) => q.id).join(', ')}`);
+  const unconfirmed = (j.discussions ?? []).filter((/** @type {any} */ d) => !f.discussions.has(d.id));
+  if (unconfirmed.length) why.push(`확인하지 않은 토론 결정: ${unconfirmed.map((/** @type {any} */ d) => d.id).join(', ')}`);
   const noSpec = j.questions.filter((/** @type {any} */ q) => q.citesSpec && RETURNING.has(f.verdicts.get(q.id) ?? '') && !f.specChoices.has(q.id));
   if (noSpec.length) why.push(`spec 처리를 고르지 않은 질문: ${noSpec.map((/** @type {any} */ q) => q.id).join(', ')}`);
   const accepting = ![...f.verdicts.values()].some((v) => RETURNING.has(v));
@@ -1927,9 +1956,10 @@ async function saveJudgment() {
       ...(verdict === 'answered' && (f.keeps.get(q.id) ?? 'pr') !== 'pr' ? { keep: f.keeps.get(q.id) } : {}),
     };
   });
+  const discussions = (f.task.judge.discussions ?? []).length ? { discussions: [...f.discussions].map(([id, confirmed]) => ({ id, confirmed })) } : {};
   const lifetime = !returning && f.task.judge.specs?.length ? { specAfterMerge: { action: f.afterMerge, ...(f.afterMerge === 'keep' ? { owner: f.owner.trim() } : {}) } } : {};
   await judgeStep(f, '판정을 저장하지 못함', () =>
-    post(`/api/tasks/${encodeURIComponent(f.task.taskId)}/judge`, { draftSha256: f.task.draftSha256, sourceHash: f.task.input.source.hash, items, behaviorDiffs: f.diffs.map((d) => d.trim()), ...lifetime }),
+    post(`/api/tasks/${encodeURIComponent(f.task.taskId)}/judge`, { draftSha256: f.task.draftSha256, sourceHash: f.task.input.source.hash, items, behaviorDiffs: f.diffs.map((d) => d.trim()), ...lifetime, ...discussions }),
   );
 }
 

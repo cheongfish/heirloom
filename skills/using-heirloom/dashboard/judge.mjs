@@ -206,6 +206,7 @@ export async function judgeView({ home, taskId }) {
     predictions: saved.answers,
     predictedAt: saved.answeredAt,
     behaviorDiffs: draft.behaviorDiffs,
+    discussions: draft.discussions ?? [],
     inferences: draft.inferences,
     notes: draft.notes,
     probes: (probes?.probes ?? []).map(probeView),
@@ -354,6 +355,7 @@ export async function judgeTask({ home, taskId, request, keystore, now = new Dat
     });
     const extra = [...sent.keys()].filter((id) => !draft.questions.some((/** @type {any} */ q) => q.id === id));
     if (extra.length) throw bad(`초안에 없는 질문: ${extra.join(', ')}`);
+    const discussions = confirmedDiscussions(draft, request.discussions);
 
     // The person may reword a behavior description, never the observed values in it.
     const initial = draft.behaviorDiffs.map((/** @type {any} */ d) => d.text);
@@ -399,6 +401,7 @@ export async function judgeTask({ home, taskId, request, keystore, now = new Dat
       items,
       outcome,
       ...(afterMerge ? { specAfterMerge: afterMerge } : {}),
+      ...(discussions.length ? { discussions } : {}),
       predictedAt: saved.answeredAt,
       judgedAt: now.toISOString(),
       approver: { fingerprint: '', gitUser: ident ? ident.replace(/\s+\d+\s+[+-]\d{4}$/, '') : null },
@@ -463,4 +466,29 @@ function keptAs(q, item) {
     return { action: 'retire', id: q.retires };
   }
   throw bad(`${q.id}: keep은 pr, repo, retire 중 하나여야 함`);
+}
+
+/**
+ * The person's answer to each discussion candidate (pivot 7.1): confirmed ones become decision
+ * records when the work is accepted; the others are dropped without sending the work back.
+ * @param {any} draft
+ * @param {unknown} sent
+ * @returns {{ id: string, confirmed: boolean, recordId?: string }[]}
+ */
+function confirmedDiscussions(draft, sent) {
+  const candidates = draft.discussions ?? [];
+  if (sent === undefined && !candidates.length) return [];
+  if (!Array.isArray(sent)) throw bad('discussions는 { id, confirmed } 배열이어야 함');
+  /** @type {Map<string, boolean>} */
+  const answers = new Map();
+  for (const d of sent) {
+    if (!isObject(d) || typeof d.id !== 'string' || typeof d.confirmed !== 'boolean') throw bad('discussions의 각 항목은 { id, confirmed: true|false }여야 함');
+    if (!candidates.some((/** @type {any} */ c) => c.id === d.id)) throw bad(`초안에 없는 토론 후보: ${d.id}`);
+    answers.set(d.id, d.confirmed);
+  }
+  return candidates.map((/** @type {any} */ c) => {
+    const confirmed = answers.get(c.id);
+    if (confirmed === undefined) throw bad(`${c.id}: 토론에서 확정된 결정인지 확인해야 함`);
+    return confirmed ? { id: c.id, confirmed, recordId: newRecordId('decision') } : { id: c.id, confirmed };
+  });
 }
