@@ -1,13 +1,16 @@
-// Recall: the full text of active decisions and axioms related to a query. Read-only.
+// Recall: the full text of the decision records related to a query, with their anchors
+// checked (pivot 7.3). Read-only.
 //
-// Relevance uses explicit ids, the record's codePaths against the query paths, and topics.
-// A path match is a hint, not proof that the record applies: every result carries the
-// reasons it was chosen so the agent can confirm against the original text.
+// Relevance uses explicit ids and the record's scope against the query paths. A path match is a
+// hint, not proof that the record applies: every result carries the reasons it was chosen.
+// Records written before the pivot (schema 1 decisions, axioms) are past records: they are
+// named, never served as rules.
 
 import { loadProjectConfig } from './config.mjs';
 import { HeirloomError } from './errors.mjs';
 import { changedFiles, repoInfo, resolveBase } from './git.mjs';
 import { matchesAny } from './glob.mjs';
+import { checkAnchors, lastTestRuns } from './anchors.mjs';
 import { recordView } from './record-status.mjs';
 import { serializeRecord } from './records.mjs';
 import { isMarkdownCodePath } from './schema.mjs';
@@ -131,72 +134,70 @@ export async function recall({ cwd, home, paths = [], topics = [], ids = [], lim
     // An empty result here would read as "no related records" when nothing was looked up.
     if (!queryPaths.length) {
       throw new HeirloomError('E_INPUT', '조회 조건이 없고 대상 브랜치 대비 변경된 코드 파일도 없음', {
-        hint: '앞으로 수정할 코드 경로를 --paths로, 작업 주제를 --topics로 넘긴다.',
+        hint: '앞으로 수정할 코드 경로를 --paths로 넘긴다.',
       });
     }
   }
   const query = { paths: queryPaths, topics, ids };
 
   const view = await recordView({ cwd: info.root, home });
-  const byId = new Map(view.records.map((r) => [r.id, r]));
+  const runs = await lastTestRuns(home, info);
 
   const candidates = [];
-  /** @type {{ id: string, kind: string, title: string, status: string, supersededBy: string | null, deprecation: string | null }[]} */
-  const inactive = [];
-  for (const r of view.records) {
-    const { score, reasons } = scoreRecord(r.doc.meta, query);
+  for (const d of view.decisions) {
+    const { score, reasons } = scoreRecord({ id: d.id, codePaths: d.doc.meta.scope, topics: [] }, query);
     if (!score) continue;
-    if (r.status === 'inactive') {
-      // Never served as a current rule; named only when asked for by id.
-      if (reasons.includes('id')) {
-        inactive.push({
-          id: r.id,
-          kind: r.doc.meta.kind,
-          title: r.doc.meta.title,
-          status: r.merged ? 'inactive' : 'inactive_pending',
-          supersededBy: r.doc.meta.supersededBy,
-          deprecation: r.doc.meta.deprecation?.reason ?? null,
-        });
-      }
-      continue;
-    }
-    const text = serializeRecord(r.doc);
-    candidates.push({ id: r.id, kind: r.doc.meta.kind, score, reasons, record: r, text, tokens: estimateTokens(text) });
+    const text = serializeRecord(/** @type {any} */ (d.doc));
+    candidates.push({ id: d.id, kind: 'decision', score, reasons, record: d, text, tokens: estimateTokens(text) });
   }
   const limits = { maxRecords: limit ?? config.recall.maxRecords, maxTokens: config.recall.maxTokens };
   const { chosen, excluded, tokens } = selectWithinLimits(candidates, limits);
 
-  // Other tasks' pending changes: only those that touch a relevant record or add a relevant one.
-  const relevant = new Set(candidates.map((c) => c.id));
-  for (const i of inactive) relevant.add(i.id);
-  const warnings = view.pending
-    .filter((p) => relevant.has(p.id) || (p.by !== null && relevant.has(p.by)) || (p.scope && scoreRecord({ id: p.id, ...p.scope }, query).score > 0) || ids.includes(p.id))
-    .map((p) => ({ id: p.id, change: p.change, title: p.title, taskId: p.taskId, by: p.by, seenIn: p.seenIn }));
-
-  const missing = ids.filter((id) => !byId.has(id) && !view.pending.some((p) => p.id === id));
-
-  return {
-    query: { ...query, from },
-    merge: view.merge,
-    records: chosen.map((c) => ({
+  const records = [];
+  for (const c of chosen) {
+    const check = await checkAnchors({ root: info.root, anchors: c.record.doc.meta.anchors, runs });
+    records.push({
       id: c.id,
-      kind: c.kind,
-      title: c.record.doc.meta.title,
+      choice: c.record.doc.meta.choice,
       status: c.record.status,
+      anchorCheck: check.result,
+      anchors: check.anchors,
+      replaces: c.record.doc.meta.replaces,
       file: c.record.file,
       score: c.score,
       reasons: c.reasons,
       tokens: c.tokens,
       text: c.text,
-    })),
+    });
+  }
+
+  // Past records: named so the agent knows they exist, never served as rules.
+  const legacy = view.records
+    .map((r) => ({ r, ...scoreRecord(r.doc.meta, query) }))
+    .filter((x) => x.score)
+    .map(({ r, reasons }) => ({ id: r.id, kind: r.doc.meta.kind, title: r.doc.meta.title, file: r.file, reasons }));
+
+  // Other tasks' pending changes that touch a relevant record or add a relevant one.
+  const relevant = new Set(candidates.map((c) => c.id));
+  const warnings = view.pending
+    .filter((p) => relevant.has(p.id) || (p.by !== null && relevant.has(p.by)) || (p.scope && scoreRecord({ id: p.id, ...p.scope }, query).score > 0) || ids.includes(p.id))
+    .map((p) => ({ id: p.id, change: p.change, title: p.title, taskId: p.taskId, by: p.by, seenIn: p.seenIn }));
+
+  const known = new Set([...view.decisions.map((d) => d.id), ...view.records.map((r) => r.id), ...view.pending.map((p) => p.id)]);
+  const missing = ids.filter((id) => !known.has(id));
+
+  return {
+    query: { ...query, from },
+    merge: view.merge,
+    records,
     excluded: {
       count: excluded.length,
       byLimit: excluded.filter((e) => e.reason === 'limit').length,
       byTokens: excluded.filter((e) => e.reason === 'tokens').length,
-      items: excluded.map((e) => ({ id: e.id, kind: e.kind, title: e.record.doc.meta.title, score: e.score, tokens: e.tokens, reason: e.reason })),
+      items: excluded.map((e) => ({ id: e.id, choice: e.record.doc.meta.choice, score: e.score, tokens: e.tokens, reason: e.reason })),
     },
     limits: { ...limits, tokensUsed: tokens },
-    inactive,
+    legacy,
     pendingWarnings: warnings,
     missing,
     errors: view.errors,

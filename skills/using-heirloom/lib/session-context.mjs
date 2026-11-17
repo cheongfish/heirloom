@@ -81,16 +81,14 @@ async function projectSection(cwd, home) {
   const errors = view.errors;
   // Only the scope of decisions is given, never their titles or text: the agent reads a record
   // with recall-context once it knows which files it will change.
-  const decisions = view.records.filter((r) => r.status !== 'inactive' && r.doc.meta.kind === 'decision');
-  const scope = [...new Set(decisions.flatMap((d) => d.doc.meta.codePaths))].sort();
-  const unscoped = decisions.filter((d) => d.doc.meta.codePaths.length === 0).length;
+  // Records from before the pivot are past records and give no scope (pivot 7).
+  const scope = [...new Set(view.decisions.flatMap((d) => d.doc.meta.scope))].sort();
 
   const lines = ['## 규칙', ...RULES.map((r) => `- ${r}`)];
-  if (scope.length || unscoped) {
+  if (scope.length) {
     lines.push('', '## 결정 기록 범위 (이 경로를 고치기 전에 recall-context 스킬로 기록을 읽는다)');
     for (const glob of scope.slice(0, SCOPE_SHOWN)) lines.push(`- ${glob}`);
     if (scope.length > SCOPE_SHOWN) lines.push(`- … ${scope.length - SCOPE_SHOWN}개 더 있음.`);
-    if (unscoped) lines.push(`- 경로 없는 결정 ${unscoped}개: recall-context 스킬의 --topics로 찾는다.`);
   }
   if (errors.length) lines.push('', `읽지 못한 기록 ${errors.length}개: ${errors.map((e) => e.split(': ')[0]).join(', ')}`);
 

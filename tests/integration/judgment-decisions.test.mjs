@@ -11,6 +11,7 @@ import { judge, judgedTask } from '../helpers/judge-fixture.mjs';
 import { tempDir } from '../helpers/git-fixture.mjs';
 import { applyApproval } from '../../skills/using-heirloom/lib/apply.mjs';
 import { writePrBody } from '../../skills/using-heirloom/lib/judgment-pr.mjs';
+import { recall } from '../../skills/using-heirloom/lib/recall.mjs';
 import { readRecords, serializeRecord } from '../../skills/using-heirloom/lib/records.mjs';
 
 /** A test that passes on base and head, so it can anchor a decision. */
@@ -133,4 +134,19 @@ test('retiring a record removes it; an answer kept in the PR only writes nothing
   const plain = /** @type {any} */ (await applyApproval({ home: u.home, taskId: u.taskId }));
   assert.deepEqual(plain.files, []);
   assert.equal((await readRecords(u.repo.dir)).decisions.length, 1, 'only the record of the target branch');
+});
+
+test('recall: a record this task retires is no longer served to it; another branch sees the unmerged change as pending', async () => {
+  const t = await judgedTask(withFork((q) => { q.decision = { scope: ['src/cart.mjs'], anchors: ANCHORS, replaces: OLD_ID }; }));
+  const judgment = await judge({ home: t.home, taskId: t.taskId, sourceHash: t.sourceHash, verdicts: { q4: { verdict: 'answered', answer: '100개부터 할인한다', keep: 'repo' } } });
+  const id = judgment.items.find((/** @type {any} */ i) => i.id === 'q4').keep.id;
+  await applyApproval({ home: t.home, taskId: t.taskId });
+  const own = await recall({ cwd: t.repo.dir, home: t.home, paths: ['src/cart.mjs'] });
+  assert.deepEqual(own.records.map((r) => [r.id, r.status]), [[id, 'pending']]);
+
+  t.repo.commitAll('records');
+  t.repo.git('checkout', '-q', '-b', 'other', 'origin/main');
+  const other = await recall({ cwd: t.repo.dir, home: t.home, paths: ['src/cart.mjs'] });
+  assert.deepEqual(other.records.map((r) => [r.id, r.status]), [[OLD_ID, 'active']]);
+  assert.deepEqual(other.pendingWarnings.map((w) => [w.id, w.change, w.seenIn, w.by]).sort(), [[OLD_ID, 'retire', 'task', id], [id, 'add', 'task', null]].sort());
 });

@@ -18,14 +18,15 @@ import { readJson } from './fsx.mjs';
 import { readTreeTexts, repoInfo, resolveBase, tryGit } from './git.mjs';
 import { readIds } from './ids.mjs';
 import { REPO_DIR, taskPaths } from './paths.mjs';
+import { planDecisions } from './decisions.mjs';
 import { parseRecord, readRecords, serializeRecord } from './records.mjs';
-import { recordMetaSchema, validate } from './schema.mjs';
+import { decisionSchema, recordMetaSchema, validate } from './schema.mjs';
 import { readIndex } from './store.mjs';
 
 /** @typedef {import('./records.mjs').RecordDoc} RecordDoc */
 /** @typedef {import('./records.mjs').RecordMeta} RecordMeta */
 /** @typedef {'active' | 'inactive' | 'pending' | 'unknown'} RecordStatus */
-/** @typedef {'add' | 'update' | 'supersede' | 'deprecate' | 'relate'} ChangeKind */
+/** @typedef {'add' | 'update' | 'supersede' | 'deprecate' | 'relate' | 'retire'} ChangeKind */
 
 /**
  * @typedef {object} ViewRecord
@@ -34,6 +35,14 @@ import { readIndex } from './store.mjs';
  * @property {RecordStatus} status
  * @property {string} file repository-relative path
  * @property {boolean} merged the content comes from the base branch
+ */
+
+/**
+ * @typedef {object} ViewDecision A decision record since the pivot (schema 2).
+ * @property {string} id
+ * @property {import('./records.mjs').DecisionDoc} doc
+ * @property {'active' | 'pending' | 'unknown'} status
+ * @property {string} file repository-relative path
  */
 
 /**
@@ -109,20 +118,24 @@ async function baseRecords(root, ref) {
   const texts = await readTreeTexts({ cwd: root, ref, dirs: [`${REPO_DIR}/decisions`, `${REPO_DIR}/axioms`] });
   /** @type {Map<string, RecordDoc & { file: string }>} */
   const out = new Map();
+  /** @type {Map<string, import('./records.mjs').DecisionDoc & { file: string }>} */
+  const decisions = new Map();
   /** @type {string[]} */
   const errors = [];
   for (const [file, text] of texts) {
     if (!file.endsWith('.md')) continue;
     try {
       const doc = parseRecord(text, `${ref}:${file}`);
-      const problems = validate(recordMetaSchema, doc.meta);
+      const v2 = /** @type {any} */ (doc.meta)?.schemaVersion === 2 && file.startsWith(`${REPO_DIR}/decisions/`);
+      const problems = validate(v2 ? decisionSchema : recordMetaSchema, doc.meta);
       if (problems.length) errors.push(`${ref}:${file}: ${problems.join('; ')}`);
+      else if (v2) decisions.set(doc.meta.id, { meta: /** @type {any} */ (doc.meta), body: doc.body, file });
       else out.set(doc.meta.id, { ...doc, file });
     } catch (err) {
       errors.push(err instanceof Error ? err.message : String(err));
     }
   }
-  return { records: out, errors };
+  return { records: out, decisions, errors };
 }
 
 /** @param {string} commonDir */
@@ -225,14 +238,16 @@ export async function appliedTaskMerged({ home, taskId }) {
  * @param {string} taskId
  * @param {Map<string, RecordDoc>} base null-safe: an empty map when merge state is unknown
  * @param {boolean} checked whether `base` is meaningful
+ * @param {Map<string, any>} decisions schema 2 records of the base branch
  * @returns {Promise<PendingChange[]>}
  */
-async function taskChanges(home, taskId, base, checked) {
+async function taskChanges(home, taskId, base, checked, decisions) {
   const paths = taskPaths(home, taskId);
   const events = await readEvents(paths.events);
   const approvalId = events.filter((e) => e.type === 'approved').at(-1)?.approvalId;
   if (typeof approvalId !== 'string') return [];
   const approval = /** @type {any} */ (await readJson(path.join(paths.approvals, `${approvalId}.json`)));
+  if (approval?.kind === 'judgment') return judgmentChanges(home, taskId, approval, decisions, checked);
   const draft = /** @type {any} */ (await readJson(paths.draft));
   if (!approval || !Array.isArray(approval.items) || !Array.isArray(draft?.records)) return [];
   /** @type {PendingChange[]} */
@@ -259,10 +274,54 @@ async function taskChanges(home, taskId, base, checked) {
 }
 
 /**
+ * The changes of a task's latest accepted judgment, or none when its latest approval is not a
+ * judgment.
+ * @param {string} home
+ * @param {string} taskId
+ * @param {Map<string, any>} decisions
+ * @param {boolean} checked
+ */
+async function judgmentChangesOf(home, taskId, decisions, checked) {
+  const paths = taskPaths(home, taskId);
+  const approvalId = (await readEvents(paths.events)).filter((e) => e.type === 'approved').at(-1)?.approvalId;
+  if (typeof approvalId !== 'string') return [];
+  const approval = /** @type {any} */ (await readJson(path.join(paths.approvals, `${approvalId}.json`)));
+  return approval?.kind === 'judgment' ? judgmentChanges(home, taskId, approval, decisions, checked) : [];
+}
+
+/**
+ * Decision records an accepted judgment of another task adds or removes, while the base
+ * branch does not have that change yet.
+ * @param {string} home
+ * @param {string} taskId
+ * @param {any} judgment
+ * @param {Map<string, any>} decisions schema 2 records of the base branch
+ * @param {boolean} checked
+ * @returns {Promise<PendingChange[]>}
+ */
+async function judgmentChanges(home, taskId, judgment, decisions, checked) {
+  const draft = /** @type {any} */ (await readJson(path.join(taskPaths(home, taskId).approvals, `${judgment.id}.draft.json`)));
+  const { writes, removes } = planDecisions({ judgment, draft: draft ?? { questions: [] } });
+  /** @type {PendingChange[]} */
+  const out = [];
+  for (const w of writes) {
+    if (checked && decisions.has(w.meta.id)) continue;
+    out.push({ id: w.meta.id, change: 'add', taskId, title: w.meta.choice, by: null, seenIn: 'task', scope: { codePaths: w.meta.scope, topics: [] } });
+  }
+  for (const id of removes) {
+    if (checked && !decisions.has(id)) continue;
+    out.push({ id, change: 'retire', taskId, title: decisions.get(id)?.meta.choice ?? id, by: writes.find((w) => w.meta.replaces === id)?.meta.id ?? null, seenIn: 'task', scope: null });
+  }
+  return out;
+}
+
+/**
  * The records that apply to the current task, with merge status, and the pending changes
  * of other tasks.
  * @param {{ cwd: string, home: string, includeTaskStore?: boolean }} options
- * @returns {Promise<{ root: string, merge: MergeCheck, records: ViewRecord[], pending: PendingChange[], errors: string[] }>}
+ * `records` are the records from before the pivot (past records); `decisions` the schema 2
+ * decision records that apply.
+ * @returns {Promise<{ root: string, merge: MergeCheck, records: ViewRecord[], decisions: ViewDecision[], pending: PendingChange[], errors: string[] }>}
  */
 export async function recordView({ cwd, home, includeTaskStore = true }) {
   const info = await repoInfo(cwd);
@@ -279,10 +338,13 @@ export async function recordView({ cwd, home, includeTaskStore = true }) {
   let merge;
   /** @type {Map<string, RecordDoc & { file: string }>} */
   let base = new Map();
+  /** @type {Map<string, import('./records.mjs').DecisionDoc & { file: string }>} */
+  let baseDecisions = new Map();
   try {
     const resolved = await resolveBase({ cwd: root, configBase: config.baseBranch });
     const read = await baseRecords(root, resolved.ref);
     base = read.records;
+    baseDecisions = read.decisions;
     errors.push(...read.errors);
     merge = { status: 'checked', ref: resolved.ref, fetchedAt, reason: null };
   } catch (err) {
@@ -330,12 +392,44 @@ export async function recordView({ cwd, home, includeTaskStore = true }) {
     }
   }
 
+  // Schema 2 decisions are never edited in place: a worktree copy the base lacks is an add;
+  // a base record the worktree no longer has is being retired or replaced.
+  /** @type {ViewDecision[]} */
+  const decisions = [];
+  /** @type {Set<string>} */
+  const ownRemoved = new Set();
+  for (const taskId of scope.own) {
+    if (abandoned(taskId) || !WAITING.has(String(scope.states.get(taskId)))) continue;
+    try {
+      for (const p of await judgmentChangesOf(home, taskId, new Map(), false)) if (p.change === 'retire') ownRemoved.add(p.id);
+    } catch {
+      // unreadable judgment: the base record stays a rule
+    }
+  }
+  if (merge.status === 'unknown') {
+    for (const d of work.decisions) decisions.push({ id: d.meta.id, doc: { meta: d.meta, body: d.body }, status: 'unknown', file: rel(root, d.file) });
+  } else {
+    const workDecisions = new Map(work.decisions.map((d) => [d.meta.id, d]));
+    for (const id of [...new Set([...baseDecisions.keys(), ...workDecisions.keys()])].sort()) {
+      const b = baseDecisions.get(id);
+      const w = workDecisions.get(id);
+      if (b) {
+        // Retired or replaced by this worktree's own judgment: no longer a rule for it.
+        if (!w && ownRemoved.has(id)) continue;
+        decisions.push({ id, doc: { meta: b.meta, body: b.body }, status: 'active', file: b.file });
+      } else if (w) {
+        if (scope.own.has(w.meta.taskId) && !abandoned(w.meta.taskId)) decisions.push({ id, doc: { meta: w.meta, body: w.body }, status: 'pending', file: rel(root, w.file) });
+        else if (!abandoned(w.meta.taskId)) pending.push({ id, change: 'add', taskId: w.meta.taskId, title: w.meta.choice, by: null, seenIn: 'worktree', scope: { codePaths: w.meta.scope, topics: [] } });
+      }
+    }
+  }
+
   if (includeTaskStore) {
     const seen = new Set(pending.map((p) => `${p.taskId}|${p.id}|${p.change}`));
     for (const taskId of scope.others) {
       if (!WAITING.has(String(scope.states.get(taskId)))) continue;
       try {
-        for (const p of await taskChanges(home, taskId, base, merge.status === 'checked')) {
+        for (const p of await taskChanges(home, taskId, base, merge.status === 'checked', baseDecisions)) {
           const key = `${p.taskId}|${p.id}|${p.change}`;
           if (!seen.has(key)) {
             seen.add(key);
@@ -348,5 +442,5 @@ export async function recordView({ cwd, home, includeTaskStore = true }) {
     }
   }
 
-  return { root, merge, records, pending, errors };
+  return { root, merge, records, decisions, pending, errors };
 }

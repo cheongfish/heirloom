@@ -202,9 +202,9 @@ test('session context: convention only outside a git repository', async () => {
   assert.doesNotMatch(context, /^<heirloom-project>$/m);
 });
 
-test('session context: rules, scope of active decisions without titles, pending tasks', async () => {
+test('session context: rules, no scope from records before the pivot, pending tasks', async () => {
   const { upstream, repo, home } = await workRepo();
-  // Records merged on the base branch are active (PLAN 14.3).
+  // Schema 1 records are past records since the pivot: they give no scope (pivot 7).
   await record(upstream.dir, 'a-00000001', 'axiom', '승인은 사람만 한다', ['skills/**']);
   await record(upstream.dir, 'd-00000001', 'decision', '무관한 결정', ['lib/other.mjs']);
   await record(upstream.dir, 'd-00000002', 'decision', '관련 결정', ['src/**/*.mjs', 'lib/other.mjs']);
@@ -232,8 +232,7 @@ test('session context: rules, scope of active decisions without titles, pending 
 
   const context = await buildSessionContext({ cwd: repo.dir, home, pluginRoot: PLUGIN_ROOT });
   assert.match(context, /## 규칙\n- 요청이 기존 결정과 충돌하면[^\n]*\n- spec 문서는 작성 시점의 의도다/);
-  const scope = /## 결정 기록 범위[^\n]*\n((?:- [^\n]*\n?)*)/.exec(context)?.[1] ?? '';
-  assert.equal(scope.trim(), ['- lib/other.mjs', '- src/**/*.mjs', '- 경로 없는 결정 1개: recall-context 스킬의 --topics로 찾는다.'].join('\n'), 'deduplicated decision scope only');
+  assert.doesNotMatch(context, /결정 기록 범위/);
   assert.doesNotMatch(context, /d-0000000\d|a-00000001|무관한 결정|승인은 사람만 한다|src\/gone\.mjs/, 'no ids, titles, axioms or inactive records');
   assert.match(context, new RegExp(`${taskId}.*승인됨`));
   assert.match(context, /apply-approval/);
