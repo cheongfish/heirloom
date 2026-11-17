@@ -5,7 +5,7 @@ description: "Use when the user requests applying an approved handoff, or this s
 
 # Apply Approval
 
-Verify dashboard approval, write approved records and open the PR. Here PR means GitHub pull request (`gh`) or GitLab merge request (`glab`), selected by `pr.provider`.
+Verify the dashboard approval or judgment, write approved records and open the PR. Here PR means GitHub pull request (`gh`) or GitLab merge request (`glab`), selected by `pr.provider`.
 
 Run only on the user's request/agreement, or when this session's wait (`prepare-handoff` step 5) reports `approved`. Session-start notice alone or assumed approval is insufficient.
 
@@ -23,7 +23,7 @@ Without `--task`, lists this worktree's approved unfinished handoffs in `data.pe
 node <this skill>/scripts/apply.mjs --task <taskId>
 ```
 
-Success `data`:
+Success `data`. A judgment (`kind: "judgment"`, from a schema 2 draft) has no `summary` or `records`: its PR paragraph comes from `pr-body.mjs` (step 4), and `status` is the commit the `heirloom/understood` status will go on (`sha`), or why there is none yet (`reason`: `uncommitted` means commit the judged work first).
 
 | Field | Meaning |
 | --- | --- |
@@ -47,7 +47,7 @@ Never write or edit record files yourself.
 
 ## 3. Commit
 
-Follow `commitGuides`. Commit `files`, `removed`, and any uncommitted handoff work without changing approved content. Rerun `apply.mjs --task <taskId>`; require success. On `E_CONFLICT`, stop and report post-approval changes.
+Follow `commitGuides`. Commit `files`, `removed`, and any uncommitted handoff work without changing approved content. Rerun `apply.mjs --task <taskId>`; require success. On `E_CONFLICT`, stop and report post-approval changes. For a judgment, require `status.sha` to be set before you push.
 
 ## 4. Open the pull request
 
@@ -67,7 +67,7 @@ Records are committed; the user can open a PR manually or merge directly. Once a
 
 ### When `pr.existing` is set
 
-Push new commits; never create a duplicate PR. If `previousPrUrl` is set, update the body using "Otherwise", step 2; incremental approval authorizes this without another question. Otherwise update the body only on user request.
+Push new commits; never create a duplicate PR. If `previousPrUrl` is set, update the body using "Otherwise", step 2; incremental approval authorizes this without another question. For a judgment, fetch the current body into a file (`gh pr view <url> --json body -q .body`, or `glab api` for the MR), run `pr-body.mjs` on it (it replaces only its own paragraph), then update. Otherwise update the body only on user request.
 
 ```sh
 # GitHub: REST avoids gh pr edit's Projects classic GraphQL failure on some versions.
@@ -87,6 +87,11 @@ Continue to step 5 with `pr.existing.url`.
    - Copy approved `summary` bullets verbatim and in order. Never reword, merge, translate or extend them. Put them in the template's summary section, or at the top if there is none.
    - Fill other template sections only with known facts; otherwise preserve them.
    - After the summary list `records` by id/title and `pendingItems` as "kept as drafts".
+   - For a judgment: write the rest of the body (template, a short description of the change in your words, without observed values), then add the paragraph. Never write or edit the paragraph yourself:
+
+     ```sh
+     node <this skill>/scripts/pr-body.mjs --task <taskId> --body-file <file>
+     ```
 
 3. **Title:** follow project rules from the template, `CONTRIBUTING.md` or referenced PR guide. Otherwise use one line of at most 72 characters in the summary's language describing the change. Never present the title as approved.
 
@@ -110,5 +115,7 @@ node <this skill>/scripts/complete.mjs --task <taskId> --pr-url <url>
 ```
 
 Use `https://github.com/<owner>/<repo>/pull/<n>` or `https://<host>/<group>/<project>/-/merge_requests/<n>`.
+
+For a judgment this also sets the `heirloom/understood` commit status on the judged commit (`data.status`). If `status.posted` is false, report `status.error`; running `complete.mjs` again retries it. A commit pushed later has no status, which shows on the PR that the judgment does not cover it.
 
 Report the PR URL, added/changed record files and items kept as drafts. Merging and deploying are outside this skill.

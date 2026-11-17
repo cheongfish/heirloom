@@ -44,6 +44,17 @@ if (args[0] === '--version') {
   state.prs.push({ number, url, state: 'OPEN', headRefName: flag('--head'), baseRefName: flag('--base'), title: flag('--title'), body });
   save();
   process.stdout.write(`${url}\n`);
+} else if (args[0] === 'api' && flag('-X') === 'POST' && /^repos\/[^/]+\/[^/]+\/statuses\/[0-9a-f]+$/.test(args.find((a) => a.startsWith('repos/')) ?? '')) {
+  // Commit status: gh api -X POST repos/<owner>/<repo>/statuses/<sha> -f state=… -f context=…
+  if (state.fail === 'status') {
+    process.stderr.write('gh: Resource not accessible by integration (HTTP 403)\n');
+    process.exit(1);
+  }
+  const [, owner, repo, , sha] = args.find((a) => a.startsWith('repos/')).split('/');
+  const fields = Object.fromEntries(args.filter((_, i) => args[i - 1] === '-f').map((f) => [f.slice(0, f.indexOf('=')), f.slice(f.indexOf('=') + 1)]));
+  state.statuses = [...(state.statuses ?? []), { repo: `${owner}/${repo}`, sha, ...fields }];
+  save();
+  process.stdout.write(`${JSON.stringify({ state: fields.state, context: fields.context })}\n`);
 } else if (args[0] === 'api' && flag('-X') === 'PATCH') {
   // REST update of a PR body: gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F body=@<file>
   const m = /^repos\/[^/]+\/[^/]+\/pulls\/(\d+)$/.exec(args.find((a) => a.startsWith('repos/')) ?? '');

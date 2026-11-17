@@ -97,3 +97,13 @@ export async function prState({ cwd, url }) {
   if (state !== 'OPEN' && state !== 'CLOSED' && state !== 'MERGED') throw new HeirloomError('E_INTERNAL', `알 수 없는 PR 상태: ${String(state)}`);
   return state;
 }
+
+/**
+ * Set a commit status (`gh api POST repos/<repo>/statuses/<sha>`).
+ * @param {{ cwd: string, repo: string, sha: string, context: string, description: string }} options
+ */
+export async function postCommitStatus({ cwd, repo, sha, context, description }) {
+  await withRetry(() =>
+    gh(['api', '-X', 'POST', `repos/${repo}/statuses/${sha}`, '-f', 'state=success', '-f', `context=${context}`, '-f', `description=${description}`], { cwd }),
+  );
+}

@@ -16,7 +16,7 @@ import { git, readTreeTexts, repoInfo } from './git.mjs';
 import { findOpenPr, ghReady } from './github.mjs';
 import { findOpenMr, glabReady, parseMrUrl } from './gitlab.mjs';
 import { readIds } from './ids.mjs';
-import { taskPaths } from './paths.mjs';
+import { approvalFiles, taskPaths } from './paths.mjs';
 import { checkPrExpiry } from './pr-expiry.mjs';
 import { findMrTemplates, findProjectRules } from './project-rules.mjs';
 import { planRecordChanges } from './record-changes.mjs';
@@ -26,6 +26,9 @@ import { parseRecord, readRecords, recordPath, writeRecord } from './records.mjs
 import { currentSourceState, hashMaterial } from './state.mjs';
 import { readIndex, tasksForWorktree } from './store.mjs';
 import { withTaskLock } from './task-lock.mjs';
+import { STATUS_CONTEXT, codeMatches, statusCommit } from './judgment-pr.mjs';
+import { postCommitStatus as postGithubStatus } from './github.mjs';
+import { postCommitStatus as postGitlabStatus } from './gitlab.mjs';
 
 /** @typedef {import('./events.mjs').TaskEvent} TaskEvent */
 
@@ -212,7 +215,7 @@ export async function applyApproval({ home, taskId }) {
       });
     }
     if (info.branch === input.branch) {
-      const match = await stateMatches(input, approval);
+      const match = approval.kind === 'judgment' ? await judgedCodeMatches(input) : await stateMatches(input, approval);
       if (!match.ok) {
         await appendEvent(paths.events, { type: 'stale', approvalId: approval.id, reason: match.why });
         throw new HeirloomError('E_CONFLICT', `${match.why}. 승인은 보존되고, 바뀐 부분만 다시 확인받으면 된다`, {
@@ -225,6 +228,10 @@ export async function applyApproval({ home, taskId }) {
     let files;
     if (already) {
       files = /** @type {string[]} */ (lastOf(events, 'records_written')?.files ?? []);
+    } else if (approval.kind === 'judgment') {
+      // A judgment writes no records yet (pivot 7); the event moves the task to the PR step.
+      files = [];
+      await appendEvent(paths.events, { type: 'records_written', approvalId: approval.id, files });
     } else {
       const { written, removed } = await writeApprovedRecords({ root, input, draft, approval, events });
       files = written;
@@ -234,6 +241,7 @@ export async function applyApproval({ home, taskId }) {
   });
 
   const { input, draft, approval, files, already } = written;
+  if (approval.kind === 'judgment') return judgmentResult({ home, taskId, input, approval, files, already });
   const records = approval.items.map((/** @type {any} */ item) => {
     const op = draft.records[item.index];
     const target = op.op === 'add' ? op.id : op.target;
@@ -269,6 +277,51 @@ export async function applyApproval({ home, taskId }) {
     summary: approval.summary.final,
     records: records.filter((/** @type {any} */ r) => r.decision === 'approved'),
     pendingItems: records.filter((/** @type {any} */ r) => r.decision === 'pending').map((/** @type {any} */ r) => r.index),
+    prUrl: state === 'pr_created' && typeof prEvent?.url === 'string' ? prEvent.url : null,
+    previousPrUrl: typeof previousPr?.url === 'string' ? previousPr.url : null,
+    pr,
+    commitGuides: (await findProjectRules(input.repo.root)).commitGuides,
+  };
+}
+
+/**
+ * Whether the working tree still holds the judged code. Markdown changes do not count.
+ * @param {any} input the frozen input the judgment was made on
+ */
+async function judgedCodeMatches(input) {
+  const match = await codeMatches({ input, judgedFiles: input.source.files });
+  return match.ok ? { ok: true, why: null } : { ok: false, why: '판정 이후 코드가 바뀜' };
+}
+
+/**
+ * The apply result of a judgment: what the PR needs (the paragraph comes from pr-body.mjs)
+ * and the commit the status will go on.
+ * @param {{ home: string, taskId: string, input: any, approval: any, files: string[], already: boolean }} options
+ */
+async function judgmentResult({ home, taskId, input, approval, files, already }) {
+  const paths = taskPaths(home, taskId);
+  const after = await readEvents(paths.events);
+  const state = deriveState(after);
+  const prEvent = lastOf(after, 'pr_created');
+  const previousPr = state === 'pr_created' ? undefined : prEvent;
+  /** @type {Awaited<ReturnType<typeof prMaterial>> | null} */
+  let pr = null;
+  try {
+    if (state !== 'pr_created') pr = await prMaterial(input);
+  } catch (err) {
+    throw recordsKept(err, files);
+  }
+  return {
+    taskId,
+    approvalId: approval.id,
+    kind: 'judgment',
+    outcome: approval.outcome,
+    state,
+    alreadyApplied: already,
+    root: input.repo.root,
+    files,
+    removed: [],
+    status: await statusCommit({ input, judgedFiles: input.source.files }),
     prUrl: state === 'pr_created' && typeof prEvent?.url === 'string' ? prEvent.url : null,
     previousPrUrl: typeof previousPr?.url === 'string' ? previousPr.url : null,
     pr,
@@ -360,6 +413,28 @@ async function reviewUrlProvider(url, cwd) {
 }
 
 /**
+ * Post the `heirloom/understood` status. A failure is reported, never thrown: the PR is
+ * already open and the status can be posted again by running complete.mjs again.
+ * @param {{ input: any, prUrl: string, provider: string, sha: string, description: string }} options
+ * @returns {Promise<{ posted: boolean, error: string | null }>}
+ */
+async function postStatus({ input, prUrl, provider, sha, description }) {
+  const cwd = input.repo.root;
+  try {
+    if (provider === 'gitlab') {
+      const mr = /** @type {{ host: string, repo: string }} */ (parseMrUrl(prUrl));
+      await postGitlabStatus({ cwd, host: mr.host, repo: mr.repo, sha, context: STATUS_CONTEXT, description });
+    } else {
+      const repo = /** @type {RegExpExecArray} */ (/^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\//.exec(prUrl))[1];
+      await postGithubStatus({ cwd, repo, sha, context: STATUS_CONTEXT, description });
+    }
+    return { posted: true, error: null };
+  } catch (err) {
+    return { posted: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
  * Record that the PR or MR exists (its creation is its own state, after the records are written).
  * @param {{ home: string, taskId: string, prUrl: string }} options
  */
@@ -379,8 +454,21 @@ export async function completePr({ home, taskId, prUrl }) {
     }
     if (state !== 'applied') throw new HeirloomError('E_CONFLICT', `기록 반영 전에는 PR 완료를 기록할 수 없음 (현재 상태: ${state ?? '없음'})`, { hint: 'apply.mjs를 먼저 실행한다.' });
     const approvalId = lastOf(events, 'records_written')?.approvalId;
-    const next = await appendEvent(paths.events, { type: 'pr_created', approvalId, url: prUrl, provider });
-    return { taskId, state: next, prUrl, provider };
+    const approval = /** @type {any} */ (typeof approvalId === 'string' ? await readJson(approvalFiles(paths.approvals, approvalId).record) : null);
+    if (approval?.kind !== 'judgment') {
+      const next = await appendEvent(paths.events, { type: 'pr_created', approvalId, url: prUrl, provider });
+      return { taskId, state: next, prUrl, provider };
+    }
+    // The judged commit gets the status; a later commit has none, which shows on the PR.
+    const target = await statusCommit({ input, judgedFiles: input.source.files });
+    if (!target.sha) {
+      throw new HeirloomError('E_CONFLICT', target.reason === 'uncommitted' ? '판정한 코드가 아직 커밋되지 않음' : '판정 이후 코드가 바뀜', {
+        hint: target.reason === 'uncommitted' ? '판정한 변경을 커밋하고 push한 뒤 다시 실행한다.' : 'prepare-handoff로 다시 인계해 재확인한다.',
+      });
+    }
+    const status = await postStatus({ input, prUrl, provider, sha: target.sha, description: `Heirloom 판정 ${approval.id}` });
+    const next = await appendEvent(paths.events, { type: 'pr_created', approvalId, url: prUrl, provider, statusSha: target.sha });
+    return { taskId, state: next, prUrl, provider, status: { sha: target.sha, context: STATUS_CONTEXT, ...status } };
   });
 }
 

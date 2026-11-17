@@ -6,7 +6,7 @@ import { draftDigest } from './canonical.mjs';
 import { HeirloomError } from './errors.mjs';
 import { readJson } from './fsx.mjs';
 import { approvalFiles, taskPaths } from './paths.mjs';
-import { approvalSchema, validate } from './schema.mjs';
+import { approvalSchema, judgmentSchema, validate } from './schema.mjs';
 import { verify } from './sign.mjs';
 import { hashEntries } from './state.mjs';
 
@@ -20,7 +20,7 @@ const untrusted = (approvalId, why) =>
   });
 
 /**
- * Read an approval record and check its signature, schema and task. Throws E_VERIFY.
+ * Read an approval or judgment record and check its signature, schema and task. Throws E_VERIFY.
  * @param {{ home: string, taskId: string, approvalId: unknown }} options
  * @returns {Promise<any>} the approval record
  */
@@ -30,7 +30,8 @@ export async function verifiedApprovalRecord({ home, taskId, approvalId }) {
   if (!record) throw untrusted(approvalId, '승인 기록 파일이 없음');
   const result = await verify(home, record);
   if (!result.ok) throw untrusted(approvalId, result.reason === 'missing_signature' ? '서명이 없음' : result.reason === 'unknown_key' ? '알 수 없는 서명 키' : '서명이 맞지 않음');
-  const problems = validate(approvalSchema, record);
+  // Schema 2 is the signed judgment of a schema 2 draft (pivot 5.4).
+  const problems = validate(record.schemaVersion === 2 ? judgmentSchema : approvalSchema, record);
   if (problems.length) throw untrusted(approvalId, `형식 오류 (${problems.join('; ')})`);
   if (record.id !== approvalId || record.taskId !== taskId) throw untrusted(approvalId, '다른 작업이나 다른 승인의 기록임');
   return record;

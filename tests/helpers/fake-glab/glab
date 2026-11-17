@@ -45,8 +45,16 @@ if (args[0] === '--version') {
   }
 } else if (args[0] === 'api') {
   network();
-  const endpoint = args.find((a, i) => i > 0 && !a.startsWith('-') && args[i - 1] !== '--hostname');
+  const endpoint = args.find((a, i) => i > 0 && !a.startsWith('-') && !['--hostname', '-X', '-f'].includes(args[i - 1]));
   const url = new URL(endpoint, 'https://fake.invalid/');
+  const status = /^\/projects\/([^/]+)\/statuses\/([0-9a-f]+)$/.exec(url.pathname);
+  if (status && flag('-X') === 'POST') {
+    const fields = Object.fromEntries(args.filter((_, i) => args[i - 1] === '-f').map((f) => [f.slice(0, f.indexOf('=')), f.slice(f.indexOf('=') + 1)]));
+    state.statuses = [...(state.statuses ?? []), { project: decodeURIComponent(status[1]), sha: status[2], ...fields }];
+    save();
+    process.stdout.write(JSON.stringify({ status: fields.state, name: fields.name }));
+    process.exit(0);
+  }
   const m = /^\/projects\/([^/]+)\/merge_requests(?:\/(\d+))?$/.exec(url.pathname);
   if (!m) {
     process.stderr.write(`fake glab: unsupported endpoint ${endpoint}\n`);
