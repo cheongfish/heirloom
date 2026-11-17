@@ -84,7 +84,7 @@ export async function prTemplateChoice(root, provider = 'github') {
 
 /**
  * Load the latest judgment of a task and check it end to end. Throws E_VERIFY when the
- * judgment is unsigned, forged, an item approval from before the pivot, or does not match the
+ * judgment is unsigned, forged, an item approval from before 0.4, or does not match the
  * current draft.
  * @param {string} home
  * @param {string} taskId
@@ -209,13 +209,13 @@ export async function applyApproval({ home, taskId }) {
     if (already) {
       files = /** @type {string[]} */ (lastOf(events, 'records_written')?.files ?? []);
     } else {
-      // Decision records the person kept (pivot 7). Earlier rounds' files go back first.
+      // Decision records the person kept. Earlier rounds' files go back first.
       const prior = [...new Set(events.filter((e) => e.type === 'records_written' && e.approvalId !== approval.id).flatMap((e) => [...(/** @type {string[]} */ (e.files ?? [])), ...(/** @type {string[]} */ (e.removed ?? []))]))];
       const { written, removed } = await writeDecisions({ root, mergeBase: input.base.mergeBase, judgment: approval, draft, prior });
       files = written;
       await appendEvent(paths.events, { type: 'records_written', approvalId: approval.id, files, ...(removed.length ? { removed } : {}) });
     }
-    // The spec lifetime the person chose (pivot 5.6.2), on every run until it is done.
+    // The spec lifetime the person chose, on every run until it is done.
     const spec = info.branch === input.branch ? await applySpecLifecycle({ root, afterMerge: approval.specAfterMerge }) : null;
     return { input, approval, files, already, spec };
   });

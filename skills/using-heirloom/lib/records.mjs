@@ -83,7 +83,7 @@ export async function writeRecord(root, record) {
 }
 
 /**
- * A decision record since the pivot (pivot 7.2).
+ * A decision record since 0.4.
  * @typedef {object} DecisionMeta
  * @property {2} schemaVersion
  * @property {string} id
@@ -102,7 +102,7 @@ export async function writeRecord(root, record) {
 
 /**
  * Read and validate all records under .heirloom/. Invalid files are reported, not thrown.
- * `records` are the records written before the pivot (schema 1: decisions and axioms), read
+ * `records` are the records written before 0.4 (schema 1: decisions and axioms), read
  * only as past records; `decisions` are the decision records since (schema 2).
  * @param {string} root
  * @returns {Promise<{ records: (RecordDoc & { file: string })[], decisions: (DecisionDoc & { file: string })[], errors: string[] }>}

@@ -1,4 +1,4 @@
-// Probe runs (pivot plan 5.1). The agent proposes commands that show what this change does;
+// Probe runs. The agent proposes commands that show what this change does;
 // Heirloom runs them itself on the frozen base (merge-base) and on head (the handed-off source
 // state, uncommitted changes included), each in a temporary worktree. Observed values in a
 // draft then come from a recorded run, not from the agent's word.

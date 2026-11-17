@@ -122,7 +122,7 @@ export async function prepareHandoff(options) {
     const approvalId = events.filter((e) => e.type === 'approved').at(-1)?.approvalId;
     // A stale task is prepared again even when the content went back to the approved state:
     // the new round is what takes it out of `stale`. So is a task approved item by item before
-    // the pivot: that approval is no longer applied, and the work is judged anew.
+    // 0.4: that approval is no longer applied, and the work is judged anew.
     const legacy = typeof approvalId === 'string' && (state === 'approved' || state === 'applied' || state === 'pr_created') && /** @type {any} */ (await readJson(approvalFiles(paths.approvals, approvalId).record))?.kind !== 'judgment';
     const sameState = state !== 'stale' && !legacy && existing && existing.source.hash === source.hash && materialKey(existing.materials) === materialKey(materials);
 
@@ -193,7 +193,7 @@ export async function prepareHandoff(options) {
 
 /**
  * The PR of an earlier round that is still open, so a recheck updates it instead of opening
- * another, and marks its paragraph as rechecking (pivot 6.4).
+ * another, and marks its paragraph as rechecking.
  * @param {import('./events.mjs').TaskEvent[]} events
  */
 function openPr(events) {
@@ -203,7 +203,7 @@ function openPr(events) {
 
 /**
  * The questions the person sent back in the task's last judgment, when that judgment
- * returned the work: the agent fixes them in this round (pivot 6.1). Null otherwise.
+ * returned the work: the agent fixes them in this round. Null otherwise.
  * @param {ReturnType<typeof taskPaths>} paths
  * @param {import('./events.mjs').TaskEvent[]} events
  */
@@ -227,8 +227,8 @@ async function previousJudgment(paths, events) {
 }
 
 /**
- * What changed since the last signed judgment of this task. An item approval from before the
- * pivot (schema 1) is not rechecked: the new round is a whole new handoff (undefined).
+ * What changed since the last signed judgment of this task. An item approval from before
+ * 0.4 (schema 1) is not rechecked: the new round is a whole new handoff (undefined).
  * @param {{ home: string, root: string, taskId: string, approvalId: string, base: { mergeBase: string }, source: { files: any[] }, materials: any[] }} options
  */
 async function recheckFor({ home, root, taskId, approvalId, base, source, materials }) {
@@ -239,7 +239,7 @@ async function recheckFor({ home, root, taskId, approvalId, base, source, materi
 }
 
 /**
- * Recheck after a judgment (pivot 6.3): the probes run again on the new head, and questions
+ * Recheck after a judgment: the probes run again on the new head, and questions
  * whose probe outputs stayed the same keep their verdict. Here only the changed files are
  * listed, and the code files no behavior description or open choice of the judged draft
  * points at (`unlinked`): the agent adds probes for them.

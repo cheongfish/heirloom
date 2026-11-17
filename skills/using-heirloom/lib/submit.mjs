@@ -66,7 +66,7 @@ export async function submitDraft({ home, taskId }) {
     const probes = (await readJson(path.join(paths.probes, 'result.json'))) ?? null;
     const result = await checkDraft({ root, input, draft, repoFiles, conversation, probes });
     // Spec lines the person said were wrong or deferred must change before the work goes
-    // back to them (pivot 5.6.1, 6.3).
+    // back to them.
     result.errors.push(...(await unchangedSpecLines({ home, taskId, root, events })));
     const ok = result.errors.length === 0;
     await writeJsonAtomic(paths.check, {

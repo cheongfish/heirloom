@@ -186,7 +186,7 @@ const recordSource = object({ ref: nonEmpty, sha256 }, { optional: { lines: line
 
 // ---------------------------------------------------------------- records (5.1)
 
-// Records from before the pivot (decisions and axioms): no longer written, still read as past
+// Records from before 0.4 (decisions and axioms): no longer written, still read as past
 // records.
 
 const recordApproval = object({ id: approvalId, signer: nonEmpty, approvedAt: timestamp });
@@ -221,9 +221,9 @@ export const recordMetaSchema = object(
   },
 );
 
-// ---------------------------------------------------------------- decision records 2 (pivot 7)
+// ---------------------------------------------------------------- decision records 2
 
-/** A decision record id (`d-…`). Axioms belong to the records before the pivot. */
+/** A decision record id (`d-…`). Axioms belong to the records before 0.4. */
 const decisionId = str({ pattern: /^d-[0-9a-hjkmnp-tv-z]{8}$/ });
 
 /**
@@ -245,7 +245,7 @@ export const decisionAnchor = object(
 );
 
 /**
- * Anchors of a decision: at least one, and at least one test that locks it (pivot 7.2).
+ * Anchors of a decision: at least one, and at least one test that locks it.
  * @type {Validator}
  */
 const anchorList = (v, at, errors) => {
@@ -255,10 +255,10 @@ const anchorList = (v, at, errors) => {
   }
 };
 
-/** What the agent proposes to keep when the person answers a fork question (pivot 7.1). */
+/** What the agent proposes to keep when the person answers a fork question. */
 export const decisionProposal = object({ scope: arrayOf(codePath, { min: 1 }), anchors: anchorList }, { optional: { replaces: decisionId } });
 
-/** The narrow decision record since the pivot (pivot 7.2). */
+/** The narrow decision record since 0.4. */
 export const decisionSchema = object({
   schemaVersion: oneOf(2),
   id: decisionId,
@@ -321,7 +321,7 @@ export const inputSchema = object({
   },
 });
 
-// ---------------------------------------------------------------- draft v2 (pivot 5.3)
+// ---------------------------------------------------------------- draft v2
 
 /** Probe and question ids: lower case, digits and hyphens. */
 export const SHORT_ID = /^[a-z][a-z0-9-]{0,31}$/;
@@ -330,7 +330,7 @@ const shortId = str({ pattern: SHORT_ID });
 const questionSources = arrayOf(draftSource);
 
 /**
- * The draft of the agent since the pivot: what the change does, backed by probe runs, and the
+ * The draft of the agent since 0.4: what the change does, backed by probe runs, and the
  * questions the human answers before seeing the observed results.
  */
 export const draftV2Schema = object(
@@ -357,7 +357,7 @@ export const draftV2Schema = object(
         fork: object(
           { id: shortId, kind: oneOf('fork'), probes: arrayOf(shortId, { min: 1 }), codePaths: arrayOf(codePath, { min: 1 }), prompt: nonEmpty, whyOpen: nonEmpty },
           // `decision`: what to keep if the person keeps the answer in the repository;
-          // `retires`: a decision record this question asks whether it still holds (pivot 7.4).
+          // `retires`: a decision record this question asks whether it still holds.
           { optional: { sources: questionSources, decision: decisionProposal, retires: decisionId } },
         ),
       }),
@@ -367,7 +367,7 @@ export const draftV2Schema = object(
   },
   {
     optional: {
-      // Decisions settled in a PR or issue discussion, for the person to confirm (pivot 7.1).
+      // Decisions settled in a PR or issue discussion, for the person to confirm.
       // `fetched` is filled by the check: who wrote the comment and a hash of its text.
       discussions: arrayOf(
         object(
@@ -379,7 +379,7 @@ export const draftV2Schema = object(
   },
 );
 
-// ---------------------------------------------------------------- judgment (pivot 5.4)
+// ---------------------------------------------------------------- judgment
 
 /** What the person concluded about one question. */
 export const VERDICTS = /** @type {const} */ (['as-expected', 'my-misunderstanding', 'answered', 'revert', 'split']);
@@ -389,7 +389,7 @@ export const ACCEPTING = new Set(['as-expected', 'my-misunderstanding', 'answere
 const probeHash = object({ base: sha256, head: sha256 });
 
 /**
- * What the spec becomes when a question citing it is sent back (pivot 5.6.1), with the cited
+ * What the spec becomes when a question citing it is sent back, with the cited
  * parts as they were, so the next handoff can tell whether they changed.
  */
 const specChoice = object({
@@ -400,7 +400,7 @@ const specChoice = object({
   ),
 });
 
-/** The spec's lifetime once every question is accepted (pivot 5.6.2). */
+/** The spec's lifetime once every question is accepted. */
 const specAfterMerge = object(
   { action: oneOf('delete', 'archive', 'keep'), specs: arrayOf(nonEmpty, { min: 1 }) },
   { optional: { owner: nonEmpty }, check: (o) => (o.action === 'keep') === (typeof o.owner === 'string') ? [] : ['owner는 keep일 때만, 그리고 반드시 쓴다'] },
@@ -473,7 +473,7 @@ export const indexSchema = object({
   lastFetch: recordOf(timestamp),
 });
 
-// ---------------------------------------------------------------- probes (pivot 5.1)
+// ---------------------------------------------------------------- probes
 
 /** A command as an argument vector. It runs without a shell. */
 const argv = arrayOf(nonEmpty, { min: 1 });

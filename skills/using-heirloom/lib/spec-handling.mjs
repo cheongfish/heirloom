@@ -1,10 +1,10 @@
-// What happens to the spec of a judged task (pivot 5.6).
+// What happens to the spec of a judged task.
 //
 // When the person sends back a question that cites spec lines, they also say what the spec
 // should become: wrong (the agent fixes or removes those lines), deferred (the agent marks them
 // as on hold) or a snapshot (the spec stays; the PR says the cited part is not implemented).
 // For the first two, the next handoff is refused while the cited lines are still there word for
-// word (pivot 6.3, step 5).
+// word.
 //
 // When every question is accepted, the person chooses the spec's lifetime: delete it, move it
 // to the archive or keep it. `apply` carries that choice out in the repository.
@@ -19,13 +19,13 @@ import { git, tryGit } from './git.mjs';
 import { approvalFiles, taskPaths } from './paths.mjs';
 import { isMarkdownCodePath } from './schema.mjs';
 
-/** What the spec becomes when a question citing it is sent back (pivot 5.6.1). */
+/** What the spec becomes when a question citing it is sent back. */
 export const SPEC_CHOICES = /** @type {const} */ (['spec-wrong', 'defer', 'snapshot']);
 /** Choices that require the agent to change the cited lines before the next handoff. */
 export const SPEC_EDITING = new Set(['spec-wrong', 'defer']);
-/** The spec's lifetime once the work is accepted (pivot 5.6.2). */
+/** The spec's lifetime once the work is accepted. */
 export const AFTER_MERGE = /** @type {const} */ (['delete', 'archive', 'keep']);
-/** Where archived specs go. The session rule reads it as past record (pivot 6.5). */
+/** Where archived specs go. The session rule reads it as past record. */
 export const ARCHIVE_DIR = 'docs/specs/archive';
 
 /** @param {any} input @returns {string[]} specs inside the repository the handoff was given */
@@ -122,7 +122,7 @@ async function returnedJudgments(home, taskId, events) {
 
 /**
  * Errors for spec lines the person said were wrong or deferred, which the agent has not
- * changed yet (pivot 6.3, step 5). Empty when nothing is left.
+ * changed yet. Empty when nothing is left.
  * @param {{ home: string, taskId: string, root: string, events: import('./events.mjs').TaskEvent[] }} options
  * @returns {Promise<string[]>}
  */
@@ -174,10 +174,10 @@ async function exists(p) {
 }
 
 /**
- * Carry out the spec lifetime the person chose (pivot 5.6.2). Runs on every apply and does
+ * Carry out the spec lifetime the person chose. Runs on every apply and does
  * nothing twice. A spec with changes not committed yet is left alone (`uncommitted`): deleting
  * it would lose the only copy, so the agent commits first and applies again. Only Markdown
- * specs are moved or removed, so the judged code stays the same (pivot 6.2).
+ * specs are moved or removed, so the judged code stays the same.
  * @param {{ root: string, afterMerge: { action: string, specs: string[] } | undefined }} options
  * @returns {Promise<{ action: string, owner?: string, specs: { ref: string, status: string, to?: string }[], files: string[], removed: string[], pending: boolean } | null>}
  */

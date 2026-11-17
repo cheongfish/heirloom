@@ -1,4 +1,4 @@
-// Anchor check of a decision record at recall (pivot 7.3). Only presence is checked, never
+// Anchor check of a decision record at recall. Only presence is checked, never
 // meaning: a function that keeps its name but changes its behavior is caught only by a test
 // anchor that fails. That is why every record has at least one test anchor.
 

@@ -122,9 +122,9 @@ export async function checkDraft({ root, input, draft, repoFiles, conversation =
   return { errors: ['$.schemaVersion: 2여야 함. prepare-handoff 스킬의 스키마 2 형식으로 쓴다'], warnings: [], draft: isObject(draft) ? structuredClone(draft) : {} };
 }
 
-// ---------------------------------------------------------------- schema 2 (pivot 5.3)
+// ---------------------------------------------------------------- schema 2
 
-/** Questions per handoff that one person can answer in one sitting (pivot 5.2). */
+/** Questions per handoff that one person can answer in one sitting. */
 const QUESTIONS_MAX = 5;
 
 /**
@@ -300,7 +300,7 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export const hasSymbol = (text, symbol) => new RegExp(`(^|[^\\p{L}\\p{N}_$])${escapeRe(symbol)}(?=$|[^\\p{L}\\p{N}_$])`, 'u').test(text);
 
 /**
- * Checks of what a decision record would rest on (pivot 7.2): its scope matches repository
+ * Checks of what a decision record would rest on: its scope matches repository
  * files, its anchor files and symbols exist, its test anchors passed on head in the recorded
  * test run, and a replaced or retired record exists.
  * @param {{ root: string, repoFiles: string[], probes: any, errors: string[] }} options

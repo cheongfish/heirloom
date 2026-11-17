@@ -8,7 +8,7 @@
 // them; for any other task they are only warned about by id and title. When the base branch
 // cannot be resolved, the worktree's files are used and every status is 'unknown' (미확인).
 //
-// Records from before the pivot (schema 1 decisions and axioms) are only listed as past
+// Records from before 0.4 (schema 1 decisions and axioms) are only listed as past
 // records: from the base branch when it can be read, else from the worktree.
 
 import { stat } from 'node:fs/promises';
@@ -31,7 +31,7 @@ import { readIndex } from './store.mjs';
 /** @typedef {'add' | 'retire'} ChangeKind */
 
 /**
- * @typedef {object} ViewRecord A record from before the pivot (schema 1), listed only.
+ * @typedef {object} ViewRecord A record from before 0.4 (schema 1), listed only.
  * @property {string} id
  * @property {RecordDoc} doc
  * @property {RecordStatus} status
@@ -40,7 +40,7 @@ import { readIndex } from './store.mjs';
  */
 
 /**
- * @typedef {object} ViewDecision A decision record since the pivot (schema 2).
+ * @typedef {object} ViewDecision A decision record since 0.4 (schema 2).
  * @property {string} id
  * @property {import('./records.mjs').DecisionDoc} doc
  * @property {'active' | 'pending' | 'unknown'} status
@@ -178,7 +178,7 @@ export async function appliedTaskMerged({ home, taskId }) {
 
 /**
  * The changes of a task's latest accepted judgment, or none when its latest approval is not a
- * judgment (an approval from before the pivot changes nothing that is read now).
+ * judgment (an approval from before 0.4 changes nothing that is read now).
  * @param {string} home
  * @param {string} taskId
  * @param {Map<string, any>} decisions
@@ -222,7 +222,7 @@ async function judgmentChanges(home, taskId, judgment, decisions, checked) {
  * The records that apply to the current task, with merge status, and the pending changes
  * of other tasks.
  * @param {{ cwd: string, home: string, includeTaskStore?: boolean }} options
- * `records` are the records from before the pivot (past records); `decisions` the schema 2
+ * `records` are the records from before 0.4 (past records); `decisions` the schema 2
  * decision records that apply.
  * @returns {Promise<{ root: string, merge: MergeCheck, records: ViewRecord[], decisions: ViewDecision[], pending: PendingChange[], errors: string[] }>}
  */

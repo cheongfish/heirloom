@@ -20,7 +20,7 @@ import { codeMatches } from './judgment-pr.mjs';
 
 const SCOPE_SHOWN = 30;
 
-/** What the person chose for the spec of a question they sent back (pivot 5.6.1). @type {Record<string, string>} */
+/** What the person chose for the spec of a question they sent back. @type {Record<string, string>} */
 const SPEC_LABEL = { 'spec-wrong': 'spec이 틀림', defer: '미룸', snapshot: '스냅샷' };
 
 /** Rules every session gets. The first carried most of the effect in the recall experiments. */
@@ -81,7 +81,7 @@ async function projectSection(cwd, home) {
   const errors = view.errors;
   // Only the scope of decisions is given, never their titles or text: the agent reads a record
   // with recall-context once it knows which files it will change.
-  // Records from before the pivot are past records and give no scope (pivot 7).
+  // Records from before 0.4 are past records and give no scope.
   const scope = [...new Set(view.decisions.flatMap((d) => d.doc.meta.scope))].sort();
 
   const lines = ['## 규칙', ...RULES.map((r) => `- ${r}`)];
@@ -110,7 +110,7 @@ async function projectSection(cwd, home) {
       else if (state === 'awaiting_approval') pending.push(`- ${taskId}: 대시보드에서 사람의 승인을 기다리는 중.`);
       else if (state === 'pr_created') {
         if (await appliedTaskMerged({ home, taskId })) continue;
-        // After the PR, new commits are not covered by the judgment (pivot 6.4).
+        // After the PR, new commits are not covered by the judgment.
         const pr = /** @type {any} */ (events.filter((e) => e.type === 'pr_created').at(-1));
         const input = /** @type {any} */ (await readJson(taskPaths(home, taskId).input));
         if (typeof pr?.statusSha === 'string' && input && !(await codeMatches({ input, judgedFiles: input.source.files })).ok) {

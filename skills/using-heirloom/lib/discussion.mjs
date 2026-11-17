@@ -1,4 +1,4 @@
-// Decisions settled in a PR or issue discussion (pivot 7.1, second entry). The agent cites the
+// Decisions settled in a PR or issue discussion (the second way in). The agent cites the
 // comment by URL with an exact quote; Heirloom fetches the comment itself with gh or glab and
 // checks the quote, so a record never rests on a comment that does not say it.
 

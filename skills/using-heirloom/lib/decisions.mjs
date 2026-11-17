@@ -1,10 +1,10 @@
-// Narrow decision records (pivot 7): what a judgment keeps in the repository.
+// Narrow decision records: what a judgment keeps in the repository.
 //
 // A record comes in only two ways: a `fork` answer the person chose to keep in the repository,
 // or a decision settled in a PR or issue discussion that the person confirmed. Each record
 // names where the code holds the decision now (anchors), with at least one test that locks it.
 // Records are never edited in place: a new record replaces an old one, and a record that no
-// longer holds is removed. Records written before the pivot (schema 1, axioms) are only read.
+// longer holds is removed. Records written before 0.4 (schema 1, axioms) are only read.
 
 import { rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';

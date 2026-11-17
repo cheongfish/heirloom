@@ -13,8 +13,8 @@ export const DEFAULT_SPEC_GLOBS = Object.freeze(['docs/superpowers/specs/**', '*
  * @property {string[]} specGlobs
  * @property {{ maxRecords: number, maxTokens: number }} recall
  * @property {{ mode: 'off' | 'phase' }} testCadence opt-in rule for how often the full test suite runs
- * @property {ProbeConfig} probe how probes run (pivot 5.1)
- * @property {{ afterMerge: 'delete' | 'archive' | 'keep' }} spec the spec lifetime the judgment screen offers first (pivot 5.6.2)
+ * @property {ProbeConfig} probe how probes run
+ * @property {{ afterMerge: 'delete' | 'archive' | 'keep' }} spec the spec lifetime the judgment screen offers first
  */
 
 /**

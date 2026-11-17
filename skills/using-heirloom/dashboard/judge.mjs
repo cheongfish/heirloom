@@ -1,4 +1,4 @@
-// Prediction, reveal and judgment of a schema 2 draft (pivot plan 5.2, 5.4).
+// Prediction, reveal and judgment of a schema 2 draft.
 //
 // The person first answers the questions that ask for a prediction (`predict`, `test-lock`).
 // Until those answers are saved, the server sends nothing that shows a result: no probe
@@ -119,7 +119,7 @@ function hashesFor(q, probes) {
 }
 
 /**
- * Verdicts kept from the judgment this round rechecks (pivot 6.3): a question asked the same
+ * Verdicts kept from the judgment this round rechecks: a question asked the same
  * way whose probe outputs did not change keeps its accepting verdict and is not asked again.
  * @param {{ home: string, taskId: string, input: any, draft: any, probes: any }} options
  * @returns {Promise<{ basedOn: string | null, carried: Map<string, any> }>}
@@ -427,7 +427,7 @@ export async function judgeTask({ home, taskId, request, keystore, now = new Dat
 
 /**
  * The spec lifetime of an accepted judgment: what the person chose, or the project default
- * when the request names none (pivot 5.6.2). Keeping a spec needs its owner.
+ * when the request names none. Keeping a spec needs its owner.
  * @param {any} request
  * @param {string} root
  * @param {string[]} specs
@@ -448,7 +448,7 @@ async function chosenAfterMerge(request, root, specs) {
 
 /**
  * Whether the person keeps a fork answer in the repository as a decision record, or retires the
- * record the question asked about (pivot 7.1, 7.4). Without a choice the answer stays in the PR
+ * record the question asked about. Without a choice the answer stays in the PR
  * only.
  * @param {any} q
  * @param {any} item
@@ -469,7 +469,7 @@ function keptAs(q, item) {
 }
 
 /**
- * The person's answer to each discussion candidate (pivot 7.1): confirmed ones become decision
+ * The person's answer to each discussion candidate: confirmed ones become decision
  * records when the work is accepted; the others are dropped without sending the work back.
  * @param {any} draft
  * @param {unknown} sent

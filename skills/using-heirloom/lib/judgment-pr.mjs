@@ -1,5 +1,5 @@
-// What a signed judgment (pivot 5.4) puts on the pull request: the "사람이 확인한 동작"
-// paragraph of the PR body and the `heirloom/understood` commit status (pivot 5.5).
+// What a signed judgment puts on the pull request: the "사람이 확인한 동작"
+// paragraph of the PR body and the `heirloom/understood` commit status.
 //
 // The paragraph is built from the judgment record only; neither the person nor the agent
 // writes it. It sits between markers, so updating it never touches the rest of the body.
@@ -21,7 +21,7 @@ export const STATUS_CONTEXT = 'heirloom/understood';
 
 /**
  * Hash of the code part of a source state. Markdown changes (spec lifecycle, docs) after a
- * judgment do not change what the person judged (pivot 5.6.2, 6.2).
+ * judgment do not change what the person judged.
  * @param {{ path: string, status: 'A' | 'M' | 'D', sha256: string }[]} files
  */
 export const codeHash = (files) => hashEntries(files.filter((f) => !isMarkdownCodePath(f.path)));
@@ -61,7 +61,7 @@ const VERDICT_TEXT = {
 /** @param {string} s */
 const oneLine = (s) => s.replace(/\s+/g, ' ').trim();
 
-/** What the agent did with spec lines the person sent back (pivot 5.6.1). @type {Record<string, string>} */
+/** What the agent did with spec lines the person sent back. @type {Record<string, string>} */
 const SPEC_CHOICE_TEXT = {
   'spec-wrong': 'spec이 틀렸다고 판정해 spec에서 고침',
   defer: '이번에는 하지 않기로 하고 spec에 보류로 표시함',
@@ -157,8 +157,7 @@ export function mergeSection(body, section) {
 
 /**
  * Write the paragraph of the task's latest accepted judgment into a PR body file, replacing
- * an earlier paragraph. `rechecking` marks it as judged on an older head while a recheck runs
- * (pivot 6.4).
+ * an earlier paragraph. `rechecking` marks it as judged on an older head while a recheck runs.
  * @param {{ home: string, taskId: string, bodyFile: string, rechecking?: boolean }} options
  */
 export async function writePrBody({ home, taskId, bodyFile, rechecking = false }) {

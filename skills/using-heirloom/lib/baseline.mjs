@@ -30,8 +30,8 @@ export async function verifiedApprovalRecord({ home, taskId, approvalId }) {
   if (!record) throw untrusted(approvalId, '승인 기록 파일이 없음');
   const result = await verify(home, record);
   if (!result.ok) throw untrusted(approvalId, result.reason === 'missing_signature' ? '서명이 없음' : result.reason === 'unknown_key' ? '알 수 없는 서명 키' : '서명이 맞지 않음');
-  // Only the signed judgment of a schema 2 draft (pivot 5.4) is read. Item approvals from
-  // before the pivot are no longer applied or rechecked: the work is handed off again.
+  // Only the signed judgment of a schema 2 draft is read. Item approvals from
+  // before 0.4 are no longer applied or rechecked: the work is handed off again.
   if (record.schemaVersion !== 2 || record.kind !== 'judgment') {
     throw new HeirloomError('E_VERIFY', `승인 ${approvalId}은(는) 지원하지 않는 이전 형식(항목별 승인)임`, {
       hint: '이 승인으로는 기록과 PR을 만들지 않는다. 사용자에게 알리고 prepare-handoff로 다시 인계해 판정을 받는다.',

@@ -864,7 +864,7 @@ function judgeCard(f, q) {
 /** @param {any} a an anchor of a decision record */
 const anchorText = (a) => (a.test ? `테스트 ${a.test} (${a.file})` : `${a.file}의 ${a.symbol}`);
 
-/** Where an answered fork question is kept (pivot 7.1, 7.4). @param {JudgeForm} f @param {any} q */
+/** Where an answered fork question is kept. @param {JudgeForm} f @param {any} q */
 function keepBlock(f, q) {
   /** @type {[string, string][]} */
   const options = [['pr', '이 PR에서만']];
@@ -1279,7 +1279,7 @@ function drawForm(task) {
     refreshJudge();
     return;
   }
-  // A judged task, or a draft from before the pivot, which is no longer judged here.
+  // A judged task, or a draft from before 0.4, which is no longer judged here.
   judge = null;
   replace(panels.judge);
   const card = judgmentSummaryCard(task);

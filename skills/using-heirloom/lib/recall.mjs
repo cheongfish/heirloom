@@ -1,9 +1,9 @@
 // Recall: the full text of the decision records related to a query, with their anchors
-// checked (pivot 7.3). Read-only.
+// checked. Read-only.
 //
 // Relevance uses explicit ids and the record's scope against the query paths. A path match is a
 // hint, not proof that the record applies: every result carries the reasons it was chosen.
-// Records written before the pivot (schema 1 decisions, axioms) are past records: they are
+// Records written before 0.4 (schema 1 decisions, axioms) are past records: they are
 // named, never served as rules.
 
 import { loadProjectConfig } from './config.mjs';
