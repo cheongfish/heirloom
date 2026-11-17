@@ -36,7 +36,6 @@ The files are JSON, so they cannot hold comments. Unknown keys and out-of-range 
 | `specGlobs` | `["docs/superpowers/specs/**", "**/specs/**/*.md"]` | Paths that count as spec documents. Used by the stop hook's handoff reminder. When a handed-off spec does not match, the agent offers to add a pattern and, if you agree, creates this file or adds to it. |
 | `recall.maxRecords` | `8` | Maximum number of records returned by context recall |
 | `recall.maxTokens` | `6000` | Token budget for context recall, estimated as UTF-8 bytes ÷ 3 (about one token per Hangul syllable) |
-| `sessionIndex.maxDecisions` | `30` | Number of decisions listed in the session-start index |
 | `curation.minUnreviewed` | `10` | Suggest a [context curation](curation.md) when this many decisions are unreviewed |
 | `curation.maxAgeDays` | `30` | … or when this many days passed since the last curation |
 | `curation.minForAge` | `3` | … and at least this many decisions are unreviewed |

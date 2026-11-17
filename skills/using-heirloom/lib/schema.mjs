@@ -420,6 +420,7 @@ export const projectConfigSchema = object(
       baseBranch: nonEmpty,
       specGlobs: arrayOf(nonEmpty),
       recall: object({}, { optional: { maxRecords: int({ min: 1 }), maxTokens: int({ min: 1 }) } }),
+      // Accepted for configs written before 0.4 and ignored: the session start no longer lists decisions.
       sessionIndex: object({}, { optional: { maxDecisions: int({ min: 0 }) } }),
       curation: object({}, { optional: { minUnreviewed: int({ min: 1 }), maxAgeDays: int({ min: 1 }), minForAge: int({ min: 1 }), batchSize: int({ min: 1 }) } }),
       testCadence: object({}, { optional: { mode: oneOf('off', 'phase') } }),

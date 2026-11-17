@@ -15,7 +15,6 @@ export const DEFAULT_SPEC_GLOBS = Object.freeze(['docs/superpowers/specs/**', '*
  * @property {string | null} baseBranch
  * @property {string[]} specGlobs
  * @property {{ maxRecords: number, maxTokens: number }} recall
- * @property {{ maxDecisions: number }} sessionIndex
  * @property {CurationConfig} curation
  * @property {{ mode: 'off' | 'phase' }} testCadence opt-in rule for how often the full test suite runs
  */
@@ -39,7 +38,6 @@ export async function loadProjectConfig(root) {
     baseBranch: c.baseBranch ?? null,
     specGlobs: c.specGlobs ?? [...DEFAULT_SPEC_GLOBS],
     recall: { maxRecords: c.recall?.maxRecords ?? 8, maxTokens: c.recall?.maxTokens ?? 6000 },
-    sessionIndex: { maxDecisions: c.sessionIndex?.maxDecisions ?? 30 },
     curation: { ...CURATION_DEFAULTS, ...(c.curation ?? {}) },
     testCadence: { mode: c.testCadence?.mode ?? 'off' },
   };

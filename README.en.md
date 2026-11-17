@@ -38,7 +38,7 @@ Of the dashed lines, phase tests work only when you turn on the [optional featur
 - The agent writes the records to `.heirloom/` and opens the PR (an MR on GitLab) with the approved summary.
 - If the code changes after approval, only the items the change touches come back to you.
 ### Context management
-- Later sessions start with the active decisions and rules (axioms).
+- Later sessions get the paths that decisions cover, and read the full decisions before changing those paths.
 - When decisions pile up, the dashboard suggests a context curation.
 
 ## Optional features

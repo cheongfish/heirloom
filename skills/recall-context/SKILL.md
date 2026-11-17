@@ -5,11 +5,11 @@ description: "Use before changing covered files or relying on a decision or axio
 
 # Recall Context
 
-Read full records before relying on them or editing covered code; the session-start index alone is insufficient.
+Read full records before relying on them or editing covered code; the session start lists only the covered paths.
 
 ## Run
 
-Run when intended files are known, an index entry is `[관련]`, or a user/spec cites a record id. Repeat for expanded scope, not identical queries.
+Run when intended files are known and fall under a covered path listed at session start, or a user/spec cites a record id. Repeat for expanded scope, not identical queries.
 
 ```sh
 node <this skill>/scripts/recall.mjs [--paths <path,...>] [--topics <topic,...>] [--ids <id,...>] [--limit <n>]

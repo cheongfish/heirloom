@@ -170,10 +170,8 @@ test('pending records: served to the task that approved them, only warned about 
   assert.deepEqual((await recall({ cwd: repo.dir, home, topics: ['nothing'] })).pendingWarnings, []);
 
   const ctx = await buildSessionContext({ cwd: repo.dir, home, pluginRoot: ROOT });
-  assert.match(ctx, /d-00000010 \[머지 대기\]: d-00000010 제목/);
-  assert.match(ctx, /다른 작업의 머지 대기 변경[\s\S]*d-00000011: 추가 제안/);
-  assert.match(ctx, /d-00000001: 폐기 제안/);
-  assert.match(ctx, /머지 판정: origin\/main 기준/);
+  assert.doesNotMatch(ctx, /d-000000\d\d/, 'no record ids or titles at session start');
+  assert.doesNotMatch(ctx, /머지 대기/, 'other tasks’ pending changes are left to recall-context');
 });
 
 test('own pending records of an expired task are dropped', async () => {
@@ -235,7 +233,6 @@ test('without a resolvable base branch the merge state is unknown and worktree f
   assert.match(String(view.merge.reason), /원격이 없어/);
   const out = await recall({ cwd: repo.dir, home, topics: ['money'] });
   assert.deepEqual(out.records.map((r) => [r.id, r.status]), [['d-00000001', 'unknown']]);
-  assert.match(await buildSessionContext({ cwd: repo.dir, home, pluginRoot: ROOT }), /머지 판정: 미확인/);
 });
 
 test('limits: --limit and the token budget, with what was left out', async () => {

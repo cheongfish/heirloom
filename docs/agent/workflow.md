@@ -80,8 +80,8 @@ Decisions from many handoffs can be reviewed together in a [context curation](cu
 
 The agent does this.
 
-- **At session start.** The agent receives a summary of the active axioms and an index of active decisions. Decisions related to the current changes come first.
-- **Once the task is known.** The agent runs the `recall-context` skill to fetch the full text of the records related to the files, topics or record IDs it is working on. Each result says why it matched. A path match is a hint; the agent still reads the record's scope. It passes the files it is about to change, so recall works before anything has changed; with no query and no changed code files, recall fails with exit 2 instead of returning an empty result.
+- **At session start.** The agent receives two rules (do not overturn an existing decision on its own; a spec is the intent at the time it was written) and the list of paths that active decisions cover. Record titles and text are not included.
+- **Once the task is known.** Before changing a file under a covered path, the agent runs the `recall-context` skill to fetch the full text of the records related to the files, topics or record IDs it is working on. Each result says why it matched. A path match is a hint; the agent still reads the record's scope. It passes the files it is about to change, so recall works before anything has changed; with no query and no changed code files, recall fails with exit 2 instead of returning an empty result.
 - **Limits.** Recall returns at most `recall.maxRecords` records within `recall.maxTokens` tokens ([Configuration](configuration.md#project-settings)). Records left out are listed by ID so the agent can ask for them.
 
 ### When a record is active
@@ -93,6 +93,6 @@ The agent does this.
 | Inactive | Its supersede or deprecation is merged | No. Kept as history. |
 | Unknown | The target branch cannot be resolved | The worktree's records are used and marked unconfirmed |
 
-- **No fetch.** Session start and recall compare with the local remote-tracking branch (for example `origin/main`) and never fetch. They report when the repository was last fetched, so a merge after that is not seen until the next fetch. Applying an approval fetches the target branch.
+- **No fetch.** Recall compares with the local remote-tracking branch (for example `origin/main`) and never fetch. It reports when the repository was last fetched, so a merge after that is not seen until the next fetch. Applying an approval fetches the target branch.
 - **Parallel work.** A supersede or deprecation approved in another worktree of the same repository is shown as a warning until it is merged.
 - **Edits during PR review.** The merged wording is what counts.

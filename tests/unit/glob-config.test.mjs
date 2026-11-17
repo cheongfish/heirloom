@@ -42,7 +42,6 @@ test('loadProjectConfig: defaults without a file, merges and validates a file', 
   const defaults = await loadProjectConfig(root);
   assert.equal(defaults.baseBranch, null);
   assert.deepEqual(defaults.specGlobs, DEFAULT_SPEC_GLOBS);
-  assert.equal(defaults.sessionIndex.maxDecisions, 30);
   assert.equal(defaults.recall.maxRecords, 8);
 
   await mkdir(path.join(root, '.heirloom'));
@@ -53,7 +52,7 @@ test('loadProjectConfig: defaults without a file, merges and validates a file', 
   const merged = await loadProjectConfig(root);
   assert.equal(merged.baseBranch, 'develop');
   assert.deepEqual(merged.specGlobs, ['spec/**']);
-  assert.equal(merged.sessionIndex.maxDecisions, 5);
+  assert.equal('sessionIndex' in merged, false, 'accepted for old configs, ignored');
   assert.equal(merged.recall.maxTokens, 6000);
 
   await writeFile(path.join(root, '.heirloom', 'config.json'), JSON.stringify({ schemaVersion: 1, baseBranch: 3 }));

@@ -202,15 +202,14 @@ test('session context: convention only outside a git repository', async () => {
   assert.doesNotMatch(context, /^<heirloom-project>$/m);
 });
 
-test('session context: axioms, decision index with related ones first, cap, pending tasks', async () => {
+test('session context: rules, scope of active decisions without titles, pending tasks', async () => {
   const { upstream, repo, home } = await workRepo();
   // Records merged on the base branch are active (PLAN 14.3).
   await record(upstream.dir, 'a-00000001', 'axiom', '승인은 사람만 한다', ['skills/**']);
-  await record(upstream.dir, 'a-00000002', 'axiom', '비활성 axiom', [], false);
   await record(upstream.dir, 'd-00000001', 'decision', '무관한 결정', ['lib/other.mjs']);
-  await record(upstream.dir, 'd-00000002', 'decision', '관련 결정', ['src/**/*.mjs']);
-  await record(upstream.dir, 'd-00000003', 'decision', '또 다른 무관한 결정', ['lib/x.mjs']);
-  await record(upstream.dir, 'd-00000004', 'decision', '폐기된 결정', ['src/a.mjs'], false);
+  await record(upstream.dir, 'd-00000002', 'decision', '관련 결정', ['src/**/*.mjs', 'lib/other.mjs']);
+  await record(upstream.dir, 'd-00000003', 'decision', '경로 없는 결정', []);
+  await record(upstream.dir, 'd-00000004', 'decision', '폐기된 결정', ['src/gone.mjs'], false);
   upstream.commitAll('records');
   repo.git('fetch', '-q', 'origin');
   repo.git('merge', '-q', 'origin/main');
@@ -232,17 +231,19 @@ test('session context: axioms, decision index with related ones first, cap, pend
   }
 
   const context = await buildSessionContext({ cwd: repo.dir, home, pluginRoot: PLUGIN_ROOT });
-  assert.match(context, /a-00000001: 승인은 사람만 한다/);
-  assert.doesNotMatch(context, /비활성 axiom/);
-  assert.doesNotMatch(context, /폐기된 결정/);
-  const related = context.indexOf('d-00000002');
-  const unrelated = context.indexOf('d-00000001');
-  assert.ok(related !== -1 && unrelated !== -1 && related < unrelated, 'related decision listed first');
-  assert.doesNotMatch(context, /d-00000003/, 'capped at maxDecisions');
-  assert.match(context, /1개 더 있음/);
+  assert.match(context, /## 규칙\n- 요청이 기존 결정과 충돌하면[^\n]*\n- spec 문서는 작성 시점의 의도다/);
+  const scope = /## 결정 기록 범위[^\n]*\n((?:- [^\n]*\n?)*)/.exec(context)?.[1] ?? '';
+  assert.equal(scope.trim(), ['- lib/other.mjs', '- src/**/*.mjs', '- 경로 없는 결정 1개: recall-context 스킬의 --topics로 찾는다.'].join('\n'), 'deduplicated decision scope only');
+  assert.doesNotMatch(context, /d-0000000\d|a-00000001|무관한 결정|승인은 사람만 한다|src\/gone\.mjs/, 'no ids, titles, axioms or inactive records');
   assert.match(context, new RegExp(`${taskId}.*승인됨`));
   assert.match(context, /apply-approval/);
-  assert.match(context, /fetch/);
+});
+
+test('session context: no scope section without decisions', async () => {
+  const { repo, home } = await workRepo();
+  const context = await buildSessionContext({ cwd: repo.dir, home, pluginRoot: PLUGIN_ROOT });
+  assert.match(context, /## 규칙/);
+  assert.doesNotMatch(context, /결정 기록 범위/);
 });
 
 test('session context: does not create id files in a repository never used with Heirloom', async () => {

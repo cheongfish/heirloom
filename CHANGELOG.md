@@ -2,6 +2,12 @@
 
 이 문서는 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 형식을 따릅니다. 버전은 `main`의 태그와 같습니다.
 
+## [Unreleased]
+
+### 변경
+
+- 세션 시작 블록을 줄였습니다. 활성 axiom 목록, decision 색인(제목과 `[관련]` 표시), 다른 작업의 머지 대기 변경, 머지 판정 줄을 빼고, 규칙 두 줄과 결정 기록이 걸린 경로 목록만 넣습니다. 결정 원문은 그 경로를 고치기 전에 `recall-context`로 읽습니다. 프로젝트 설정 `sessionIndex.maxDecisions`는 더 이상 쓰지 않으며, 기존 설정 파일에 있어도 무시합니다.
+
 ## [0.3.6] - 2026-11-16
 
 ### 변경

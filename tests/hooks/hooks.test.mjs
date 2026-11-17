@@ -80,7 +80,7 @@ test('session-start with Node injects the convention and project index', { skip 
   assert.equal(r.status, 0, r.stderr);
   const context = JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
   assert.match(context, /<heirloom-convention>[\s\S]*prepare-handoff[\s\S]*<\/heirloom-convention>/);
-  assert.match(context, /<heirloom-project>[\s\S]*활성 axiom/);
+  assert.match(context, /<heirloom-project>[\s\S]*## 규칙/);
 });
 
 test('session-start tolerates invalid stdin', { skip }, async () => {
