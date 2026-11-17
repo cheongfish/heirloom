@@ -399,6 +399,24 @@ export const ACCEPTING = new Set(['as-expected', 'my-misunderstanding', 'answere
 const probeHash = object({ base: sha256, head: sha256 });
 
 /**
+ * What the spec becomes when a question citing it is sent back (pivot 5.6.1), with the cited
+ * parts as they were, so the next handoff can tell whether they changed.
+ */
+const specChoice = object({
+  choice: oneOf('spec-wrong', 'defer', 'snapshot'),
+  parts: arrayOf(
+    object({ ref: nonEmpty, block: nullable(str()), fileSha256: sha256 }, { optional: { lines: lineRange, quote: text } }),
+    { min: 1 },
+  ),
+});
+
+/** The spec's lifetime once every question is accepted (pivot 5.6.2). */
+const specAfterMerge = object(
+  { action: oneOf('delete', 'archive', 'keep'), specs: arrayOf(nonEmpty, { min: 1 }) },
+  { optional: { owner: nonEmpty }, check: (o) => (o.action === 'keep') === (typeof o.owner === 'string') ? [] : ['owner는 keep일 때만, 그리고 반드시 쓴다'] },
+);
+
+/**
  * The signed judgment of a schema 2 draft, kept where approvals are kept. One item per
  * question: the person's prediction or answer, what was revealed and the verdict.
  */
@@ -421,7 +439,7 @@ export const judgmentSchema = object({
         probeHashes: recordOf(probeHash),
         verdict: oneOf(...VERDICTS),
       },
-      { optional: { reason: nonEmpty, carried: bool } },
+      { optional: { reason: nonEmpty, carried: bool, spec: specChoice } },
     ),
   ),
   outcome: oneOf('accepted', 'returned'),
@@ -429,7 +447,7 @@ export const judgmentSchema = object({
   judgedAt: timestamp,
   approver: object({ fingerprint: nonEmpty, gitUser: nullable(nonEmpty) }),
   signature: nonEmpty,
-}, { optional: { basedOn: approvalId } });
+}, { optional: { basedOn: approvalId, specAfterMerge } });
 
 // ---------------------------------------------------------------- approval (5.5)
 
@@ -524,6 +542,7 @@ export const projectConfigSchema = object(
       sessionIndex: object({}, { optional: { maxDecisions: int({ min: 0 }) } }),
       curation: object({}, { optional: { minUnreviewed: int({ min: 1 }), maxAgeDays: int({ min: 1 }), minForAge: int({ min: 1 }), batchSize: int({ min: 1 }) } }),
       testCadence: object({}, { optional: { mode: oneOf('off', 'phase') } }),
+      spec: object({}, { optional: { afterMerge: oneOf('delete', 'archive', 'keep') } }),
       probe: object({}, {
         optional: {
           setup: arrayOf(argv),

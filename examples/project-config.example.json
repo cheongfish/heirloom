@@ -17,5 +17,8 @@
     "maxProbes": 10,
     "setupTimeoutSeconds": 600,
     "testTimeoutSeconds": 600
+  },
+  "spec": {
+    "afterMerge": "delete"
   }
 }

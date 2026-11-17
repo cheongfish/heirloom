@@ -12,6 +12,7 @@ import { readEvents } from './events.mjs';
 import { tryGit } from './git.mjs';
 import { taskPaths } from './paths.mjs';
 import { isMarkdownCodePath } from './schema.mjs';
+import { ARCHIVE_DIR, specDecisions } from './spec-handling.mjs';
 import { computeCommitState, currentSourceState, hashEntries } from './state.mjs';
 
 export const SECTION_START = '<!-- heirloom:understood:start -->';
@@ -60,12 +61,46 @@ const VERDICT_TEXT = {
 /** @param {string} s */
 const oneLine = (s) => s.replace(/\s+/g, ' ').trim();
 
+/** What the agent did with spec lines the person sent back (pivot 5.6.1). @type {Record<string, string>} */
+const SPEC_CHOICE_TEXT = {
+  'spec-wrong': 'spec이 틀렸다고 판정해 spec에서 고침',
+  defer: '이번에는 하지 않기로 하고 spec에 보류로 표시함',
+  snapshot: '구현하지 않음. spec은 작성 시점의 스냅샷이라 고치지 않음',
+};
+
+/** @param {any} part */
+const partName = (part) => `\`${part.ref}${part.lines ? `:${part.lines[0]}-${part.lines[1]}` : ''}\``;
+
+/**
+ * Lines on the spec: parts the person sent back in earlier rounds, then the spec's lifetime.
+ * @param {any[]} decisions
+ * @param {any} afterMerge
+ */
+function specLines(decisions, afterMerge) {
+  /** @type {string[]} */
+  const lines = [];
+  for (const d of decisions) {
+    const quote = d.parts.map((/** @type {any} */ p) => p.quote).find(Boolean);
+    lines.push(`- spec ${d.parts.map(partName).join(', ')}${quote ? ` "${oneLine(quote)}"` : ''}: ${SPEC_CHOICE_TEXT[d.choice] ?? d.choice}. 이유: "${oneLine(d.reason)}"`);
+  }
+  for (const ref of afterMerge?.specs ?? []) {
+    const what =
+      afterMerge.action === 'delete'
+        ? '머지 뒤 삭제(git 이력과 이 PR에 남음)'
+        : afterMerge.action === 'archive'
+          ? `\`${ARCHIVE_DIR}/\`로 보관`
+          : `유지. 소유자: ${oneLine(afterMerge.owner ?? '')}`;
+    lines.push(`- spec \`${ref}\`: ${what}.`);
+  }
+  return lines;
+}
+
 /**
  * The paragraph for the PR body.
- * @param {{ judgment: any, draft: any, sha: string | null, rechecking?: { head: string | null } | null }} options
+ * @param {{ judgment: any, draft: any, sha: string | null, rechecking?: { head: string | null } | null, specDecisions?: any[] }} options
  * @returns {string}
  */
-export function renderSection({ judgment, draft, sha, rechecking = null }) {
+export function renderSection({ judgment, draft, sha, rechecking = null, specDecisions = [] }) {
   if (judgment.outcome !== 'accepted') throw new HeirloomError('E_CONFLICT', '되돌린 판정으로는 PR 본문을 만들 수 없음');
   const short = (/** @type {string | null} */ s) => (s ? s.slice(0, 7) : '알 수 없음');
   const lines = [SECTION_START, '### 사람이 확인한 동작', ''];
@@ -89,6 +124,7 @@ export function renderSection({ judgment, draft, sha, rechecking = null }) {
     }
   }
   for (const x of draft?.inferences ?? []) lines.push(`- 실행 증거 없음: ${oneLine(x.text)} (${oneLine(x.reason)})`);
+  lines.push(...specLines(specDecisions, judgment.specAfterMerge));
   const probes = [...new Set(judgment.items.flatMap((/** @type {any} */ i) => Object.keys(i.probeHashes).filter((k) => k !== 'tests')))];
   lines.push('', `<sub>Heirloom 판정 ${judgment.id} · 탐침 ${probes.join(', ') || '없음'} · head ${short(sha)}</sub>`, SECTION_END);
   return lines.join('\n');
@@ -123,7 +159,8 @@ export async function writePrBody({ home, taskId, bodyFile, rechecking = false }
   const recorded = /** @type {any} */ (events.filter((e) => e.type === 'pr_created' && e.approvalId === approvalId).at(-1));
   const sha = typeof recorded?.statusSha === 'string' ? recorded.statusSha : (await statusCommit({ input, judgedFiles: input.source.files })).sha;
   const head = rechecking ? await tryGit(['rev-parse', 'HEAD'], { cwd: input.repo.root }) : null;
-  const section = renderSection({ judgment: approval, draft, sha, rechecking: rechecking ? { head } : null });
+  const decisions = await specDecisions({ home, taskId, events });
+  const section = renderSection({ judgment: approval, draft, sha, rechecking: rechecking ? { head } : null, specDecisions: decisions });
   let body = '';
   try {
     body = await readFile(bodyFile, 'utf8');

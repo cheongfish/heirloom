@@ -27,6 +27,7 @@ import { currentSourceState, hashMaterial } from './state.mjs';
 import { readIndex, tasksForWorktree } from './store.mjs';
 import { withTaskLock } from './task-lock.mjs';
 import { STATUS_CONTEXT, codeMatches, statusCommit } from './judgment-pr.mjs';
+import { applySpecLifecycle } from './spec-handling.mjs';
 import { postCommitStatus as postGithubStatus } from './github.mjs';
 import { postCommitStatus as postGitlabStatus } from './gitlab.mjs';
 
@@ -237,11 +238,13 @@ export async function applyApproval({ home, taskId }) {
       files = written;
       await appendEvent(paths.events, { type: 'records_written', approvalId: approval.id, files, ...(removed.length ? { removed } : {}) });
     }
-    return { input, draft, approval, files, already };
+    // The spec lifetime the person chose (pivot 5.6.2), on every run until it is done.
+    const spec = approval.kind === 'judgment' && info.branch === input.branch ? await applySpecLifecycle({ root, afterMerge: approval.specAfterMerge }) : null;
+    return { input, draft, approval, files, already, spec };
   });
 
-  const { input, draft, approval, files, already } = written;
-  if (approval.kind === 'judgment') return judgmentResult({ home, taskId, input, approval, files, already });
+  const { input, draft, approval, files, already, spec } = written;
+  if (approval.kind === 'judgment') return judgmentResult({ home, taskId, input, approval, files, already, spec });
   const records = approval.items.map((/** @type {any} */ item) => {
     const op = draft.records[item.index];
     const target = op.op === 'add' ? op.id : op.target;
@@ -296,9 +299,9 @@ async function judgedCodeMatches(input) {
 /**
  * The apply result of a judgment: what the PR needs (the paragraph comes from pr-body.mjs)
  * and the commit the status will go on.
- * @param {{ home: string, taskId: string, input: any, approval: any, files: string[], already: boolean }} options
+ * @param {{ home: string, taskId: string, input: any, approval: any, files: string[], already: boolean, spec: Awaited<ReturnType<typeof applySpecLifecycle>> }} options
  */
-async function judgmentResult({ home, taskId, input, approval, files, already }) {
+async function judgmentResult({ home, taskId, input, approval, files, already, spec }) {
   const paths = taskPaths(home, taskId);
   const after = await readEvents(paths.events);
   const state = deriveState(after);
@@ -319,8 +322,9 @@ async function judgmentResult({ home, taskId, input, approval, files, already })
     state,
     alreadyApplied: already,
     root: input.repo.root,
-    files,
-    removed: [],
+    files: [...files, ...(spec?.files ?? [])],
+    removed: spec?.removed ?? [],
+    spec: spec ? { action: spec.action, ...(spec.owner ? { owner: spec.owner } : {}), specs: spec.specs, pending: spec.pending } : null,
     status: await statusCommit({ input, judgedFiles: input.source.files }),
     prUrl: state === 'pr_created' && typeof prEvent?.url === 'string' ? prEvent.url : null,
     previousPrUrl: typeof previousPr?.url === 'string' ? previousPr.url : null,

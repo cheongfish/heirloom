@@ -14,6 +14,7 @@ import { renderHandoff } from './handoff.mjs';
 import { taskPaths } from './paths.mjs';
 import { readRecords } from './records.mjs';
 import { assertValid, inputSchema } from './schema.mjs';
+import { unchangedSpecLines } from './spec-handling.mjs';
 import { currentSourceState, hashMaterial } from './state.mjs';
 import { withTaskLock } from './task-lock.mjs';
 
@@ -39,7 +40,8 @@ export async function submitDraft({ home, taskId }) {
     }
     assertValid(inputSchema, input, paths.input);
 
-    const state = deriveState(await readEvents(paths.events));
+    const events = await readEvents(paths.events);
+    const state = deriveState(events);
     if (state !== 'prepared' && state !== 'drafted' && state !== 'awaiting_approval') {
       throw new HeirloomError('E_CONFLICT', `현재 상태(${state ?? '없음'})에서는 초안을 제출할 수 없음`, {
         hint: '새 변경을 인계하려면 prepare를 다시 실행한다.',
@@ -76,6 +78,9 @@ export async function submitDraft({ home, taskId }) {
     const conversation = await readConversation(paths.conversation);
     const probes = (await readJson(path.join(paths.probes, 'result.json'))) ?? null;
     const result = await checkDraft({ root, input, draft, records, repoFiles, conversation, probes });
+    // Spec lines the person said were wrong or deferred must change before the work goes
+    // back to them (pivot 5.6.1, 6.3).
+    result.errors.push(...(await unchangedSpecLines({ home, taskId, root, events })));
     const ok = result.errors.length === 0;
     await writeJsonAtomic(paths.check, {
       schemaVersion: 1,

@@ -20,6 +20,9 @@ import { codeMatches } from './judgment-pr.mjs';
 
 const SCOPE_SHOWN = 30;
 
+/** What the person chose for the spec of a question they sent back (pivot 5.6.1). @type {Record<string, string>} */
+const SPEC_LABEL = { 'spec-wrong': 'spec이 틀림', defer: '미룸', snapshot: '스냅샷' };
+
 /** Rules every session gets. The first carried most of the effect in the recall experiments. */
 const RULES = [
   '요청이 기존 결정과 충돌하면 임의로 뒤집지 말고, 결정을 지키는 범위까지만 진행한 뒤 충돌을 알려라.',
@@ -118,7 +121,7 @@ async function projectSection(cwd, home) {
       }
       else if (state === 'returned') {
         const returned = /** @type {any} */ (events.filter((e) => e.type === 'returned').at(-1));
-        const why = (returned?.items ?? []).map((/** @type {any} */ i) => `${i.id} ${i.verdict === 'split' ? '분리' : '되돌림'}: ${i.reason}`).join('; ');
+        const why = (returned?.items ?? []).map((/** @type {any} */ i) => `${i.id} ${i.verdict === 'split' ? '분리' : '되돌림'}${i.spec ? `(spec: ${SPEC_LABEL[i.spec] ?? i.spec})` : ''}: ${i.reason}`).join('; ');
         pending.push(`- ${taskId}: 사람이 판정에서 되돌림(${why}) → 코드와 spec을 고친 뒤 prepare-handoff를 다시 실행한다.`);
       }
     }

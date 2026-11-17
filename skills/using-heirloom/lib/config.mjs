@@ -14,6 +14,7 @@ export const DEFAULT_SPEC_GLOBS = Object.freeze(['docs/superpowers/specs/**', '*
  * @property {{ maxRecords: number, maxTokens: number }} recall
  * @property {{ mode: 'off' | 'phase' }} testCadence opt-in rule for how often the full test suite runs
  * @property {ProbeConfig} probe how probes run (pivot 5.1)
+ * @property {{ afterMerge: 'delete' | 'archive' | 'keep' }} spec the spec lifetime the judgment screen offers first (pivot 5.6.2)
  */
 
 /**
@@ -45,6 +46,7 @@ export async function loadProjectConfig(root) {
       setupTimeoutSeconds: c.probe?.setupTimeoutSeconds ?? 600,
       testTimeoutSeconds: c.probe?.testTimeoutSeconds ?? 600,
     },
+    spec: { afterMerge: c.spec?.afterMerge ?? 'delete' },
   };
 }
 

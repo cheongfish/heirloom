@@ -1435,6 +1435,23 @@ const VERDICT_HELP = {
   split: '동작은 맞지만 이번 PR에서 뺍니다. 에이전트가 별도 브랜치로 옮깁니다.',
 };
 
+/** What the spec becomes when a question citing it is sent back. @type {[string, string][]} */
+const SPEC_CHOICE_OPTIONS = [['spec-wrong', 'spec이 틀렸다'], ['defer', '미룬다'], ['snapshot', 'spec은 스냅샷']];
+/** @type {Record<string, string>} */
+const SPEC_CHOICE_HELP = {
+  'spec-wrong': '원래 하면 안 되는 동작입니다. 에이전트가 spec의 인용한 줄을 고치거나 지우고 "거절: <이유>"를 남깁니다. 줄이 그대로면 다시 인계할 수 없습니다.',
+  defer: '맞는 동작이지만 이번에는 하지 않습니다. 에이전트가 인용한 줄에 "보류: <후속 이슈>"를 표시합니다. 줄이 그대로면 다시 인계할 수 없습니다.',
+  'snapshot': 'spec을 고치지 않습니다. PR 본문에 "spec의 이 부분은 구현하지 않음"이 남습니다.',
+};
+/** The spec's lifetime once every question is accepted. @type {[string, string][]} */
+const AFTER_MERGE_OPTIONS = [['delete', '삭제'], ['archive', '보관'], ['keep', '유지']];
+/** @type {Record<string, string>} */
+const AFTER_MERGE_HELP = {
+  delete: 'git 이력과 PR에 남습니다. 오래 남길 내용은 테스트, PR 본문, 결정 기록이 맡습니다.',
+  archive: '`docs/specs/archive/`로 옮깁니다. 과거 기록으로 읽힙니다.',
+  keep: '그 자리에 둡니다. 외부 API 계약처럼 코드 밖 약속이 있을 때 씁니다. 소유자가 PR 본문에 남습니다.',
+};
+
 /**
  * @typedef {object} JudgeForm
  * @property {any} task
@@ -1443,6 +1460,11 @@ const VERDICT_HELP = {
  * @property {Map<string, string>} reasons
  * @property {Map<string, string>} answers fork answers
  * @property {string[]} diffs behavior descriptions as the person edits them
+ * @property {Map<string, string>} specChoices what the spec becomes, per sent-back question citing it
+ * @property {string} afterMerge the spec's lifetime when every question is accepted
+ * @property {string} owner who owns a kept spec
+ * @property {HTMLElement} lifecycle
+ * @property {boolean | null} lifecycleFor whether the lifetime box was drawn for an accepting judgment
  * @property {HTMLElement} status
  * @property {boolean} dirty
  * @property {boolean} busy
@@ -1460,6 +1482,11 @@ function newJudgeForm(task) {
     reasons: new Map(),
     answers: new Map(),
     diffs: (task.judge.behaviorDiffs ?? []).map((/** @type {any} */ d) => d.text),
+    specChoices: new Map(),
+    afterMerge: task.judge.specAfterMergeDefault ?? 'delete',
+    owner: '',
+    lifecycle: h('div', { class: 'hl-stack' }),
+    lifecycleFor: null,
     status: h('div', { class: 'hl-stack' }),
     dirty: false,
     busy: false,
@@ -1636,6 +1663,7 @@ function judgeCard(f, q) {
       v && RETURNING.has(v)
         ? fieldBlock('이유 (필수)', textInput({ value: f.reasons.get(q.id) ?? '', multiline: true, label: `${q.id} 이유`, oninput: (x) => { f.reasons.set(q.id, x); f.dirty = true; refreshJudge(); } }), '에이전트가 이 이유를 받아 코드를 고칩니다.')
         : null,
+      v && RETURNING.has(v) && q.citesSpec ? specChoiceBlock(f, q) : null,
     );
   };
   drawExtra();
@@ -1657,6 +1685,72 @@ function judgeCard(f, q) {
     extra,
   );
   return h('section', { class: 'hl-card hl-stack', id: `question-${q.id}` }, body);
+}
+
+/** What to do with the spec lines a sent-back question cites. @param {JudgeForm} f @param {any} q */
+function specChoiceBlock(f, q) {
+  const help = h('span', { class: 'seed-field__description' }, SPEC_CHOICE_HELP[f.specChoices.get(q.id) ?? ''] ?? '이 질문은 spec을 인용했습니다. spec을 어떻게 할지 고릅니다.');
+  return fieldBlock(
+    'spec 처리 (필수)',
+    h(
+      'div',
+      { class: 'hl-stack-tight' },
+      choiceControl({
+        label: `${q.id} spec 처리`,
+        options: SPEC_CHOICE_OPTIONS,
+        value: f.specChoices.get(q.id) ?? null,
+        onchange: (v) => {
+          f.specChoices.set(q.id, v);
+          f.dirty = true;
+          help.textContent = SPEC_CHOICE_HELP[v] ?? '';
+          refreshJudge();
+        },
+      }),
+      help,
+    ),
+  );
+}
+
+/** The spec's lifetime, asked only when every question is accepted. @param {JudgeForm} f */
+function drawLifecycle(f) {
+  const j = f.task.judge;
+  const accepting = ![...f.verdicts.values()].some((v) => RETURNING.has(v));
+  if (f.lifecycleFor === accepting) return;
+  f.lifecycleFor = accepting;
+  if (!j.revealed || !j.specs?.length || !accepting) return void replace(f.lifecycle, null);
+  const help = h('span', { class: 'hl-muted hl-small' }, AFTER_MERGE_HELP[f.afterMerge] ?? '');
+  const owner = h('div', {});
+  const drawOwner = () =>
+    replace(
+      owner,
+      f.afterMerge === 'keep'
+        ? fieldBlock('소유자 (필수)', textInput({ value: f.owner, oneLine: true, label: 'spec 소유자', oninput: (x) => { f.owner = x; f.dirty = true; refreshJudge(); } }), 'spec이 코드와 어긋나지 않게 챙길 사람이나 팀입니다.')
+        : null,
+    );
+  drawOwner();
+  replace(
+    f.lifecycle,
+    h(
+      'section',
+      { class: 'hl-card hl-stack' },
+      h('h2', { class: 'hl-section-title' }, '머지할 때 spec 처리'),
+      h('p', { class: 'hl-muted hl-small' }, '작업이 끝난 spec이 저장소에 남으면 현재 명세처럼 읽힙니다. ', j.specs.map((/** @type {string} */ r, /** @type {number} */ i) => [i ? ', ' : null, h('code', {}, r)])),
+      choiceControl({
+        label: 'spec 수명',
+        options: AFTER_MERGE_OPTIONS,
+        value: f.afterMerge,
+        onchange: (v) => {
+          f.afterMerge = v;
+          f.dirty = true;
+          help.textContent = AFTER_MERGE_HELP[v] ?? '';
+          drawOwner();
+          refreshJudge();
+        },
+      }),
+      help,
+      owner,
+    ),
+  );
 }
 
 /** @param {JudgeForm} f */
@@ -1697,6 +1791,7 @@ function judgePanel(f) {
       : null,
     recheckNotice(j),
     j.questions.map((/** @type {any} */ q) => judgeCard(f, q)),
+    f.lifecycle,
     f.status,
     h('div', { class: 'hl-row' }, submit),
   );
@@ -1718,12 +1813,17 @@ function judgeBlockers(f) {
   if (noReason.length) why.push(`이유가 없는 되돌림·분리: ${noReason.map((/** @type {any} */ q) => q.id).join(', ')}`);
   const noAnswer = j.questions.filter((/** @type {any} */ q) => f.verdicts.get(q.id) === 'answered' && !f.answers.get(q.id)?.trim());
   if (noAnswer.length) why.push(`답이 없는 열린 선택: ${noAnswer.map((/** @type {any} */ q) => q.id).join(', ')}`);
+  const noSpec = j.questions.filter((/** @type {any} */ q) => q.citesSpec && RETURNING.has(f.verdicts.get(q.id) ?? '') && !f.specChoices.has(q.id));
+  if (noSpec.length) why.push(`spec 처리를 고르지 않은 질문: ${noSpec.map((/** @type {any} */ q) => q.id).join(', ')}`);
+  const accepting = ![...f.verdicts.values()].some((v) => RETURNING.has(v));
+  if (accepting && j.specs?.length && f.afterMerge === 'keep' && !f.owner.trim()) why.push('유지할 spec의 소유자');
   if (f.diffs.some((d) => !d.trim())) why.push('비어 있는 동작 차이 설명');
   return why;
 }
 
 function refreshJudge() {
   if (!judge) return;
+  drawLifecycle(judge);
   const why = judgeBlockers(judge);
   const target = /** @type {HTMLButtonElement | null} */ (document.getElementById(judge.task.judge.revealed ? 'judge-submit' : 'reveal'));
   if (target) {
@@ -1776,10 +1876,12 @@ async function saveJudgment() {
       verdict,
       ...(RETURNING.has(verdict) ? { reason: f.reasons.get(q.id)?.trim() } : {}),
       ...(verdict === 'answered' ? { answer: f.answers.get(q.id)?.trim() } : {}),
+      ...(RETURNING.has(verdict) && q.citesSpec ? { spec: f.specChoices.get(q.id) } : {}),
     };
   });
+  const lifetime = !returning && f.task.judge.specs?.length ? { specAfterMerge: { action: f.afterMerge, ...(f.afterMerge === 'keep' ? { owner: f.owner.trim() } : {}) } } : {};
   await judgeStep(f, '판정을 저장하지 못함', () =>
-    post(`/api/tasks/${encodeURIComponent(f.task.taskId)}/judge`, { draftSha256: f.task.draftSha256, sourceHash: f.task.input.source.hash, items, behaviorDiffs: f.diffs.map((d) => d.trim()) }),
+    post(`/api/tasks/${encodeURIComponent(f.task.taskId)}/judge`, { draftSha256: f.task.draftSha256, sourceHash: f.task.input.source.hash, items, behaviorDiffs: f.diffs.map((d) => d.trim()), ...lifetime }),
   );
 }
 
@@ -1807,9 +1909,13 @@ function judgmentSummaryCard(task) {
           ` ${i.id} ${i.prompt}`,
           i.answer !== null ? h('span', { class: 'hl-muted' }, ` · 답: ${i.answer}${i.correct === false ? ' (틀림)' : i.correct === true ? ' (맞음)' : ''}`) : null,
           i.reason ? h('span', { class: 'hl-muted' }, ` · 이유: ${i.reason}`) : null,
+          i.spec ? h('span', { class: 'hl-muted' }, ` · spec: ${SPEC_CHOICE_OPTIONS.find(([v]) => v === i.spec.choice)?.[1] ?? i.spec.choice}`) : null,
         ),
       ),
     ),
+    a.specAfterMerge
+      ? h('p', { class: 'hl-muted hl-small' }, `머지할 때 spec: ${AFTER_MERGE_OPTIONS.find(([v]) => v === a.specAfterMerge.action)?.[1] ?? a.specAfterMerge.action}${a.specAfterMerge.owner ? ` (소유자: ${a.specAfterMerge.owner})` : ''} — ${a.specAfterMerge.specs.join(', ')}`)
+      : null,
   );
 }
 

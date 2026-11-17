@@ -50,14 +50,34 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
 
   await q1.getByRole('radio', { name: '잘못 알았음' }).click();
   await page.getByRole('radiogroup', { name: 'q2 판정' }).getByRole('radio', { name: '예상대로' }).click();
-  await page.getByRole('radiogroup', { name: 'q3 판정' }).getByRole('radio', { name: '의도와 같음' }).click();
+  const q3 = page.getByRole('radiogroup', { name: 'q3 판정' });
   await page.getByRole('radiogroup', { name: 'q4 판정' }).getByRole('radio', { name: '답함' }).click();
-  const submit = page.getByRole('button', { name: '판정 저장' });
+  const submit = page.getByRole('button', { name: /^판정 저장/ });
   assert.equal(await submit.isDisabled(), true, 'the open choice still needs an answer');
   await page.getByLabel('q4 답').fill('100으로 한다');
+
+  // Sending back q3, which cites the spec, asks what the spec becomes and hides the lifetime.
+  await q3.getByRole('radio', { name: '되돌림' }).click();
+  await page.getByLabel('q3 이유').fill('경계는 10개로 둔다');
+  assert.equal(await page.getByRole('radiogroup', { name: 'spec 수명' }).count(), 0, 'no lifetime while work goes back');
+  assert.equal(await submit.isDisabled(), true, 'the spec choice is required');
+  assert.match(await page.locator('main').innerText(), /spec 처리를 고르지 않은 질문: q3/);
+  await page.getByRole('radiogroup', { name: 'q3 spec 처리' }).getByRole('radio', { name: 'spec이 틀렸다' }).click();
+  assert.equal(await submit.isDisabled(), false);
+
+  // Accepting everything instead asks for the spec's lifetime; keeping it needs an owner.
+  await q3.getByRole('radio', { name: '의도와 같음' }).click();
+  const lifetime = page.getByRole('radiogroup', { name: 'spec 수명' });
+  await lifetime.waitFor();
+  assert.equal(await lifetime.getByRole('radio', { name: '삭제' }).getAttribute('aria-checked'), 'true', 'the project default is chosen first');
+  await lifetime.getByRole('radio', { name: '유지' }).click();
+  assert.equal(await submit.isDisabled(), true, 'a kept spec needs an owner');
+  await page.getByLabel('spec 소유자').fill('결제팀');
   await submit.click();
   await page.getByText('판정 내용').first().waitFor();
-  assert.match(await page.locator('main').innerText(), /모두 수용/);
+  const done = await page.locator('main').innerText();
+  assert.match(done, /모두 수용/);
+  assert.match(done, /머지할 때 spec: 유지 \(소유자: 결제팀\)/);
   assert.equal(deriveState(await readEvents(taskPaths(home, taskId).events)), 'approved');
   assert.deepEqual(errors, []);
 });

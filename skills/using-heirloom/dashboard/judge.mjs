@@ -16,10 +16,12 @@ import { readJson, writeJsonAtomic } from '../lib/fsx.mjs';
 import { tryGit } from '../lib/git.mjs';
 import { newApprovalId } from '../lib/ids.mjs';
 import { loadApprovalBaseline } from '../lib/baseline.mjs';
+import { loadProjectConfig } from '../lib/config.mjs';
 import { approvalFiles, taskPaths } from '../lib/paths.mjs';
 import { ACCEPTING, assertValid, judgmentSchema } from '../lib/schema.mjs';
 import { sign } from '../lib/sign.mjs';
-import { currentSourceState } from '../lib/state.mjs';
+import { AFTER_MERGE, SPEC_CHOICES, citedSpecParts, specRefs, specSourcesOf } from '../lib/spec-handling.mjs';
+import { currentSourceState, hashMaterial } from '../lib/state.mjs';
 import { withTaskLock } from '../lib/task-lock.mjs';
 
 /** Questions the person answers before anything is revealed. */
@@ -180,10 +182,17 @@ export async function judgeView({ home, taskId }) {
   const { basedOn, carried } = await carriedVerdicts({ home, taskId, input, draft, probes });
   const questions = draft.questions.map((/** @type {any} */ q) => {
     const kept = carried.get(q.id);
-    return { ...q, predictFirst: PREDICTED.has(q.kind) && !kept, carried: kept ? { verdict: kept.verdict, answer: kept.answer, correct: kept.correct, judgedIn: basedOn } : null };
+    return {
+      ...q,
+      predictFirst: PREDICTED.has(q.kind) && !kept,
+      citesSpec: specSourcesOf(q, input).length > 0,
+      carried: kept ? { verdict: kept.verdict, answer: kept.answer, correct: kept.correct, judgedIn: basedOn } : null,
+    };
   });
   const base = {
     revealed: Boolean(saved),
+    specs: specRefs(input),
+    specAfterMergeDefault: input ? (await loadProjectConfig(input.repo.root)).spec.afterMerge : 'delete',
     basedOn,
     unlinked: input?.recheck?.kind === 'probes' ? input.recheck.unlinked : [],
     questions,
@@ -307,6 +316,12 @@ export async function judgeTask({ home, taskId, request, keystore, now = new Dat
         if (typeof item.answer !== 'string' || !item.answer.trim() || item.answer.length > MAX_TEXT) throw bad(`${q.id}: 열린 선택에 대한 답이 필요함`);
         answer = item.answer.trim();
       }
+      const cited = specSourcesOf(q, input);
+      const specChoice = item.spec === undefined || item.spec === null ? null : item.spec;
+      if (specChoice !== null && (ACCEPTING.has(item.verdict) || !cited.length)) throw bad(`${q.id}: spec 처리는 spec을 인용한 질문을 되돌리거나 분리할 때만 고름`);
+      if (!ACCEPTING.has(item.verdict) && cited.length && !SPEC_CHOICES.includes(specChoice)) {
+        throw bad(`${q.id}: spec을 인용한 질문을 되돌리거나 분리할 때는 spec 처리(${SPEC_CHOICES.join(', ')})를 골라야 함`);
+      }
       const correct = predictionCorrect(q, answer, probes);
       if (correct === false && item.verdict === 'as-expected') throw bad(`${q.id}: 예측이 결과와 달라 '예상대로'로 판정할 수 없음`);
       if (correct === true && item.verdict === 'my-misunderstanding') throw bad(`${q.id}: 예측이 결과와 같아 '내가 잘못 알았음'으로 판정할 수 없음`);
@@ -332,6 +347,7 @@ export async function judgeTask({ home, taskId, request, keystore, now = new Dat
         probeHashes,
         verdict: item.verdict,
         ...(reason ? { reason } : {}),
+        ...(specChoice !== null ? { spec: { choice: specChoice, cited } } : {}),
       };
     });
     const extra = [...sent.keys()].filter((id) => !draft.questions.some((/** @type {any} */ q) => q.id === id));
@@ -351,9 +367,19 @@ export async function judgeTask({ home, taskId, request, keystore, now = new Dat
     if (current.hash !== input.source.hash) {
       throw new HeirloomError('E_CONFLICT', '인계 이후 소스가 바뀌어 판정할 수 없음. 에이전트가 prepare-handoff를 다시 실행해야 한다.');
     }
+    const root = input.repo.root;
+    for (const m of input.materials) {
+      if (m.role !== 'spec' || !m.sha256 || path.isAbsolute(m.ref)) continue;
+      const now = await hashMaterial(root, m.ref).catch(() => null);
+      if (now !== m.sha256) throw new HeirloomError('E_CONFLICT', `인계 이후 spec이 바뀌어 판정할 수 없음: ${m.ref}. 에이전트가 prepare-handoff를 다시 실행해야 한다.`);
+    }
+    for (const i of items) if (i.spec?.cited) i.spec = { choice: i.spec.choice, parts: await citedSpecParts(root, i.spec.cited) };
+    const outcome = items.every((/** @type {any} */ i) => ACCEPTING.has(i.verdict)) ? 'accepted' : 'returned';
+    const specs = specRefs(input);
+    const afterMerge = outcome === 'accepted' && specs.length ? await chosenAfterMerge(request, root, specs) : null;
+    if (outcome === 'returned' && request.specAfterMerge !== undefined) throw bad('spec 수명은 모든 질문을 수용할 때만 고름');
     const headSha = await tryGit(['rev-parse', 'HEAD'], { cwd: input.repo.root });
     const ident = await tryGit(['var', 'GIT_AUTHOR_IDENT'], { cwd: input.repo.root });
-    const outcome = items.every((/** @type {any} */ i) => ACCEPTING.has(i.verdict)) ? 'accepted' : 'returned';
     const record = {
       schemaVersion: 2,
       id: newApprovalId(),
@@ -370,6 +396,7 @@ export async function judgeTask({ home, taskId, request, keystore, now = new Dat
       behaviorDiffs: { initial, final: final.map((/** @type {string} */ t) => t.trim()) },
       items,
       outcome,
+      ...(afterMerge ? { specAfterMerge: afterMerge } : {}),
       predictedAt: saved.answeredAt,
       judgedAt: now.toISOString(),
       approver: { fingerprint: '', gitUser: ident ? ident.replace(/\s+\d+\s+[+-]\d{4}$/, '') : null },
@@ -386,9 +413,30 @@ export async function judgeTask({ home, taskId, request, keystore, now = new Dat
       await appendEvent(paths.events, {
         type: 'returned',
         approvalId: signed.id,
-        items: items.filter((/** @type {any} */ i) => !ACCEPTING.has(i.verdict)).map((/** @type {any} */ i) => ({ id: i.id, verdict: i.verdict, reason: i.reason })),
+        items: items.filter((/** @type {any} */ i) => !ACCEPTING.has(i.verdict)).map((/** @type {any} */ i) => ({ id: i.id, verdict: i.verdict, reason: i.reason, ...(i.spec ? { spec: i.spec.choice } : {}) })),
       });
     }
     return signed;
   });
+}
+
+/**
+ * The spec lifetime of an accepted judgment: what the person chose, or the project default
+ * when the request names none (pivot 5.6.2). Keeping a spec needs its owner.
+ * @param {any} request
+ * @param {string} root
+ * @param {string[]} specs
+ */
+async function chosenAfterMerge(request, root, specs) {
+  const chosen = request.specAfterMerge;
+  if (chosen !== undefined && !isObject(chosen)) throw bad('specAfterMerge는 { action, owner? } 객체여야 함');
+  const action = chosen?.action ?? (await loadProjectConfig(root)).spec.afterMerge;
+  if (!(/** @type {readonly string[]} */ (AFTER_MERGE)).includes(action)) throw bad(`spec 수명은 ${AFTER_MERGE.join(', ')} 중 하나여야 함`);
+  if (action !== 'keep') {
+    if (chosen?.owner !== undefined) throw bad('owner는 spec을 유지할 때만 적음');
+    return { action, specs };
+  }
+  const owner = typeof chosen?.owner === 'string' ? chosen.owner.trim() : '';
+  if (!owner || owner.length > MAX_TEXT) throw bad('spec을 유지하려면 소유자(owner)를 적어야 함');
+  return { action, specs, owner };
 }

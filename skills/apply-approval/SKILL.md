@@ -33,6 +33,7 @@ Success `data`. A judgment (`kind: "judgment"`, from a schema 2 draft) has no `s
 | `pr` | Step 4 inputs; null when already recorded (`prUrl`). `provider` is `github`, `gitlab` or null; `host`/`repo` identify the project (`owner/repo` or GitLab `group/sub/project`). |
 | `previousPrUrl` | Existing PR after incremental recheck; update it rather than creating another. |
 | `commitGuides` | Project commit guide files. |
+| `spec` | Judgment only: the spec lifetime the person chose (`action` `delete`, `archive` or `keep`, with `owner` for `keep`), carried out in the working tree by this script; null when the handoff had no spec. `specs[].status`: `deleted`/`archived` (staged by `git rm`/`git mv`; `to` is the archive path), `kept`, `not_markdown` (left alone), `missing`, `uncommitted` (the spec has changes not committed yet; nothing was done), `archive_taken` (a file already sits at `to`; report it). `pending: true` means a spec still waits. |
 
 Failures:
 
@@ -48,6 +49,8 @@ Never write or edit record files yourself.
 ## 3. Commit
 
 Follow `commitGuides`. Commit `files`, `removed`, and any uncommitted handoff work without changing approved content. Rerun `apply.mjs --task <taskId>`; require success. On `E_CONFLICT`, stop and report post-approval changes. For a judgment, require `status.sha` to be set before you push.
+
+For a judgment with `spec`: commit the handoff work first. If a spec was `uncommitted`, the rerun carries out the lifetime; commit that spec change on its own (it is Markdown only and does not invalidate the judgment), then rerun once more. Push only when `spec.pending` is false, or report `archive_taken` to the user. Never move, delete or edit the spec yourself for this step.
 
 ## 4. Open the pull request
 

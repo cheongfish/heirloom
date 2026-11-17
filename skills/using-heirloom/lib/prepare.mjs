@@ -211,7 +211,15 @@ async function previousJudgment(paths, events) {
   const items = (record?.items ?? []).filter((/** @type {any} */ i) => i.verdict === 'revert' || i.verdict === 'split');
   return {
     approvalId: last.approvalId,
-    returned: items.map((/** @type {any} */ i) => ({ id: i.id, kind: i.kind, prompt: i.prompt, answer: i.answer, verdict: i.verdict, reason: i.reason })),
+    returned: items.map((/** @type {any} */ i) => ({
+      id: i.id,
+      kind: i.kind,
+      prompt: i.prompt,
+      answer: i.answer,
+      verdict: i.verdict,
+      reason: i.reason,
+      spec: i.spec ? { choice: i.spec.choice, parts: i.spec.parts.map((/** @type {any} */ p) => ({ ref: p.ref, ...(p.lines ? { lines: p.lines } : {}), ...(p.quote ? { quote: p.quote } : {}) })) } : null,
+    })),
   };
 }
 

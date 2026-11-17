@@ -22,7 +22,12 @@ Read the result:
 
 - `alreadyPrepared: true`, `state` `awaiting_approval` or later: report the existing handoff and stop without drafting.
 - `alreadyPrepared: true`, `state` `returned`: nothing changed since the person sent the work back. Fix what `previousJudgment` lists first, then run this skill again.
-- Non-null `previousJudgment`: the last judgment returned these questions (`verdict` `revert`: the behavior is wrong; `split`: move it out of this branch), with the person's `reason`. This round must address each one; ask about the changed behavior again.
+- Non-null `previousJudgment`: the last judgment returned these questions (`verdict` `revert`: the behavior is wrong; `split`: move it out of this branch), with the person's `reason`. This round must address each one; ask about the changed behavior again. When a returned question cited the spec, `spec.choice` says what the spec becomes, and `spec.parts` lists the cited lines:
+  - `spec-wrong`: the behavior should never have been there. Fix or remove the cited lines and leave one line `거절: <reason>` in their place.
+  - `defer`: right, but not in this change. Mark the cited lines themselves with `보류: <follow-up issue, or the reason>`.
+  - `snapshot`: leave the spec alone; the PR paragraph will say the cited part is not implemented.
+
+  For `spec-wrong` and `defer`, submit refuses the draft while the cited lines are still there word for word: change text inside the cited lines, not only next to them. Cite the edited lines (not the old quote) if a question still rests on that spec part.
 - `ok: false`: report `error.message` and `error.hint`; stop. `E_INPUT` (exit 2) requires clarification, not guessing; `E_CONFLICT` (3) means concurrent processing; `E_TRANSIENT` (75) already retried, so do not rerun.
 - Otherwise use `taskId`, `draftPath`, `source.files`, `materials`, `unknowns`, `relatedRecords`, and `reviewMatchesSource`.
 - Non-null `recheck`: the work was judged before and changed since. With `recheck.kind` `probes`: run the probes file of the last round again (add probes for every path in `recheck.unlinked`, the changed code no behavior description pointed at), then write a full draft for the current state. Keep the id and exact wording of each question that still holds: a question asked the same way whose probe outputs did not change keeps its verdict and is not asked again. Rewrite or drop what no longer holds.
