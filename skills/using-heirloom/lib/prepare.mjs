@@ -182,9 +182,20 @@ export async function prepareHandoff(options) {
       projectRules: input.projectRules,
       recheck: input.recheck ? recheckReport(input.recheck) : null,
       previousJudgment: await previousJudgment(paths, events),
+      openPr: openPr(events),
       conversation: { ...conversation, path: paths.conversation },
     };
   });
+}
+
+/**
+ * The PR of an earlier round that is still open, so a recheck updates it instead of opening
+ * another, and marks its paragraph as rechecking (pivot 6.4).
+ * @param {import('./events.mjs').TaskEvent[]} events
+ */
+function openPr(events) {
+  const pr = events.filter((e) => e.type === 'pr_created' || e.type === 'expired').at(-1);
+  return pr?.type === 'pr_created' && typeof pr.url === 'string' ? { url: pr.url, statusSha: typeof pr.statusSha === 'string' ? pr.statusSha : null } : null;
 }
 
 /**

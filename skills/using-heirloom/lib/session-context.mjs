@@ -16,6 +16,7 @@ import { taskPaths } from './paths.mjs';
 import { appliedTaskMerged, recordView } from './record-status.mjs';
 import { readIndex, tasksForWorktree } from './store.mjs';
 import { testCadenceBlock } from './test-cadence.mjs';
+import { codeMatches } from './judgment-pr.mjs';
 
 const SCOPE_SHOWN = 30;
 
@@ -106,6 +107,15 @@ async function projectSection(cwd, home) {
       }
       else if (state === 'stale') pending.push(`- ${taskId}: 승인 이후 소스나 자료가 바뀜(재확인 필요) → prepare-handoff를 다시 실행하면 바뀐 부분과 연결된 항목만 다시 승인받는다. 기존 승인은 보존된다.`);
       else if (state === 'awaiting_approval') pending.push(`- ${taskId}: 대시보드에서 사람의 승인을 기다리는 중.`);
+      else if (state === 'pr_created') {
+        if (await appliedTaskMerged({ home, taskId })) continue;
+        // After the PR, new commits are not covered by the judgment (pivot 6.4).
+        const pr = /** @type {any} */ (events.filter((e) => e.type === 'pr_created').at(-1));
+        const input = /** @type {any} */ (await readJson(taskPaths(home, taskId).input));
+        if (typeof pr?.statusSha === 'string' && input && !(await codeMatches({ input, judgedFiles: input.source.files })).ok) {
+          pending.push(`- ${taskId}: PR ${pr.url}의 판정은 ${pr.statusSha.slice(0, 7)} 기준인데 그 뒤 코드가 바뀜. 새 커밋에는 heirloom/understood 상태가 없다 → 변경을 마쳤으면 prepare-handoff로 재확인한다.`);
+        }
+      }
       else if (state === 'returned') {
         const returned = /** @type {any} */ (events.filter((e) => e.type === 'returned').at(-1));
         const why = (returned?.items ?? []).map((/** @type {any} */ i) => `${i.id} ${i.verdict === 'split' ? '분리' : '되돌림'}: ${i.reason}`).join('; ');

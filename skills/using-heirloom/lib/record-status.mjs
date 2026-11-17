@@ -200,10 +200,12 @@ export async function appliedTaskMerged({ home, taskId }) {
     if (!input || typeof approvalId !== 'string') return null;
     const approval = /** @type {any} */ (await readJson(path.join(paths.approvals, `${approvalId}.json`)));
     const draft = /** @type {any} */ (await readJson(paths.draft));
-    if (!approval || !Array.isArray(approval.items) || !Array.isArray(draft?.records)) return null;
+    if (!approval || !Array.isArray(approval.items)) return null;
     const root = input.repo.root;
     const ref = input.base.ref;
-    const approved = approval.items.filter((/** @type {any} */ i) => i.decision === 'approved').map((/** @type {any} */ i) => draft.records[i.index]).filter(Boolean);
+    // A judgment writes no records: only the branch reaching the target tells it is merged.
+    if (approval.kind !== 'judgment' && !Array.isArray(draft?.records)) return null;
+    const approved = approval.kind === 'judgment' ? [] : approval.items.filter((/** @type {any} */ i) => i.decision === 'approved').map((/** @type {any} */ i) => draft.records[i.index]).filter(Boolean);
     if (approved.length) {
       const { records } = await baseRecords(root, ref);
       return approved.every((/** @type {any} */ op) => changeMerged(op, draft.records, approvalId, records.get(op.op === 'add' ? op.id : op.target)?.meta));

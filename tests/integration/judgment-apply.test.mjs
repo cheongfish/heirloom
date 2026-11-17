@@ -10,10 +10,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { tempDir } from '../helpers/git-fixture.mjs';
-import { CART_HEAD, judge, judgedTask } from '../helpers/judge-fixture.mjs';
+import { CART_HEAD, SPEC, judge, judgedTask } from '../helpers/judge-fixture.mjs';
 import { deriveState, readEvents } from '../../skills/using-heirloom/lib/events.mjs';
 import { SECTION_END, SECTION_START, mergeSection } from '../../skills/using-heirloom/lib/judgment-pr.mjs';
 import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
+import { prepareHandoff } from '../../skills/using-heirloom/lib/prepare.mjs';
+import { buildSessionContext } from '../../skills/using-heirloom/lib/session-context.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const script = (/** @type {string} */ name) => path.join(ROOT, 'skills', 'apply-approval', 'scripts', `${name}.mjs`);
@@ -150,4 +152,41 @@ test('mergeSection: replaces only the marked paragraph', () => {
   const section = `${SECTION_START}\nnew\n${SECTION_END}`;
   assert.equal(mergeSection('', section), `${section}\n`);
   assert.equal(mergeSection(`위\n\n${SECTION_START}\nold\n${SECTION_END}\n\n아래\n`, section), `위\n\n${section}\n\n아래\n`);
+});
+
+test('after the PR: a later code change shows at session start, the paragraph says it is rechecking, and prepare names the open PR', async () => {
+  const t = await setup();
+  const judged = t.repo.git('rev-parse', 'HEAD');
+  assert.equal(t.run('apply', ['--task', t.taskId]).status, 0);
+  const url = 'https://github.com/acme/widgets/pull/11';
+  assert.equal(t.run('complete', ['--task', t.taskId, '--pr-url', url]).status, 0);
+  const context = () => buildSessionContext({ cwd: t.repo.dir, home: t.home, pluginRoot: ROOT });
+  assert.doesNotMatch(await context(), /판정은 .* 기준인데/, 'nothing to say while the code is the judged code');
+
+  await t.repo.write('src/cart.mjs', `${CART_HEAD}export const extra = 1;\n`);
+  t.repo.commitAll('after the PR');
+  const now = t.repo.git('rev-parse', 'HEAD');
+  assert.match(await context(), new RegExp(`${t.taskId}: PR ${url}의 판정은 ${judged.slice(0, 7)} 기준인데 그 뒤 코드가 바뀜`));
+
+  const body = path.join(t.dir, 'pr.md');
+  await writeFile(body, '설명\n');
+  assert.equal(t.run('pr-body', ['--task', t.taskId, '--body-file', body]).status, 0);
+  const marked = t.run('pr-body', ['--task', t.taskId, '--body-file', body, '--rechecking']);
+  assert.equal(marked.status, 0, marked.stderr);
+  const text = await readFile(body, 'utf8');
+  assert.match(text, new RegExp(`> ${judged.slice(0, 7)} 기준 판정\\. 현재 head\\(${now.slice(0, 7)}\\)와 다름, 재확인 중\\.`));
+  assert.match(text, new RegExp(`head ${judged.slice(0, 7)}</sub>`), 'the footer names the judged commit');
+
+  const prepared = /** @type {any} */ (await prepareHandoff({ cwd: t.repo.dir, home: t.home, specs: [SPEC] }));
+  assert.deepEqual(prepared.openPr, { url, statusSha: judged });
+  assert.equal(prepared.recheck.kind, 'probes');
+});
+
+test('a merged PR is not reported as changed at session start', async () => {
+  const t = await setup();
+  assert.equal(t.run('apply', ['--task', t.taskId]).status, 0);
+  assert.equal(t.run('complete', ['--task', t.taskId, '--pr-url', 'https://github.com/acme/widgets/pull/12']).status, 0);
+  // The target branch now holds the work, so the task's own diff against it is empty.
+  t.repo.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  assert.doesNotMatch(await buildSessionContext({ cwd: t.repo.dir, home: t.home, pluginRoot: ROOT }), /기준인데 그 뒤 코드가 바뀜/);
 });
