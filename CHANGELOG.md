@@ -8,6 +8,10 @@
 
 - 세션 시작 블록을 줄였습니다. 활성 axiom 목록, decision 색인(제목과 `[관련]` 표시), 다른 작업의 머지 대기 변경, 머지 판정 줄을 빼고, 규칙 두 줄과 결정 기록이 걸린 경로 목록만 넣습니다. 결정 원문은 그 경로를 고치기 전에 `recall-context`로 읽습니다. 프로젝트 설정 `sessionIndex.maxDecisions`는 더 이상 쓰지 않으며, 기존 설정 파일에 있어도 무시합니다.
 
+### 제거
+
+- spec 위치 등록 흐름을 지웠습니다. 인계한 spec이 `specGlobs`에 맞지 않을 때 패턴 추가를 제안하던 `prepare.mjs`의 `specCoverage`와 `prepare-handoff/scripts/add-spec-globs.mjs`가 없어졌습니다. `specGlobs` 설정과 stop 훅의 spec 감지는 그대로이며, 필요하면 `.heirloom/config.json`에 직접 패턴을 더합니다.
+
 ## [0.3.6] - 2026-11-16
 
 ### 변경

@@ -24,7 +24,6 @@ Read the result:
 - `ok: false`: report `error.message` and `error.hint`; stop. `E_INPUT` (exit 2) requires clarification, not guessing; `E_CONFLICT` (3) means concurrent processing; `E_TRANSIENT` (75) already retried, so do not rerun.
 - Otherwise use `taskId`, `draftPath`, `source.files`, `materials`, `unknowns`, `relatedRecords`, and `reviewMatchesSource`.
 - Non-null `recheck`: use section 2.1 for previously approved work changed since approval.
-- Non-null `specCoverage`: continue the handoff; after reporting, handle the unmatched spec in section 6.
 - `conversation.path` freezes the user's typed messages. If `available: false`, continue with document sources and report `reason`: `no_session` (no recorded session), `ambiguous` (concurrent sessions), `unreadable`, or `empty`.
 
 Only hooks record sessions. Never manufacture conversation input, write `~/.heirloom/` files or call library modules directly. If conversation evidence is needed, the user starts a new session or ends the competing one; then rerun `prepare`.
@@ -125,19 +124,3 @@ Report immediately after starting the wait (or skipping it):
 - Warnings, unknowns, and `conversation.reason` if unavailable conversation excluded a decision.
 
 You may end the session; saved approval can be applied later. If a wait was started, say you will apply approval when it arrives.
-
-## 6. Add a spec location (ask first, then add)
-
-Non-null `specCoverage` means the spec is outside project `specGlobs` used for session-end detection.
-
-After reporting, ask once whether to add `specCoverage.suggested` for `specCoverage.uncovered` to repository `.heirloom/config.json`. Wait for explicit agreement; use the suggested or user-provided repository-relative patterns:
-
-```sh
-node <this skill>/scripts/add-spec-globs.mjs --glob <pattern> [--glob <pattern> ...]
-```
-
-Report `data.created` and `data.added`. The user commits this project setting; it is outside handoff state and needs no new handoff/approval.
-
-If declined or unanswered, do nothing and do not ask again this session. In non-interactive runs, report instead of asking or adding. Never hand-edit config or run the script without agreement.
-
-The approval wait continues. If approval arrives first, apply as step 4 requires, then ask.
