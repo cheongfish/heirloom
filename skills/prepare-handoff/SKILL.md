@@ -22,7 +22,7 @@ Read the result:
 
 - `alreadyPrepared: true`, `state` `awaiting_approval` or later: report the existing handoff and stop without drafting.
 - `alreadyPrepared: true`, `state` `returned`: nothing changed since the person sent the work back. Fix what `previousJudgment` lists first, then run this skill again.
-- Non-null `previousJudgment`: the last judgment returned these questions (`verdict` `revert`: the behavior is wrong; `split`: move it out of this branch), with the person's `reason`. This round must address each one; ask about the changed behavior again. When a returned question cited the spec, `spec.choice` says what the spec becomes, and `spec.parts` lists the cited lines:
+- Non-null `previousJudgment`: the last judgment returned these questions (`verdict` `revert`: the behavior is wrong; `split`: move it out of this branch), with the person's `reason`. This round must address each one; ask about the changed behavior again, keeping the returned question's `id` so the dashboard can tell it is the same question. `timesReturned` counts how often that question has been sent back; at 2 or more, the fixes are not converging: before another round, report it to the user and recommend agreeing on the design of that behavior first, and continue only when the user says how. When a returned question cited the spec, `spec.choice` says what the spec becomes, and `spec.parts` lists the cited lines:
   - `spec-wrong`: the behavior should never have been there. Fix or remove the cited lines and leave one line `거절: <reason>` in their place.
   - `defer`: right, but not in this change. Mark the cited lines themselves with `보류: <follow-up issue, or the reason>`.
   - `snapshot`: leave the spec alone; the PR paragraph will say the cited part is not implemented.
@@ -182,7 +182,7 @@ On completion, handle `data.state`:
 | `applied`, `pr_created` | Report already applied elsewhere. |
 | `discarded`, `expired` | Report; do not apply. |
 | `stale` | Report code changed during review. After changes finish, rerun this skill for a recheck. |
-| `returned` | The person sent the work back; `data.returned` lists the questions and reasons. Report them, change the code (for `split`, move that behavior out of this branch), then rerun this skill. Do not open a PR. |
+| `returned` | The person sent the work back; `data.returned` lists the questions and reasons. Report them, change the code (for `split`, move that behavior out of this branch), then rerun this skill. Do not open a PR. If an item's `timesReturned` is 2 or more, stop after reporting and recommend agreeing on the design first, as in step 1. |
 | `timedOut: true`, still `awaiting_approval` | Report no approval yet; it remains applicable later. |
 
 ## 6. Report

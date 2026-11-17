@@ -11,7 +11,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { tempDir } from '../helpers/git-fixture.mjs';
 
-import { OBSERVED, judgedTask } from '../helpers/judge-fixture.mjs';
+import { CART_HEAD, OBSERVED, SPEC, handIn, judgedTask } from '../helpers/judge-fixture.mjs';
+import { judgeTask, recordPredictions } from '../../skills/using-heirloom/dashboard/judge.mjs';
+import { draftDigest } from '../../skills/using-heirloom/lib/canonical.mjs';
+import { readJson } from '../../skills/using-heirloom/lib/fsx.mjs';
+import { prepareHandoff } from '../../skills/using-heirloom/lib/prepare.mjs';
 import { createDashboardServer } from '../../skills/using-heirloom/dashboard/server.mjs';
 import { deriveState, readEvents } from '../../skills/using-heirloom/lib/events.mjs';
 import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
@@ -136,5 +140,63 @@ test('browser: keep a fork answer in the repository and confirm a discussion', {
   const judgment = JSON.parse(await readFile(path.join(taskPaths(home, taskId).approvals, `${(await readEvents(taskPaths(home, taskId).events)).find((e) => e.type === 'approved')?.approvalId}.json`), 'utf8'));
   assert.equal(judgment.items.find((/** @type {any} */ i) => i.id === 'q4').keep.action, 'record');
   assert.equal(judgment.discussions[0].confirmed, true);
+  assert.deepEqual(errors, []);
+});
+
+test('browser: sending the same question back a second time recommends agreeing on the design', { skip, timeout: 120_000 }, async (t) => {
+  const pw = await import(pathToFileURL(path.join(/** @type {string} */ (PLAYWRIGHT_CORE), 'index.mjs')).href);
+  const { chromium } = pw.default ?? pw;
+  const { repo, home, taskId, sourceHash } = await judgedTask();
+  // First round, judged without the screen: q1 goes back.
+  const draft = /** @type {any} */ (await readJson(taskPaths(home, taskId).draft));
+  await recordPredictions({ home, taskId, request: { draftSha256: draftDigest(draft), answers: { q1: OBSERVED.head, q2: 'yes' } } });
+  await judgeTask({
+    home,
+    taskId,
+    keystore: 'file',
+    request: {
+      draftSha256: draftDigest(draft),
+      sourceHash,
+      items: [
+        { id: 'q1', verdict: 'revert', reason: '12개에도 할인이 붙어야 한다' },
+        { id: 'q2', verdict: 'as-expected' },
+        { id: 'q3', verdict: 'as-expected' },
+        { id: 'q4', verdict: 'answered', answer: '100' },
+      ],
+    },
+  });
+  await repo.write('src/cart.mjs', CART_HEAD.replace('qty >= 100', 'qty >= 50'));
+  const round2 = /** @type {any} */ (await prepareHandoff({ cwd: repo.dir, home, specs: [SPEC] }));
+  await handIn({ home, taskId, sourceHash: round2.source.hash });
+
+  const server = await createDashboardServer({ home, port: 0, version: '0.0.0-test', codeHash: 'test', keystore: 'file' });
+  t.after(() => server.close());
+  const browser = await chromium.launch({ executablePath: CHROMIUM, headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  /** @type {string[]} */
+  const errors = [];
+  page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
+  page.on('dialog', (/** @type {any} */ d) => d.accept());
+
+  await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
+  await page.getByLabel('q1 예측').fill(OBSERVED.head);
+  await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
+  await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
+  await page.getByText('동작 차이').first().waitFor();
+  await page.getByRole('radiogroup', { name: 'q2 판정' }).getByRole('radio', { name: '예상대로' }).click();
+  await page.getByRole('radiogroup', { name: 'q3 판정' }).getByRole('radio', { name: '의도와 같음' }).click();
+  await page.getByRole('radiogroup', { name: 'q4 판정' }).getByRole('radio', { name: '답함' }).click();
+  await page.getByLabel('q4 답').fill('100');
+  const card = page.locator('#question-q1');
+  assert.match(await card.innerText(), /이전에 1번 되돌린 질문[\s\S]*1번째 되돌림: 12개에도 할인이 붙어야 한다/);
+  await page.getByRole('radiogroup', { name: 'q1 판정' }).getByRole('radio', { name: '되돌림' }).click();
+  assert.match(await card.innerText(), /2번째 되돌림: 설계부터 다시 합의하길 권함/);
+  await page.getByLabel('q1 이유').fill('여전히 할인이 없다');
+  await page.getByRole('button', { name: /^판정 저장/ }).click();
+  await page.getByText('판정 내용').first().waitFor();
+  await page.getByRole('tab', { name: /개요/ }).click();
+  assert.match(await page.locator('main').innerText(), /설계부터 다시 합의하길 권함[\s\S]*q1 2번/);
+  assert.equal(deriveState(await readEvents(taskPaths(home, taskId).events)), 'returned');
   assert.deepEqual(errors, []);
 });

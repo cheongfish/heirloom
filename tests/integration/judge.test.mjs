@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { CART_HEAD, OBSERVED, SPEC, judgedTask } from '../helpers/judge-fixture.mjs';
+import { CART_HEAD, OBSERVED, SPEC, handIn, judgedTask } from '../helpers/judge-fixture.mjs';
 import { createDashboardServer } from '../../skills/using-heirloom/dashboard/server.mjs';
 import { deriveState, readEvents } from '../../skills/using-heirloom/lib/events.mjs';
 import { approvalFiles, taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
@@ -153,7 +153,7 @@ test('a revert returns the work: the waiting agent and the next session get the 
   assert.equal(res.body.judgment.outcome, 'returned');
 
   const waited = await waitForApproval({ home, taskId, timeoutMs: 1000 });
-  assert.deepEqual(waited, { taskId, state: 'returned', approvalId: res.body.judgment.id, timedOut: false, returned: [{ id: 'q1', verdict: 'revert', reason: '12개 구매에도 할인이 붙어야 한다' }] });
+  assert.deepEqual(waited, { taskId, state: 'returned', approvalId: res.body.judgment.id, timedOut: false, returned: [{ id: 'q1', verdict: 'revert', reason: '12개 구매에도 할인이 붙어야 한다', timesReturned: 1 }] });
   assert.match(await buildSessionContext({ cwd: repo.dir, home, pluginRoot: ROOT }), new RegExp(`${taskId}: 사람이 판정에서 되돌림\\(q1 되돌림: 12개 구매에도 할인이 붙어야 한다\\)`));
   assert.equal((await get(taskId)).body.latestApproval.outcome, 'returned');
 
@@ -166,5 +166,42 @@ test('a revert returns the work: the waiting agent and the next session get the 
   const next = /** @type {any} */ (await prepareHandoff({ cwd: repo.dir, home, specs: [SPEC] }));
   assert.equal(next.state, 'prepared');
   assert.equal(next.taskId, taskId);
-  assert.deepEqual(next.previousJudgment.returned.map((/** @type {any} */ i) => [i.id, i.verdict, i.answer]), [['q1', 'revert', '108']]);
+  assert.deepEqual(next.previousJudgment.returned.map((/** @type {any} */ i) => [i.id, i.verdict, i.answer, i.timesReturned]), [['q1', 'revert', '108', 1]]);
+});
+
+test('the same question sent back a second time: the screen and the agent are told to agree on the design first', async (t) => {
+  const { repo, home, taskId } = await judgedTask();
+  const { get, post } = await server(t, home);
+  /** @param {string} reason */
+  const returnQ1 = async (reason) => {
+    let task = (await get(taskId)).body;
+    await post(taskId, 'predict', { draftSha256: task.draftSha256, answers: { q1: '120', q2: 'yes' } });
+    task = (await get(taskId)).body;
+    /** @type {any[]} */
+    const items = judgeBody(task).items;
+    items[0] = { id: 'q1', verdict: 'revert', reason };
+    const res = await post(taskId, 'judge', judgeBody(task, { items }));
+    assert.equal(res.status, 200, res.text);
+    return task;
+  };
+
+  const first = await returnQ1('12개 구매에도 할인이 붙어야 한다');
+  assert.deepEqual(first.judge.questions.map((/** @type {any} */ q) => q.returns.length), [0, 0, 0, 0]);
+  assert.equal(first.judge.redesignAfter, 2);
+  assert.deepEqual((await get(taskId)).body.repeatedReturns, [], 'one return is not repeated');
+
+  await repo.write('src/cart.mjs', CART_HEAD.replace('qty >= 100', 'qty >= 50'));
+  const round2 = /** @type {any} */ (await prepareHandoff({ cwd: repo.dir, home, specs: [SPEC] }));
+  await handIn({ home, taskId, sourceHash: round2.source.hash });
+  const second = await returnQ1('여전히 12개에 할인이 없다');
+  const q1 = second.judge.questions.find((/** @type {any} */ q) => q.id === 'q1');
+  assert.deepEqual(q1.returns.map((/** @type {any} */ r) => [r.verdict, r.reason]), [['revert', '12개 구매에도 할인이 붙어야 한다']], 'the screen shows the earlier return before the second');
+
+  const detail = (await get(taskId)).body;
+  assert.deepEqual(detail.repeatedReturns.map((/** @type {any} */ r) => [r.id, r.returns.map((/** @type {any} */ x) => x.reason)]), [['q1', ['12개 구매에도 할인이 붙어야 한다', '여전히 12개에 할인이 없다']]]);
+  const waited = await waitForApproval({ home, taskId, timeoutMs: 1000 });
+  assert.deepEqual(waited.returned?.map((r) => [r.id, r.timesReturned]), [['q1', 2]]);
+  const again = /** @type {any} */ (await prepareHandoff({ cwd: repo.dir, home, specs: [SPEC] }));
+  assert.equal(again.previousJudgment.returned[0].timesReturned, 2);
+  assert.equal(deriveState(await readEvents(taskPaths(home, taskId).events)), 'returned', 'nothing is done beyond sending the work back');
 });

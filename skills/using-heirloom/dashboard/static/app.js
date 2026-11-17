@@ -512,7 +512,7 @@ function boundaryCard(task) {
  * @param {any} task
  */
 function attentionCount(task) {
-  return (task?.input && reviewMatch(task.input) === false ? 1 : 0) + (task?.check?.warnings?.length ? 1 : 0);
+  return (task?.input && reviewMatch(task.input) === false ? 1 : 0) + (task?.check?.warnings?.length ? 1 : 0) + (task?.repeatedReturns?.length ? 1 : 0);
 }
 
 /** @param {any} task */
@@ -528,9 +528,47 @@ function noticesBlock(task) {
     const lines = /** @type {string[]} */ (task.check.warnings);
     items.push(callout('warning', '검사 경고', h('span', {}, lines.map((/** @type {string} */ l, /** @type {number} */ i) => [i ? h('br') : null, l]))));
   }
+  if (task.repeatedReturns?.length) items.push(redesignCallout(task.repeatedReturns));
   if (input?.unknowns?.length) items.push(callout('neutral', '확인하지 못한 값', input.unknowns.join(', ')));
   if (draft?.notes) items.push(callout('informative', '에이전트 메모', draft.notes));
   return items.length ? h('section', { class: 'hl-stack' }, items) : null;
+}
+
+/**
+ * Questions sent back twice or more: recommend agreeing on the design before another round.
+ * @param {{ id: string, returns: { verdict: string, reason: string }[] }[]} repeated
+ */
+function redesignCallout(repeated) {
+  return callout(
+    'warning',
+    '설계부터 다시 합의하길 권함',
+    h(
+      'span',
+      {},
+      `같은 질문이 여러 번 되돌려졌습니다(${repeated.map((r) => `${r.id} ${r.returns.length}번`).join(', ')}). 에이전트에게 한 번 더 고치게 하기 전에, 이 동작을 어떻게 할지 설계부터 다시 합의하세요.`,
+      repeated.map((r) => [h('br'), `${r.id}: `, r.returns.map((x) => x.reason).join(' → ')]),
+    ),
+  );
+}
+
+/**
+ * Earlier rounds that sent this question back, and the recommendation once it is sent back
+ * again as often as the screen allows before agreeing on the design.
+ * @param {any} q
+ * @param {string | null} verdict the verdict chosen on this screen
+ * @param {number} limit
+ */
+function pastReturns(q, verdict, limit) {
+  const past = q.returns ?? [];
+  if (!past.length) return null;
+  const times = past.length + (verdict && RETURNING.has(verdict) ? 1 : 0);
+  const lines = past.map((/** @type {any} */ r, /** @type {number} */ i) => [i ? h('br') : null, `${i + 1}번째 ${VERDICT_LABEL[r.verdict] ?? r.verdict}: ${r.reason}`]);
+  if (times < limit) return callout('neutral', `이전에 ${past.length}번 되돌린 질문`, h('span', {}, lines));
+  return callout(
+    'warning',
+    times > past.length ? `${times}번째 되돌림: 설계부터 다시 합의하길 권함` : `이미 ${past.length}번 되돌린 질문: 설계부터 다시 합의하길 권함`,
+    h('span', {}, lines, h('br'), '고친 코드로 같은 질문이 다시 걸렸습니다. 이번에도 되돌린다면 에이전트에게 다시 고치게 하기보다, 이 동작을 어떻게 할지 먼저 합의하세요.'),
+  );
 }
 
 const discardButton = button(BUTTON.smallOutline, '작업 폐기', () => void discardTask());
@@ -802,6 +840,8 @@ function judgeCard(f, q) {
   const prediction = j.predictions[q.id];
   /** @type {Child[]} */
   const body = [questionHead(q), h('p', { class: 'hl-question' }, q.prompt), questionSources(q.sources)];
+  const history = h('div', {}, pastReturns(q, f.verdicts.get(q.id) ?? null, j.redesignAfter));
+  body.push(history);
   if (prediction !== undefined) {
     const shown = q.kind === 'test-lock' ? (prediction === 'yes' ? '예' : '아니오') : prediction;
     body.push(
@@ -851,6 +891,7 @@ function judgeCard(f, q) {
         f.verdicts.set(q.id, v);
         f.dirty = true;
         help.textContent = VERDICT_HELP[v] ?? '';
+        replace(history, pastReturns(q, v, j.redesignAfter));
         drawExtra();
         refreshJudge();
       },

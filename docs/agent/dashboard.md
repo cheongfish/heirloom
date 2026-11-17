@@ -48,6 +48,7 @@ The callout "먼저 결과를 예측하세요" (predict first) is shown with the
 - **테스트**: pass/fail counts on base and head and the tests whose result changed.
 - **Each question**: your prediction with 맞음 / 틀림 / 직접 비교 (right / wrong / compare yourself), the base and head output of its probes, then the verdict control. A wrong prediction cannot be judged 예상대로 (as expected).
   - 되돌림 or 분리 asks for a reason (필수, required); when the question cites the spec it also asks for **spec 처리**: spec이 틀렸다, 미룬다, spec은 스냅샷.
+  - A question sent back in an earlier round shows those reasons. Sending the same question back a second time turns the note into **설계부터 다시 합의하길 권함** (agree on the design first): another round of fixes is unlikely to converge. It is only a recommendation; saving works as usual.
   - 답함 on a `fork` question asks for the answer; with a decision proposal it also asks **답을 남길 곳**: 이 PR에서만 (default) or 저장소에 계속 유지, with the proposed scope and anchors. A question that asks about an existing record also offers to delete it.
 - **토론에서 정한 결정** (decision from a discussion): one card per candidate the agent found, with the quote, a link to the comment and its author; choose 확정된 결정이 맞다 (it is settled) or 기록하지 않음 (do not record).
 - **머지할 때 spec 처리** (spec at merge): shown when no question is sent back and the handoff has a spec. 삭제 / 보관 / 유지, preselected from `spec.afterMerge`; 유지 needs an owner.

@@ -57,6 +57,8 @@ A human does this. See [Dashboard](dashboard.md) for the screens.
 
 Any revert or split ends in **되돌림** (returned): no PR is opened, and the agent gets your reasons and spec choices. If its session is still waiting it starts fixing right away; otherwise the next session start lists the returned task. When it hands off again, Heirloom refuses the draft while lines you called wrong or deferred are still there word for word.
 
+When the same question (same id) comes back to you a second time, the dashboard recommends agreeing on the design before another round, on the question and in the task's notices. The agent gets the count too (`timesReturned`) and stops to ask you instead of fixing again. Nothing else changes: the work is returned and no PR is opened, as with any return.
+
 The judgment can come hours later. In Claude Code, the agent waits in the background for up to 60 minutes after the handoff (in other hosts, when the host can run a command in the background): if you judge while the session is open, it continues right away. Otherwise the next session picks it up.
 
 ## 3. PR, status, records

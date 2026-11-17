@@ -120,6 +120,48 @@ export async function appendEvent(file, event) {
   });
 }
 
+/** Times one question may be sent back before the dashboard recommends agreeing on the design again. */
+export const REDESIGN_AFTER = 2;
+
+/**
+ * @typedef {object} PastReturn
+ * @property {string} approvalId
+ * @property {string} verdict `revert` or `split`
+ * @property {string} reason
+ * @property {string} at
+ */
+
+/**
+ * Every time the person sent a question back, by question id, oldest first. A question is the
+ * same across rounds when it keeps its id.
+ * @param {TaskEvent[]} events
+ * @returns {Map<string, PastReturn[]>}
+ */
+export function returnsByQuestion(events) {
+  /** @type {Map<string, PastReturn[]>} */
+  const out = new Map();
+  for (const e of events) {
+    if (e.type !== 'returned' || !Array.isArray(e.items)) continue;
+    for (const i of /** @type {any[]} */ (e.items)) {
+      if (typeof i?.id !== 'string') continue;
+      const list = out.get(i.id) ?? [];
+      list.push({ approvalId: String(e.approvalId), verdict: String(i.verdict), reason: String(i.reason ?? ''), at: e.at });
+      out.set(i.id, list);
+    }
+  }
+  return out;
+}
+
+/**
+ * Questions sent back at least REDESIGN_AFTER times: the dashboard recommends agreeing on the
+ * design again instead of another round of fixes. Nothing is blocked beyond the PR itself.
+ * @param {TaskEvent[]} events
+ * @returns {{ id: string, returns: PastReturn[] }[]}
+ */
+export function repeatedReturns(events) {
+  return [...returnsByQuestion(events)].filter(([, list]) => list.length >= REDESIGN_AFTER).map(([id, returns]) => ({ id, returns }));
+}
+
 /**
  * Number of prepare runs recorded for a source state (at most two: one transient retry).
  * @param {TaskEvent[]} events

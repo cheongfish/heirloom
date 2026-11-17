@@ -37,7 +37,7 @@ Of the dashed lines, phase tests work only when you turn on the [optional featur
 ### Predict and judge
 - In the dashboard (`http://127.0.0.1:17380/`) you predict the results first. Until you save the predictions, the server sends no observed output, and saved predictions cannot be changed.
 - Once the results are revealed, you judge each question: as expected, my misunderstanding, answered, revert or split. The judgment is signed with your per-user key.
-- Any revert or split sends the work back to the agent with your reasons; no PR is opened.
+- Any revert or split sends the work back to the agent with your reasons; no PR is opened. When the same question is sent back a second time, the dashboard recommends agreeing on the design before another round of fixes.
 ### PR and commit status
 - When everything is accepted, the agent opens the PR (an MR on GitLab) and adds the "사람이 확인한 동작" (behavior a human confirmed) paragraph, built from the signed judgment only. Wrong predictions stay in it.
 - The `heirloom/understood` commit status goes on the commit that holds exactly the judged code. A commit pushed after the judgment has no status, which shows on the PR at once.

@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { draftDigest } from '../lib/canonical.mjs';
 import { loadUserConfig } from '../lib/config.mjs';
 import { HeirloomError, classifyError } from '../lib/errors.mjs';
-import { appendEvent, deriveState, readEvents } from '../lib/events.mjs';
+import { appendEvent, deriveState, readEvents, repeatedReturns } from '../lib/events.mjs';
 import { readJson } from '../lib/fsx.mjs';
 import { findUnhandedChanges, isStaleTask } from '../lib/overview.mjs';
 import { ensureDir, homePaths, taskPaths } from '../lib/paths.mjs';
@@ -249,6 +249,8 @@ export async function createDashboardServer(options) {
       check: (await readJson(paths.check)) ?? null,
       draftSha256: draft === undefined ? null : draftDigest(draft),
       events,
+      // Questions sent back REDESIGN_AFTER times or more: the screen recommends agreeing on the design again.
+      repeatedReturns: repeatedReturns(events),
       approvals,
       latestApproval: latest ?? null,
     };
