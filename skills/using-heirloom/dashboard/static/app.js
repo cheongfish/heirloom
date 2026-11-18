@@ -652,12 +652,13 @@ function permitPanel(task) {
 
 /**
  * A radio group styled as a SEED segmented control, with any options. Starts empty.
- * @param {{ label: string, options: [string, string][], value: string | null, disabled?: Set<string>, onchange: (value: string) => void }} o
+ * `vertical` lists the options one per line, for options that are sentences.
+ * @param {{ label: string, options: [string, string][], value: string | null, disabled?: Set<string>, vertical?: boolean, onchange: (value: string) => void }} o
  */
-function choiceControl({ label, options, value, disabled = new Set(), onchange }) {
-  const root = h('div', { class: 'seed-segmented-control__root hl-decision hl-choice', role: 'radiogroup', 'aria-label': label });
+function choiceControl({ label, options, value, disabled = new Set(), vertical = false, onchange }) {
+  const root = h('div', { class: `seed-segmented-control__root hl-decision hl-choice${vertical ? ' hl-choice--vertical' : ''}`, role: 'radiogroup', 'aria-label': label });
   root.style.setProperty('--segment-count', String(options.length));
-  root.append(h('div', { class: 'seed-segmented-control__indicator', 'aria-hidden': 'true' }));
+  if (!vertical) root.append(h('div', { class: 'seed-segmented-control__indicator', 'aria-hidden': 'true' }));
   /** @type {HTMLButtonElement[]} */
   const items = options.map(([v, text]) => h('button', { type: 'button', role: 'radio', class: 'seed-segmented-control__item', 'data-value': v, disabled: disabled.has(v) }, text));
   root.append(...items);
@@ -810,7 +811,7 @@ function predictionCard(f, q) {
     refreshJudge();
   };
   if (q.kind === 'test-lock') body.push(choiceControl({ label: `${q.id} 답`, options: [['yes', '예'], ['no', '아니오']], value: f.predictions.get(q.id) ?? null, onchange: set }));
-  else if (q.answerType === 'choice') body.push(choiceControl({ label: `${q.id} 답`, options: q.choices.map((/** @type {string} */ c) => [c, c]), value: f.predictions.get(q.id) ?? null, onchange: set }));
+  else if (q.answerType === 'choice') body.push(choiceControl({ label: `${q.id} 답`, options: q.choices.map((/** @type {string} */ c) => [c, c]), value: f.predictions.get(q.id) ?? null, vertical: true, onchange: set }));
   else body.push(fieldBlock('내 예측', textInput({ value: f.predictions.get(q.id) ?? '', label: `${q.id} 예측`, placeholder: q.answerType === 'number' ? '숫자' : '결과', oninput: set })));
   return h('section', { class: 'hl-card hl-stack', id: `question-${q.id}` }, body);
 }
@@ -897,7 +898,6 @@ function predictPanel(f) {
   return h(
     'div',
     { class: 'hl-stack' },
-    callout('informative', '먼저 결과를 예측하세요', '예측을 저장해야 실제 결과가 공개됩니다. 저장한 예측은 바꿀 수 없습니다. 틀린 예측도 그대로 PR에 남아 리뷰어에게 도움이 됩니다.'),
     j.questions.length > 5 ? callout('warning', `질문이 ${j.questions.length}개`, '이 변경은 한 번에 이해하기에 클 수 있습니다. 나눌 수 있는지 에이전트와 상의해 보세요.') : null,
     j.setupFailed ? callout('warning', '탐침 준비 명령 실패', '실행 환경을 갖추지 못한 채 탐침이 돌았습니다. 결과가 실행 실패일 수 있습니다.') : null,
     recheckNotice(j),

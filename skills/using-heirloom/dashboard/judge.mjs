@@ -9,7 +9,7 @@
 import path from 'node:path';
 
 import { canonicalJson, draftDigest, sha256Hex } from '../lib/canonical.mjs';
-import { normalize, numbersIn, quotedIn } from '../lib/draft-check.mjs';
+import { numbersIn, quotedIn, shownChoices } from '../lib/draft-check.mjs';
 import { HeirloomError } from '../lib/errors.mjs';
 import { appendEvent, deriveState, readEvents, REDESIGN_AFTER, returnsByQuestion } from '../lib/events.mjs';
 import { readJson, writeJsonAtomic } from '../lib/fsx.mjs';
@@ -153,19 +153,17 @@ export function predictionCorrect(q, answer, probes) {
   if (q.kind !== 'predict' || answer === null) return null;
   const p = probes?.probes.find((/** @type {any} */ x) => x.id === q.probe);
   if (!p) return null;
-  const out = `${p.head.stdout}\n${p.head.stderr}`;
   if (q.answerType === 'number') {
     const said = [...numbersIn(answer)];
     if (!said.length) return false;
-    const seen = numbersIn(out);
+    const seen = numbersIn(`${p.head.stdout}\n${p.head.stderr}`);
     return said.every((n) => seen.has(n));
   }
   if (q.answerType === 'choice') {
-    const flat = normalize(out);
-    const shown = (q.choices ?? []).filter((/** @type {string} */ c) => flat.includes(normalize(c)));
+    const shown = shownChoices(q.choices ?? [], p);
     return shown.length === 1 ? shown[0] === answer : null;
   }
-  return normalize(out) === normalize(answer) ? true : null;
+  return null;
 }
 
 /**

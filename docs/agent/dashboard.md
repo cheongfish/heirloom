@@ -49,9 +49,9 @@ The browser opens once per new request, as after a submit (`dashboard.openBrowse
 
 ### Before the reveal
 
-The callout "먼저 결과를 예측하세요" (predict first) is shown with the questions and the full probe commands, so you can see what will run. Nothing that shows a result is on the page yet: the server does not send it.
+The questions are shown with the full probe commands, so you can see what will run. Nothing that shows a result is on the page yet: the server does not send it.
 
-- `predict` questions take a number, text or one of the given choices; `test-lock` questions take 예 / 아니오 (yes / no).
+- `predict` questions take a number or one of four choices, listed one per line; `test-lock` questions take 예 / 아니오 (yes / no).
 - Questions whose verdict is kept from the previous judgment are listed under "이전 판정 유지" (previous judgment kept) and are not asked.
 - **예측 저장하고 결과 보기** (save predictions and reveal) is enabled once every question has a prediction, and asks for a confirmation: saved predictions cannot be changed.
 

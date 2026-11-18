@@ -236,6 +236,32 @@ test('v2: schema shape: kinds, choices, ids, code paths', async () => {
   assert.ok(errors.includes('$.behaviorDiffs[0].codePaths[0]: 변경 파일 목록에 없음 (src/other.mjs)'), errors.join('\n'));
 });
 
+test('v2: a choice prediction needs exactly four choices, exactly one of them in the head output', async () => {
+  const root = await fixture();
+  /** @param {string[]} choices */
+  const withChoices = (choices) => {
+    const d = draft();
+    d.questions.push({ id: 'q5', kind: 'predict', probe: 'p2', prompt: '라벨은?', answerType: 'choice', choices });
+    return d;
+  };
+  assert.deepEqual((await run(root, withChoices(['new v2', 'old v1', 'v3', '빈 문자열']))).errors, []);
+  assert.deepEqual((await run(root, withChoices(['new v2', 'old v1', 'v3']))).errors, ['$.questions[4].choices: 항목이 4개 이상이어야 함']);
+  assert.deepEqual((await run(root, withChoices(['old v1', 'v3', 'v4', '빈 문자열']))).errors, [
+    '$.questions[4].choices: 탐침 p2의 head 출력에 보이는 보기가 0개. 정답 보기 하나만 출력에 있어야 채점됨',
+  ]);
+  // "new" is part of "new v2": a distractor cut from the answer makes the question unscorable.
+  assert.deepEqual((await run(root, withChoices(['new v2', 'new', 'v3', '빈 문자열']))).errors, [
+    '$.questions[4].choices: 탐침 p2의 head 출력에 보이는 보기가 2개 (new v2, new). 정답 보기 하나만 출력에 있어야 채점됨',
+  ]);
+});
+
+test('v2: a free-text prediction is no longer accepted', async () => {
+  const root = await fixture();
+  const d = draft();
+  d.questions.push({ id: 'q5', kind: 'predict', probe: 'p2', prompt: '라벨은?', answerType: 'text' });
+  assert.deepEqual((await run(root, d)).errors, ['$.questions[4].answerType: "number", "choice" 중 하나여야 함']);
+});
+
 test('v2: warnings: too many questions, none, an unexplained changed probe, a number question without a number', async () => {
   const root = await fixture();
   const d = draft();

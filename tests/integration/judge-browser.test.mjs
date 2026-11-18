@@ -46,7 +46,7 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   page.on('dialog', (/** @type {any} */ d) => d.accept());
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
-  await page.getByText('먼저 결과를 예측하세요').waitFor();
+  await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).waitFor();
   const before = await page.locator('main').innerText();
   assert.ok(!before.includes(OBSERVED.head), 'no head output on the page before the reveal');
   assert.match(before, /qty: 12, unit: 10/, 'the probe command is shown');
@@ -100,6 +100,47 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   assert.match(done, /모두 수용/);
   assert.match(done, /머지할 때 spec: 유지 \(소유자: 결제팀\)/);
   assert.equal(deriveState(await readEvents(taskPaths(home, taskId).events)), 'approved');
+  assert.deepEqual(errors, []);
+});
+
+test('browser: a choice prediction lists its four choices one per line and is scored after the reveal', { skip, timeout: 120_000 }, async (t) => {
+  const pw = await import(pathToFileURL(path.join(/** @type {string} */ (PLAYWRIGHT_CORE), 'index.mjs')).href);
+  const { chromium } = pw.default ?? pw;
+  const long = '할인이 붙지 않아 정가 그대로 결제되고, 화면에는 대량 할인 조건을 채우지 못했다는 안내가 함께 나온다';
+  const choices = [OBSERVED.head, '96', '정가 그대로 결제된다', long];
+  const { home, taskId } = await judgedTask({
+    editDraft: (d) => {
+      d.questions[0] = { ...d.questions[0], answerType: 'choice', choices };
+    },
+  });
+  const server = await createDashboardServer({ home, port: 0, version: '0.0.0-test', codeHash: 'test', keystore: 'file' });
+  t.after(() => server.close());
+  const browser = await chromium.launch({ executablePath: CHROMIUM, headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 800, height: 900 } });
+  /** @type {string[]} */
+  const errors = [];
+  page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
+  page.on('dialog', (/** @type {any} */ d) => d.accept());
+
+  await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
+  await on(page, 'q1');
+  const group = page.getByRole('radiogroup', { name: 'q1 답' });
+  const boxes = await Promise.all(choices.map((c) => group.getByRole('radio', { name: c, exact: true }).boundingBox()));
+  for (let i = 1; i < boxes.length; i += 1) {
+    assert.ok(boxes[i].y >= boxes[i - 1].y + boxes[i - 1].height, `choice ${i} is below choice ${i - 1}`);
+    assert.equal(boxes[i].x, boxes[0].x, 'choices share the left edge');
+  }
+  assert.ok(boxes[3].height > boxes[1].height * 1.5, 'the long choice wraps instead of overflowing');
+
+  await group.getByRole('radio', { name: OBSERVED.head, exact: true }).click();
+  assert.equal(await group.getByRole('radio', { name: OBSERVED.head, exact: true }).getAttribute('aria-checked'), 'true');
+  await on(page, 'q2');
+  await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
+  await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
+  await page.getByText('동작 차이').first().waitFor();
+  await on(page, 'q1');
+  assert.match(await page.locator('#question-q1').innerText(), /맞음/);
   assert.deepEqual(errors, []);
 });
 
