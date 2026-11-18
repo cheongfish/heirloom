@@ -898,7 +898,6 @@ function predictPanel(f) {
   return h(
     'div',
     { class: 'hl-stack' },
-    callout('informative', '먼저 결과를 예측하세요', '예측을 저장해야 실제 결과가 공개됩니다. 저장한 예측은 바꿀 수 없습니다. 틀린 예측도 그대로 PR에 남아 리뷰어에게 도움이 됩니다.'),
     j.questions.length > 5 ? callout('warning', `질문이 ${j.questions.length}개`, '이 변경은 한 번에 이해하기에 클 수 있습니다. 나눌 수 있는지 에이전트와 상의해 보세요.') : null,
     j.setupFailed ? callout('warning', '탐침 준비 명령 실패', '실행 환경을 갖추지 못한 채 탐침이 돌았습니다. 결과가 실행 실패일 수 있습니다.') : null,
     recheckNotice(j),

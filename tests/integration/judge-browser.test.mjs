@@ -46,7 +46,7 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   page.on('dialog', (/** @type {any} */ d) => d.accept());
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
-  await page.getByText('먼저 결과를 예측하세요').waitFor();
+  await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).waitFor();
   const before = await page.locator('main').innerText();
   assert.ok(!before.includes(OBSERVED.head), 'no head output on the page before the reveal');
   assert.match(before, /qty: 12, unit: 10/, 'the probe command is shown');
