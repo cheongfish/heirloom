@@ -1,4 +1,4 @@
-// Hand-written validators for Heirloom's data formats (records, input, draft, approval,
+// Hand-written validators for Heirloom's data formats (records, input, draft, judgment,
 // events, index, config).
 // A validator pushes "<json path>: <message>" strings into `errors`.
 
@@ -146,7 +146,6 @@ export const PATTERNS = Object.freeze({
   taskId: /^t-\d{8}-[0-9a-hjkmnp-tv-z]{8}$/,
   approvalId: /^ap-[0-9a-hjkmnp-tv-z]{12}$/,
   recordId: /^[da]-[0-9a-hjkmnp-tv-z]{8}$/,
-  curationId: /^c-[0-9a-hjkmnp-tv-z]{8}$/,
   sha256: /^[0-9a-f]{64}$/,
   stateHash: /^sha256:[0-9a-f]{64}$/,
   commit: /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/,
@@ -187,6 +186,9 @@ const recordSource = object({ ref: nonEmpty, sha256 }, { optional: { lines: line
 
 // ---------------------------------------------------------------- records (5.1)
 
+// Records from before 0.4 (decisions and axioms): no longer written, still read as past
+// records.
+
 const recordApproval = object({ id: approvalId, signer: nonEmpty, approvedAt: timestamp });
 
 export const recordMetaSchema = object(
@@ -219,49 +221,75 @@ export const recordMetaSchema = object(
   },
 );
 
-// ---------------------------------------------------------------- input (5.2)
+// ---------------------------------------------------------------- decision records 2
 
-/** `input.recheck` of an incremental handoff. */
-function recheckSchema() {
-  const digest = nullable(str({ pattern: /^([0-9a-f]{64}|deleted)$/ }));
-  const affected = arrayOf(object({ index: int({ min: 0 }), reasons: arrayOf(nonEmpty, { min: 1 }) }));
-  return object({
-    basedOn: approvalId,
-    mergeBaseChanged: bool,
-    changes: arrayOf(object({ path: nonEmpty, before: digest, after: digest, reason: oneOf('edited', 'base_updated', 'added', 'removed') })),
-    materials: arrayOf(object({ ref: nonEmpty, before: nullable(sha256), after: nullable(sha256) })),
-    affected: object({ summary: affected, records: affected, unlinked: arrayOf(nonEmpty) }),
-    baseline: object({
-      summary: arrayOf(object({ text: nonEmpty, codePaths: arrayOf(nonEmpty) })),
-      records: arrayOf(object({}, { extra: true })),
+/** A decision record id (`d-…`). Axioms belong to the records before 0.4. */
+const decisionId = str({ pattern: /^d-[0-9a-hjkmnp-tv-z]{8}$/ });
+
+/**
+ * Where the code holds a decision now: a symbol in a file, or a test that locks it (by the
+ * name the test results report). The file is a repository file, never a glob or Markdown.
+ * @type {Validator}
+ */
+export const decisionAnchor = object(
+  { file: codePath },
+  {
+    optional: { symbol: nonEmpty, test: nonEmpty },
+    check: (o) => {
+      const problems = [];
+      if (('symbol' in o) === ('test' in o)) problems.push('symbol과 test 중 정확히 하나를 쓴다');
+      if (typeof o.file === 'string' && /[*?[{]/.test(o.file)) problems.push('file은 glob이 아닌 파일 하나여야 함');
+      return problems;
+    },
+  },
+);
+
+/**
+ * Anchors of a decision: at least one, and at least one test that locks it.
+ * @type {Validator}
+ */
+const anchorList = (v, at, errors) => {
+  arrayOf(decisionAnchor, { min: 1 })(v, at, errors);
+  if (Array.isArray(v) && v.length && !v.some((a) => typeof a === 'object' && a !== null && 'test' in a)) {
+    errors.push(`${at}: 결정을 잠그는 테스트 앵커({ file, test })가 하나 이상 필요함. 없으면 그 테스트를 먼저 쓴다`);
+  }
+};
+
+/** What the agent proposes to keep when the person answers a fork question. */
+export const decisionProposal = object({ scope: arrayOf(codePath, { min: 1 }), anchors: anchorList }, { optional: { replaces: decisionId } });
+
+/** The narrow decision record since 0.4. */
+export const decisionSchema = object({
+  schemaVersion: oneOf(2),
+  id: decisionId,
+  kind: oneOf('decision'),
+  choice: nonEmpty,
+  question: nonEmpty,
+  scope: arrayOf(codePath, { min: 1 }),
+  anchors: anchorList,
+  source: arrayOf(
+    tagged('kind', {
+      'fork-answer': object({ kind: oneOf('fork-answer'), approval: approvalId, question: str({ pattern: /^[a-z][a-z0-9-]{0,31}$/ }) }),
+      discussion: object({ kind: oneOf('discussion'), approval: approvalId, url: nonEmpty, quote: nonEmpty, author: nullable(nonEmpty) }),
     }),
-  });
-}
+    { min: 1 },
+  ),
+  replaces: nullable(decisionId),
+  taskId,
+  approval: recordApproval,
+});
+
+// ---------------------------------------------------------------- input (5.2)
 
 const fileStatus = oneOf('A', 'M', 'D');
 
-// ---------------------------------------------------------------- curation review history
-
-/** `.heirloom/curation/c-<id>.json`: one reviewed batch with its candidates and changes. */
-export const curationReviewSchema = object({
-  schemaVersion: v1,
-  id: str({ pattern: PATTERNS.curationId }),
-  taskId,
-  approvalId,
-  reviewedAt: timestamp,
-  batch: arrayOf(recordId),
-  candidates: arrayOf(
-    object(
-      { title: nonEmpty, evidence: arrayOf(recordId), decision: oneOf('accepted', 'held', 'rejected') },
-      { optional: { axiomId: recordId, reason: nonEmpty } },
-    ),
-  ),
-  changes: arrayOf(
-    object(
-      { op: oneOf('add', 'update', 'supersede', 'deprecate', 'relate'), target: recordId, decision: oneOf('approved', 'rejected', 'pending') },
-      { optional: { reason: nonEmpty } },
-    ),
-  ),
+/** `input.recheck` after a judgment: the probes run again and unchanged outputs keep their verdict. */
+const probeRecheckSchema = object({
+  kind: oneOf('probes'),
+  basedOn: approvalId,
+  mergeBaseChanged: bool,
+  changes: arrayOf(object({ path: nonEmpty, reason: oneOf('edited', 'base_updated', 'added', 'removed') })),
+  unlinked: arrayOf(nonEmpty),
 });
 
 export const inputSchema = object({
@@ -272,7 +300,7 @@ export const inputSchema = object({
   branch: nullable(nonEmpty),
   base: object({ ref: nonEmpty, mergeBase: str({ pattern: PATTERNS.commit }) }),
   sdlcTaskRef: nullable(nonEmpty),
-  trigger: oneOf('auto', 'manual', 'curation'),
+  trigger: oneOf('auto', 'manual'),
   source: object({
     hash: stateHash,
     files: arrayOf(object({ path: nonEmpty, status: fileStatus, sha256: str({ pattern: /^([0-9a-f]{64}|deleted)$/ }) })),
@@ -288,97 +316,128 @@ export const inputSchema = object({
   createdAt: timestamp,
 }, {
   optional: {
-    recheck: recheckSchema(),
-    curation: object({ batch: arrayOf(recordId), related: arrayOf(recordId), axioms: arrayOf(recordId), history: arrayOf(curationReviewSchema) }),
+    // Recheck after a judgment.
+    recheck: probeRecheckSchema,
   },
 });
 
-// ---------------------------------------------------------------- draft (5.3)
+// ---------------------------------------------------------------- draft v2
 
-const decisionBody = object({ problem: nonEmpty, choice: nonEmpty, alternatives: text, scope: text });
-const axiomBody = object({ property: nonEmpty, scope: text, exceptions: text, checks: text });
+/** Probe and question ids: lower case, digits and hyphens. */
+export const SHORT_ID = /^[a-z][a-z0-9-]{0,31}$/;
+const shortId = str({ pattern: SHORT_ID });
+/** A spec line range or a conversation message the question rests on. */
+const questionSources = arrayOf(draftSource);
 
-const addOp = object(
+/**
+ * The draft of the agent since 0.4: what the change does, backed by probe runs, and the
+ * questions the human answers before seeing the observed results.
+ */
+export const draftV2Schema = object(
   {
-    op: oneOf('add'),
-    kind: oneOf('decision', 'axiom'),
-    title: nonEmpty,
-    body: object({}, { extra: true }),
-    codePaths: arrayOf(codePath),
-    topics: arrayOf(nonEmpty),
-    sources: arrayOf(draftSource, { min: 1 }),
-  },
-  {
-    optional: {
-      id: recordId,
-      relations: arrayOf(object({ type: oneOf('exception', 'coexist'), id: recordId }, { optional: { condition: text } })),
-      evidence: arrayOf(recordId),
-      baseIndex: int({ min: 0 }),
-    },
-    check: (o) => {
-      /** @type {string[]} */
-      const errors = [];
-      (o.kind === 'axiom' ? axiomBody : decisionBody)(o.body, '$.body', errors);
-      return errors;
-    },
-  },
-);
-
-const baseIndex = int({ min: 0 });
-
-const updateOp = object(
-  { op: oneOf('update'), target: recordId, reason: nonEmpty, sources: arrayOf(draftSource) },
-  { optional: { title: nonEmpty, body: object({}, { extra: true }), codePaths: arrayOf(codePath), topics: arrayOf(nonEmpty), baseIndex } },
-);
-
-export const draftSchema = object(
-  {
-    schemaVersion: v1,
+    schemaVersion: oneOf(2),
     taskId,
     inputSourceHash: stateHash,
-    summary: arrayOf(object({ text: nonEmpty, codePaths: arrayOf(codePath) }, { optional: { baseIndex } })),
-    records: arrayOf(
-      tagged('op', {
-        add: addOp,
-        update: updateOp,
-        supersede: object({ op: oneOf('supersede'), target: recordId, reason: nonEmpty, with: int({ min: 0 }) }, { optional: { baseIndex } }),
-        deprecate: object({ op: oneOf('deprecate'), target: recordId, reason: nonEmpty, sources: arrayOf(draftSource) }, { optional: { baseIndex } }),
-        relate: object(
-          { op: oneOf('relate'), target: recordId, relation: object({ type: oneOf('exception', 'coexist'), id: recordId, condition: nonEmpty }) },
-          { optional: { baseIndex } },
+    probeSetHash: stateHash,
+    behaviorDiffs: arrayOf(object({ text: nonEmpty, probes: arrayOf(shortId, { min: 1 }), codePaths: arrayOf(codePath) })),
+    questions: arrayOf(
+      tagged('kind', {
+        predict: object(
+          { id: shortId, kind: oneOf('predict'), probe: shortId, prompt: nonEmpty, answerType: oneOf('number', 'text', 'choice') },
+          {
+            optional: { choices: arrayOf(nonEmpty, { min: 2 }), sources: questionSources },
+            check: (o) => (o.answerType === 'choice') === Array.isArray(o.choices) ? [] : ['answerType이 choice일 때만, 그리고 반드시 choices를 쓴다'],
+          },
+        ),
+        'test-lock': object(
+          { id: shortId, kind: oneOf('test-lock'), test: nonEmpty, plain: nonEmpty, prompt: nonEmpty },
+          { optional: { sources: questionSources } },
+        ),
+        intent: object({ id: shortId, kind: oneOf('intent'), probe: shortId, sources: arrayOf(draftSource, { min: 1 }), prompt: nonEmpty }),
+        fork: object(
+          { id: shortId, kind: oneOf('fork'), probes: arrayOf(shortId, { min: 1 }), codePaths: arrayOf(codePath, { min: 1 }), prompt: nonEmpty, whyOpen: nonEmpty },
+          // `decision`: what to keep if the person keeps the answer in the repository;
+          // `retires`: a decision record this question asks whether it still holds.
+          { optional: { sources: questionSources, decision: decisionProposal, retires: decisionId } },
         ),
       }),
     ),
-    missing: arrayOf(nonEmpty),
-    conflicts: arrayOf(object({ refs: arrayOf(nonEmpty, { min: 2 }), note: nonEmpty })),
+    inferences: arrayOf(object({ text: nonEmpty, reason: nonEmpty })),
     notes: text,
   },
   {
     optional: {
-      recheck: object({ extra: arrayOf(object({ kind: oneOf('summary', 'record'), baseIndex, reason: nonEmpty })) }),
+      // Decisions settled in a PR or issue discussion, for the person to confirm.
+      // `fetched` is filled by the check: who wrote the comment and a hash of its text.
+      discussions: arrayOf(
+        object(
+          { id: shortId, url: nonEmpty, quote: nonEmpty, choice: nonEmpty, scope: arrayOf(codePath, { min: 1 }), anchors: anchorList },
+          { optional: { replaces: decisionId, fetched: object({ author: nullable(nonEmpty), bodySha256: sha256 }) } },
+        ),
+      ),
     },
   },
 );
 
-// ---------------------------------------------------------------- approval (5.5)
+// ---------------------------------------------------------------- judgment
 
-export const approvalSchema = object({
-  schemaVersion: v1,
+/** What the person concluded about one question. */
+export const VERDICTS = /** @type {const} */ (['as-expected', 'my-misunderstanding', 'answered', 'revert', 'split']);
+/** Verdicts that accept the behavior; the others send the work back. */
+export const ACCEPTING = new Set(['as-expected', 'my-misunderstanding', 'answered']);
+
+const probeHash = object({ base: sha256, head: sha256 });
+
+/**
+ * What the spec becomes when a question citing it is sent back, with the cited
+ * parts as they were, so the next handoff can tell whether they changed.
+ */
+const specChoice = object({
+  choice: oneOf('spec-wrong', 'defer', 'snapshot'),
+  parts: arrayOf(
+    object({ ref: nonEmpty, block: nullable(str()), fileSha256: sha256 }, { optional: { lines: lineRange, quote: text } }),
+    { min: 1 },
+  ),
+});
+
+/** The spec's lifetime once every question is accepted. */
+const specAfterMerge = object(
+  { action: oneOf('delete', 'archive', 'keep'), specs: arrayOf(nonEmpty, { min: 1 }) },
+  { optional: { owner: nonEmpty }, check: (o) => (o.action === 'keep') === (typeof o.owner === 'string') ? [] : ['owner는 keep일 때만, 그리고 반드시 쓴다'] },
+);
+
+/**
+ * The signed judgment of a schema 2 draft, kept where approvals are kept. One item per
+ * question: the person's prediction or answer, what was revealed and the verdict.
+ */
+export const judgmentSchema = object({
+  schemaVersion: oneOf(2),
   id: approvalId,
   taskId,
-  kind: oneOf('full', 'quick', 'incremental'),
-  target: object({ sourceHash: stateHash, materials: recordOf(nullable(sha256)), draftSha256: sha256 }),
-  summary: object({ initial: arrayOf(nonEmpty), final: arrayOf(nonEmpty, { min: 1 }) }, { optional: { origins: arrayOf(nullable(int({ min: 0 }))) } }),
+  kind: oneOf('judgment'),
+  target: object({ sourceHash: stateHash, headSha: nullable(str({ pattern: PATTERNS.commit })), draftSha256: sha256, probeSetHash: stateHash, materials: recordOf(nullable(sha256)) }),
+  behaviorDiffs: object({ initial: arrayOf(nonEmpty), final: arrayOf(nonEmpty) }),
   items: arrayOf(
     object(
-      { index: int({ min: 0 }), decision: oneOf('approved', 'rejected', 'pending') },
-      { optional: { edited: object({}, { extra: true }), carried: bool, reason: nonEmpty } },
+      {
+        id: str({ pattern: SHORT_ID }),
+        kind: oneOf('predict', 'test-lock', 'intent', 'fork'),
+        prompt: nonEmpty,
+        answer: nullable(text),
+        correct: nullable(bool),
+        revealed: object({}, { extra: true }),
+        probeHashes: recordOf(probeHash),
+        verdict: oneOf(...VERDICTS),
+      },
+      { optional: { reason: nonEmpty, carried: bool, spec: specChoice, keep: object({ action: oneOf('record', 'retire'), id: decisionId }) } },
     ),
   ),
+  outcome: oneOf('accepted', 'returned'),
+  predictedAt: timestamp,
+  judgedAt: timestamp,
   approver: object({ fingerprint: nonEmpty, gitUser: nullable(nonEmpty) }),
-  approvedAt: timestamp,
-  signature: str({ pattern: /^[A-Za-z0-9+/]+={0,2}$/ }),
-}, { optional: { basedOn: approvalId } });
+  signature: nonEmpty,
+}, { optional: { basedOn: approvalId, specAfterMerge, discussions: arrayOf(object({ id: str({ pattern: SHORT_ID }), confirmed: bool }, { optional: { recordId: decisionId } })) } });
 
 // ---------------------------------------------------------------- events (5.6)
 
@@ -395,6 +454,11 @@ export const EVENT_TYPES = /** @type {const} */ ([
   'stale',
   'discarded',
   'expired',
+  'returned',
+  // The person's allowance of probe commands; neither moves the task.
+  'probe_permit_requested',
+  'probe_permit_decided',
+  // Written by the context curation removed in 0.4; kept so older task logs still read.
   'agent_started',
   'agent_finished',
 ]);
@@ -405,11 +469,72 @@ export const eventSchema = object({ at: timestamp, type: oneOf(...EVENT_TYPES) }
 
 export const indexSchema = object({
   schemaVersion: v1,
+  // `managed` marked worktrees of the context curation removed in 0.4; kept so older indexes still read.
   worktrees: recordOf(object({ repoId: str({ pattern: PATTERNS.repoId }), path: nonEmpty, lastSeen: timestamp }, { optional: { managed: bool, host: oneOf('claude-code', 'codex', 'antigravity'), hostAt: timestamp } })),
   tasks: recordOf(taskId),
   reminders: recordOf(object({ sourceHash: stateHash, at: timestamp })),
   lastFetch: recordOf(timestamp),
 });
+
+// ---------------------------------------------------------------- probes
+
+/** A command as an argument vector. It runs without a shell. */
+const argv = arrayOf(nonEmpty, { min: 1 });
+
+/** Test output formats Heirloom reads to tell which tests changed between base and head. */
+export const TEST_PARSERS = /** @type {const} */ (['node-tap', 'pytest', 'jest-json', 'exit-code']);
+
+/** The probes file the agent writes: commands that show what this change does. */
+export const probeSpecSchema = object(
+  {
+    probes: arrayOf(
+      object(
+        { id: shortId, title: nonEmpty, run: argv },
+        { optional: { timeoutSeconds: int({ min: 1, max: 600 }) } },
+      ),
+    ),
+  },
+  {
+    optional: {
+      setup: arrayOf(argv),
+      tests: object({ command: argv, parser: oneOf(...TEST_PARSERS) }, { optional: { timeoutSeconds: int({ min: 1, max: 3600 }) } }),
+    },
+  },
+);
+
+/** A command a probe run would start: a setup command, a probe, or the test command. */
+const probeCommand = object({ role: oneOf('setup', 'probe', 'tests'), run: argv }, { optional: { id: shortId, title: nonEmpty } });
+
+/** The probe commands waiting for the person's allowance. */
+export const probePermitRequestSchema = object({
+  schemaVersion: v1,
+  taskId,
+  repoId: str({ pattern: PATTERNS.repoId }),
+  sha256,
+  requestedAt: timestamp,
+  commands: arrayOf(object({ role: oneOf('setup', 'probe', 'tests'), run: argv, known: bool }, { optional: { id: shortId, title: nonEmpty } }), { min: 1 }),
+});
+
+/**
+ * The person's signed answer to a probe permit request. An allowance covers the exact
+ * commands in it, for every later probe run in the same repository.
+ */
+export const probePermitSchema = object(
+  {
+    schemaVersion: v1,
+    id: approvalId,
+    kind: oneOf('probe-permit'),
+    taskId,
+    repoId: str({ pattern: PATTERNS.repoId }),
+    requestSha256: sha256,
+    commands: arrayOf(probeCommand, { min: 1 }),
+    decision: oneOf('allowed', 'denied'),
+    decidedAt: timestamp,
+    approver: object({ fingerprint: nonEmpty, gitUser: nullable(nonEmpty) }),
+    signature: nonEmpty,
+  },
+  { optional: { reason: nonEmpty } },
+);
 
 // ---------------------------------------------------------------- config (5.8)
 
@@ -420,9 +545,19 @@ export const projectConfigSchema = object(
       baseBranch: nonEmpty,
       specGlobs: arrayOf(nonEmpty),
       recall: object({}, { optional: { maxRecords: int({ min: 1 }), maxTokens: int({ min: 1 }) } }),
+      // `sessionIndex` and `curation` are accepted for configs written before 0.4 and ignored.
       sessionIndex: object({}, { optional: { maxDecisions: int({ min: 0 }) } }),
       curation: object({}, { optional: { minUnreviewed: int({ min: 1 }), maxAgeDays: int({ min: 1 }), minForAge: int({ min: 1 }), batchSize: int({ min: 1 }) } }),
       testCadence: object({}, { optional: { mode: oneOf('off', 'phase') } }),
+      spec: object({}, { optional: { afterMerge: oneOf('delete', 'archive', 'keep') } }),
+      probe: object({}, {
+        optional: {
+          setup: arrayOf(argv),
+          maxProbes: int({ min: 1, max: 50 }),
+          setupTimeoutSeconds: int({ min: 1, max: 3600 }),
+          testTimeoutSeconds: int({ min: 1, max: 3600 }),
+        },
+      }),
     },
   },
 );
@@ -432,6 +567,7 @@ export const userConfigSchema = object(
   {
     optional: {
       dashboard: object({}, { optional: { idleMinutes: int({ min: 1 }), openBrowser: bool, staleDays: int({ min: 1 }), port: int({ min: 1024, max: 65535 }) } }),
+      // Accepted for configs written before 0.4 and ignored: the context curation was removed.
       curation: object({}, { optional: { agent: object({}, { optional: { host: oneOf('claude-code', 'codex', 'antigravity'), command: nonEmpty, model: nullable(nonEmpty) } }) } }),
     },
   },

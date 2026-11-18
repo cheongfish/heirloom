@@ -32,7 +32,7 @@ if (process.env.HEIRLOOM_DISABLE_CONVENTION !== '1') {
   output = host.sessionStartOutput(context);
 }
 if (output !== null) emit(output);
-// Context curation of this repository runs with the host of its latest session.
+// The worktree's index entry keeps the host of its latest session.
 const sessionHost = sessionHostOf(process.argv[2], raw);
 if (sessionHost) {
   try {

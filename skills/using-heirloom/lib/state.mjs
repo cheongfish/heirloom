@@ -32,7 +32,7 @@ const sha256 = (data) => createHash('sha256').update(data).digest('hex');
  * @param {string} abs
  * @returns {Promise<string | null>}
  */
-async function hashEntry(abs) {
+export async function hashEntry(abs) {
   let info;
   try {
     info = await lstat(abs);

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { HeirloomError } from './errors.mjs';
 import { writeFileAtomic } from './fsx.mjs';
 import { repoPaths } from './paths.mjs';
-import { recordMetaSchema, validate } from './schema.mjs';
+import { decisionSchema, recordMetaSchema, validate } from './schema.mjs';
 
 export { isMarkdownCodePath } from './schema.mjs';
 
@@ -61,31 +61,6 @@ export function serializeRecord({ meta, body }) {
   return `${OPEN}${JSON.stringify(meta, null, 2)}${CLOSE}${body}`;
 }
 
-/** @type {Record<'decision' | 'axiom', [string, string][]>} */
-export const SECTIONS = {
-  decision: [
-    ['problem', '문제'],
-    ['choice', '선택과 이유'],
-    ['alternatives', '버린 대안'],
-    ['scope', '적용 범위'],
-  ],
-  axiom: [
-    ['property', '유지할 성질'],
-    ['scope', '적용 범위와 조건'],
-    ['exceptions', '예외'],
-    ['checks', '점검 지침'],
-  ],
-};
-
-/**
- * Render the Markdown body of a record from draft body fields.
- * @param {'decision' | 'axiom'} kind
- * @param {Record<string, string>} body
- */
-export function renderBody(kind, body) {
-  return `\n${SECTIONS[kind].map(([key, heading]) => `## ${heading}\n\n${(body[key] ?? '').trim()}\n`).join('\n')}`;
-}
-
 /**
  * @param {string} root repository root
  * @param {RecordMeta} meta
@@ -108,14 +83,36 @@ export async function writeRecord(root, record) {
 }
 
 /**
+ * A decision record since 0.4.
+ * @typedef {object} DecisionMeta
+ * @property {2} schemaVersion
+ * @property {string} id
+ * @property {'decision'} kind
+ * @property {string} choice
+ * @property {string} question
+ * @property {string[]} scope
+ * @property {{ file: string, symbol?: string, test?: string }[]} anchors
+ * @property {any[]} source
+ * @property {string | null} replaces
+ * @property {string} taskId
+ * @property {RecordApproval} approval
+ */
+
+/** @typedef {{ meta: DecisionMeta, body: string }} DecisionDoc */
+
+/**
  * Read and validate all records under .heirloom/. Invalid files are reported, not thrown.
+ * `records` are the records written before 0.4 (schema 1: decisions and axioms), read
+ * only as past records; `decisions` are the decision records since (schema 2).
  * @param {string} root
- * @returns {Promise<{ records: (RecordDoc & { file: string })[], errors: string[] }>}
+ * @returns {Promise<{ records: (RecordDoc & { file: string })[], decisions: (DecisionDoc & { file: string })[], errors: string[] }>}
  */
 export async function readRecords(root) {
   const paths = repoPaths(root);
   /** @type {(RecordDoc & { file: string })[]} */
   const records = [];
+  /** @type {(DecisionDoc & { file: string })[]} */
+  const decisions = [];
   /** @type {string[]} */
   const errors = [];
   for (const dir of [paths.axioms, paths.decisions]) {
@@ -131,16 +128,18 @@ export async function readRecords(root) {
       const rel = path.relative(root, file).split(path.sep).join('/');
       try {
         const parsed = parseRecord(await readFile(file, 'utf8'), rel);
-        const problems = validate(recordMetaSchema, parsed.meta);
+        const v2 = /** @type {any} */ (parsed.meta)?.schemaVersion === 2 && dir === paths.decisions;
+        const problems = validate(v2 ? decisionSchema : recordMetaSchema, parsed.meta);
         if (problems.length) {
           errors.push(`${rel}: ${problems.join('; ')}`);
           continue;
         }
-        records.push({ ...parsed, file });
+        if (v2) decisions.push({ meta: /** @type {any} */ (parsed.meta), body: parsed.body, file });
+        else records.push({ ...parsed, file });
       } catch (err) {
         errors.push(err instanceof Error ? err.message : `${rel}: ${String(err)}`);
       }
     }
   }
-  return { records, errors };
+  return { records, decisions, errors };
 }

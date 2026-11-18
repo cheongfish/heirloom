@@ -1,15 +1,13 @@
-// Which host the user works in, per repository: the SessionStart hook records the host of each
-// session in the worktree's index entry, and a context curation runs with the host of the
-// repository's latest session. Without a recorded session it uses the user config.
+// Which host the user works in: the SessionStart hook records the host of each session in the
+// worktree's index entry.
 
 import path from 'node:path';
 
-import { AGENT_COMMANDS, loadUserConfig } from './config.mjs';
 import { repoInfo } from './git.mjs';
 import { readIds } from './ids.mjs';
-import { readIndex, updateIndex } from './store.mjs';
+import { updateIndex } from './store.mjs';
 
-/** @typedef {import('./agent-runner.mjs').AgentHost} AgentHost */
+/** @typedef {'claude-code' | 'codex' | 'antigravity'} AgentHost */
 
 const HOSTS = /** @type {const} */ (['claude-code', 'codex', 'antigravity']);
 
@@ -49,26 +47,4 @@ export async function recordSessionHost({ home, cwd, host, now = new Date() }) {
     const entry = index.worktrees[worktreeId];
     if (entry) index.worktrees[worktreeId] = { ...entry, host, hostAt: now.toISOString() };
   });
-}
-
-/**
- * The headless agent for a curation of the repository: the host of its latest session, else
- * the configured one. The configured command and model apply only to the configured host;
- * another host runs its default command.
- * @param {{ home: string, repoId: string }} options
- * @returns {Promise<import('./agent-runner.mjs').AgentConfig & { source: 'session' | 'config' }>}
- */
-export async function curationAgent({ home, repoId }) {
-  const configured = (await loadUserConfig(home)).curation.agent;
-  const index = await readIndex(home);
-  /** @type {{ host: string, at: string } | null} */
-  let latest = null;
-  for (const entry of Object.values(index.worktrees)) {
-    if (entry.repoId !== repoId || entry.managed || !entry.host || !entry.hostAt) continue;
-    if (!latest || entry.hostAt > latest.at) latest = { host: entry.host, at: entry.hostAt };
-  }
-  if (!latest) return { ...configured, source: 'config' };
-  const host = /** @type {AgentHost} */ (latest.host);
-  if (host === configured.host) return { ...configured, source: 'session' };
-  return { host, command: AGENT_COMMANDS[host], model: null, source: 'session' };
 }

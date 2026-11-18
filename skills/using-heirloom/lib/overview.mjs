@@ -92,10 +92,7 @@ async function checkWorktree(home, worktreeId, wt) {
  */
 export async function findUnhandedChanges({ home, timeoutMs = 2000 }) {
   const index = await readIndex(home);
-  // Curation worktrees belong to their curation task; they are never unhanded work.
-  const entries = Object.entries(index.worktrees)
-    .filter(([, w]) => !w.managed)
-    .sort(([, a], [, b]) => (a.path < b.path ? -1 : 1));
+  const entries = Object.entries(index.worktrees).sort(([, a], [, b]) => (a.path < b.path ? -1 : 1));
   const results = await Promise.all(
     entries.map(async ([worktreeId, wt]) => {
       if (!(await exists(wt.path))) return { skip: true };

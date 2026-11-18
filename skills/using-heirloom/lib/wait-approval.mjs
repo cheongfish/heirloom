@@ -6,15 +6,15 @@
 import { access } from 'node:fs/promises';
 
 import { HeirloomError } from './errors.mjs';
-import { deriveState, readEvents } from './events.mjs';
+import { deriveState, readEvents, returnsByQuestion } from './events.mjs';
 import { taskPaths } from './paths.mjs';
 
-/** States that end the wait. `approved` and later carry an approval. */
-const ANSWERED = new Set(['approved', 'applied', 'pr_created', 'stale', 'discarded', 'expired']);
+/** States that end the wait. `approved` and later carry an approval; `returned` carries the judgment that sent the work back. */
+const ANSWERED = new Set(['approved', 'applied', 'pr_created', 'stale', 'returned', 'discarded', 'expired']);
 
 /**
  * @param {{ home: string, taskId: string, timeoutMs: number, pollMs?: number }} options
- * @returns {Promise<{ taskId: string, state: string, approvalId: string | null, timedOut: boolean }>}
+ * @returns {Promise<{ taskId: string, state: string, approvalId: string | null, timedOut: boolean, returned?: { id: string, verdict: string, reason: string, timesReturned: number }[] }>}
  */
 export async function waitForApproval({ home, taskId, timeoutMs, pollMs = 2000 }) {
   const file = taskPaths(home, taskId).events;
@@ -27,6 +27,12 @@ export async function waitForApproval({ home, taskId, timeoutMs, pollMs = 2000 }
   for (;;) {
     const events = await readEvents(file);
     const state = deriveState(events);
+    if (state === 'returned') {
+      const event = /** @type {any} */ (events.filter((e) => e.type === 'returned').at(-1));
+      const times = returnsByQuestion(events);
+      const returned = (event.items ?? []).map((/** @type {any} */ i) => ({ ...i, timesReturned: times.get(i.id)?.length ?? 1 }));
+      return { taskId, state, approvalId: event.approvalId, timedOut: false, returned };
+    }
     if (state !== null && ANSWERED.has(state)) {
       const approved = events.filter((e) => e.type === 'approved').at(-1);
       const approvalId = typeof approved?.approvalId === 'string' && state !== 'discarded' && state !== 'expired' ? approved.approvalId : null;

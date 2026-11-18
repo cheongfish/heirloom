@@ -9,7 +9,7 @@ import { assertValid, eventSchema } from './schema.mjs';
 /** @typedef {{ at: string, type: EventType, [key: string]: unknown }} TaskEvent */
 /**
  * @typedef {'prepared' | 'drafted' | 'awaiting_approval' | 'approved' | 'applied' | 'pr_created'
- *   | 'failed' | 'stale' | 'discarded' | 'expired'} TaskState
+ *   | 'failed' | 'stale' | 'returned' | 'discarded' | 'expired'} TaskState
  */
 
 const TERMINAL = new Set(['discarded', 'expired']);
@@ -51,6 +51,10 @@ export function nextState(state, event) {
     case 'approved':
       require(state, event, ['awaiting_approval']);
       return 'approved';
+    case 'returned':
+      // The human judged and sent the work back: the agent changes the code and prepares again.
+      require(state, event, ['awaiting_approval']);
+      return 'returned';
     case 'approval_received':
       require(state, event, ['approved', 'applied', 'pr_created']);
       return /** @type {TaskState} */ (state);
@@ -66,10 +70,15 @@ export function nextState(state, event) {
     case 'stale':
       require(state, event, ['approved', 'applied', 'pr_created']);
       return 'stale';
+    case 'probe_permit_requested':
+    case 'probe_permit_decided':
+      // Probe commands wait for the person's allowance before they run; the task stays where it is.
+      require(state, event, ['prepared', 'drafted']);
+      return /** @type {TaskState} */ (state);
     case 'agent_started':
     case 'agent_finished':
-      // Notices about a headless run the dashboard started: they never move the task, and a
-      // run may finish after the task was discarded.
+      // Notices about a headless run of the context curation removed in 0.4: older task logs
+      // still have them, and they never moved the task.
       return /** @type {TaskState} */ (state);
     case 'discarded':
     case 'expired':
@@ -114,6 +123,48 @@ export async function appendEvent(file, event) {
     await appendJsonLine(file, stamped);
     return state;
   });
+}
+
+/** Times one question may be sent back before the dashboard recommends agreeing on the design again. */
+export const REDESIGN_AFTER = 2;
+
+/**
+ * @typedef {object} PastReturn
+ * @property {string} approvalId
+ * @property {string} verdict `revert` or `split`
+ * @property {string} reason
+ * @property {string} at
+ */
+
+/**
+ * Every time the person sent a question back, by question id, oldest first. A question is the
+ * same across rounds when it keeps its id.
+ * @param {TaskEvent[]} events
+ * @returns {Map<string, PastReturn[]>}
+ */
+export function returnsByQuestion(events) {
+  /** @type {Map<string, PastReturn[]>} */
+  const out = new Map();
+  for (const e of events) {
+    if (e.type !== 'returned' || !Array.isArray(e.items)) continue;
+    for (const i of /** @type {any[]} */ (e.items)) {
+      if (typeof i?.id !== 'string') continue;
+      const list = out.get(i.id) ?? [];
+      list.push({ approvalId: String(e.approvalId), verdict: String(i.verdict), reason: String(i.reason ?? ''), at: e.at });
+      out.set(i.id, list);
+    }
+  }
+  return out;
+}
+
+/**
+ * Questions sent back at least REDESIGN_AFTER times: the dashboard recommends agreeing on the
+ * design again instead of another round of fixes. Nothing is blocked beyond the PR itself.
+ * @param {TaskEvent[]} events
+ * @returns {{ id: string, returns: PastReturn[] }[]}
+ */
+export function repeatedReturns(events) {
+  return [...returnsByQuestion(events)].filter(([, list]) => list.length >= REDESIGN_AFTER).map(([id, returns]) => ({ id, returns }));
 }
 
 /**
