@@ -85,6 +85,17 @@ textarea.seed-text-input__value.hl-one-line { min-height: 0; resize: none; }
 @media (max-width: 480px) { .hl-choice .seed-segmented-control__item { white-space: normal; } }
 .hl-decision .seed-segmented-control__item { border: 0; background: transparent; font-family: inherit; min-width: 0; padding-inline: var(--seed-dimension-x3); }
 .hl-decision:not([data-has-value]) > .seed-segmented-control__indicator { display: none; }
+/* Prediction choices are sentences: one per line, wrapped, left aligned. Hover and the
+   chosen line use the brand orange of the task rows below; the chosen line adds their bar. */
+.hl-choice--vertical { grid-auto-flow: row; grid-auto-rows: auto; width: min(100%, 720px); border-radius: var(--seed-radius-r3); }
+.hl-choice--vertical .seed-segmented-control__item { white-space: normal; justify-content: flex-start; text-align: left; padding-block: var(--seed-dimension-x2); border-radius: var(--seed-radius-r2); }
+.hl-choice--vertical .seed-segmented-control__item:not(:is(:disabled, [disabled], [data-disabled])):is(:hover, [data-checked]) {
+  background-color: var(--seed-color-bg-brand-weak);
+  box-shadow: none;
+  color: var(--seed-color-fg-brand);
+}
+.hl-choice--vertical .seed-segmented-control__item:not(:is(:disabled, [disabled], [data-disabled]))[data-checked] { box-shadow: inset 3px 0 0 var(--seed-color-stroke-brand-solid); }
+.hl-choice--vertical .seed-segmented-control__item:not(:is(:disabled, [disabled], [data-disabled])):active { background-color: var(--seed-color-bg-brand-weak-pressed); }
 
 /* Small text links and fold rows still get a 24px target. */
 .hl-back { display: inline-block; padding-block: var(--seed-dimension-x0_5); }
