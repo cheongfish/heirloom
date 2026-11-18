@@ -69,11 +69,18 @@ The agent does this with the `apply-approval` skill, as soon as you accept every
 2. **Spec lifetime.** Delete the spec with `git rm` or move it with `git mv`, as you chose. A spec with uncommitted changes is left alone until it is committed; a spec that is not Markdown is never moved or deleted.
 3. **Decision records.** Write the records you kept to `.heirloom/decisions/`, and remove the records they replace or that you retired.
 4. **Commit and open the PR.** Commit, push, and open the PR with `gh` (GitHub) or the merge request through Heirloom's `open-mr.mjs`, which calls `glab` (GitLab). The body is the project's template (or the agent's short description) plus the "사람이 확인한 동작" (behavior a human confirmed) paragraph, which only Heirloom writes, from the signed judgment: the behavior descriptions, each prediction and verdict (wrong ones included), `fork` answers, confirmed discussions, claims without run evidence, and the spec choices. When the branch already has a PR, only that paragraph is replaced.
-5. **Commit status.** Post `heirloom/understood: success` on the commit that holds exactly the judged code. Making it a merge requirement is your choice; see the README.
+5. **Commit status.** Post `heirloom/understood: success` on the commit that holds exactly the judged code. Making it a merge requirement is your choice; see [Requiring the status for merge](#requiring-the-status-for-merge).
 
 If no PR can be opened (the remote is neither github.com nor GitLab, or `gh`/`glab` is missing or not logged in), the work is committed and you open the PR or merge the branch yourself. Once the branch is on the target branch, the task counts as finished.
 
 If the PR or MR is closed without merge, the task expires and its records never become active. Heirloom notices this through `gh` or `glab` when the agent applies the task again or when the dashboard overview is shown. Without the tool, or offline, the task keeps waiting.
+
+### Requiring the status for merge
+
+Heirloom does not make `heirloom/understood` a merge requirement; each repository decides. With it required, a commit pushed after the judgment cannot be merged until it is judged again.
+
+- GitHub: in the repository's Settings → Rules → Rulesets (or a branch protection rule under Branches), turn on "Require status checks to pass" for the target branch and add `heirloom/understood`. It shows up in the list only after the status was posted once.
+- GitLab: a commit status posted through the API counts toward the commit's pipeline status. Turning on "Pipelines must succeed" under Settings → Merge requests makes it a merge requirement, but how this behaves in a project without CI can depend on the GitLab version and settings. Push one commit after a judgment and check that merging is really blocked.
 
 ### Decision records
 
