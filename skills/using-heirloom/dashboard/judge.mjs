@@ -11,7 +11,7 @@ import path from 'node:path';
 import { canonicalJson, draftDigest, sha256Hex } from '../lib/canonical.mjs';
 import { normalize, numbersIn, quotedIn } from '../lib/draft-check.mjs';
 import { HeirloomError } from '../lib/errors.mjs';
-import { appendEvent, deriveState, readEvents } from '../lib/events.mjs';
+import { appendEvent, deriveState, readEvents, REDESIGN_AFTER, returnsByQuestion } from '../lib/events.mjs';
 import { readJson, writeJsonAtomic } from '../lib/fsx.mjs';
 import { tryGit } from '../lib/git.mjs';
 import { newApprovalId, newRecordId } from '../lib/ids.mjs';
@@ -175,8 +175,9 @@ export function predictionCorrect(q, answer, probes) {
  * @param {{ home: string, taskId: string }} options
  */
 export async function judgeView({ home, taskId }) {
-  const { input, draft, probes, answers } = await loadTask(home, taskId);
+  const { input, draft, probes, answers, events } = await loadTask(home, taskId);
   if (!isJudgedDraft(draft)) return null;
+  const returned = returnsByQuestion(events);
   const saved = answersFor(answers, draft);
   const commands = (probes?.probes ?? []).map((/** @type {any} */ p) => ({ id: p.id, title: p.title, run: p.run }));
   const { basedOn, carried } = await carriedVerdicts({ home, taskId, input, draft, probes });
@@ -187,6 +188,9 @@ export async function judgeView({ home, taskId }) {
       predictFirst: PREDICTED.has(q.kind) && !kept,
       citesSpec: specSourcesOf(q, input).length > 0,
       carried: kept ? { verdict: kept.verdict, answer: kept.answer, correct: kept.correct, judgedIn: basedOn } : null,
+      // Earlier rounds that sent this question back. One more makes REDESIGN_AFTER: the screen
+      // then recommends agreeing on the design again.
+      returns: returned.get(q.id) ?? [],
     };
   });
   const base = {
@@ -194,6 +198,7 @@ export async function judgeView({ home, taskId }) {
     specs: specRefs(input),
     specAfterMergeDefault: input ? (await loadProjectConfig(input.repo.root)).spec.afterMerge : 'delete',
     basedOn,
+    redesignAfter: REDESIGN_AFTER,
     unlinked: input?.recheck?.kind === 'probes' ? input.recheck.unlinked : [],
     questions,
     commands,

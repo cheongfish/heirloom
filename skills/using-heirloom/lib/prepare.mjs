@@ -9,7 +9,7 @@ import { loadApprovalBaseline } from './baseline.mjs';
 import { freezeConversation } from './conversation.mjs';
 import { HeirloomError } from './errors.mjs';
 import { loadProjectConfig } from './config.mjs';
-import { appendEvent, countAttempts, deriveState, readEvents } from './events.mjs';
+import { appendEvent, countAttempts, deriveState, readEvents, returnsByQuestion } from './events.mjs';
 import { readJson, writeJsonAtomic } from './fsx.mjs';
 import { matchesAny } from './glob.mjs';
 import { filesChangedBetween, repoInfo, resolveBase, tryGit } from './git.mjs';
@@ -212,6 +212,7 @@ async function previousJudgment(paths, events) {
   if (last?.type !== 'returned' || typeof last.approvalId !== 'string') return null;
   const record = /** @type {any} */ (await readJson(approvalFiles(paths.approvals, last.approvalId).record));
   const items = (record?.items ?? []).filter((/** @type {any} */ i) => i.verdict === 'revert' || i.verdict === 'split');
+  const returned = returnsByQuestion(events);
   return {
     approvalId: last.approvalId,
     returned: items.map((/** @type {any} */ i) => ({
@@ -221,6 +222,7 @@ async function previousJudgment(paths, events) {
       answer: i.answer,
       verdict: i.verdict,
       reason: i.reason,
+      timesReturned: returned.get(i.id)?.length ?? 1,
       spec: i.spec ? { choice: i.spec.choice, parts: i.spec.parts.map((/** @type {any} */ p) => ({ ref: p.ref, ...(p.lines ? { lines: p.lines } : {}), ...(p.quote ? { quote: p.quote } : {}) })) } : null,
     })),
   };

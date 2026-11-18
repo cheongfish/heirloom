@@ -47,20 +47,26 @@ export async function judgedTask({ commit = true, config, baseFiles = {}, editDr
   const home = await tempDir('home');
   const prepared = await prepareHandoff({ cwd: repo.dir, home, specs: [SPEC] });
   const taskId = prepared.taskId;
-  const probes = /** @type {any} */ (
-    await runProbes({
-      home,
-      taskId,
-      spec: {
-        probes: [{ id: 'p1', title: '12개 구매 결제액', run: ['node', '-e', "import('./src/cart.mjs').then((m) => console.log(m.total({ qty: 12, unit: 10 })))"] }],
-        tests: { command: ['node', '--test', '--test-reporter=tap'], parser: 'node-tap' },
-      },
-    })
-  );
+  const { probeSetHash } = await handIn({ home, taskId, sourceHash: prepared.source.hash, editDraft });
+  return { upstream, repo, home, taskId, sourceHash: prepared.source.hash, probeSetHash };
+}
+
+/** Probes file of the fixture. */
+export const PROBE_SPEC = {
+  probes: [{ id: 'p1', title: '12개 구매 결제액', run: ['node', '-e', "import('./src/cart.mjs').then((m) => console.log(m.total({ qty: 12, unit: 10 })))"] }],
+  tests: { command: ['node', '--test', '--test-reporter=tap'], parser: 'node-tap' },
+};
+
+/**
+ * Run the fixture's probes for a prepared task, write the fixture's draft and submit it.
+ * @param {{ home: string, taskId: string, sourceHash: string, editDraft?: (draft: any) => void }} options
+ */
+export async function handIn({ home, taskId, sourceHash, editDraft = () => {} }) {
+  const probes = /** @type {any} */ (await runProbes({ home, taskId, spec: PROBE_SPEC }));
   const draft = {
     schemaVersion: 2,
     taskId,
-    inputSourceHash: prepared.source.hash,
+    inputSourceHash: sourceHash,
     probeSetHash: probes.probeSetHash,
     behaviorDiffs: [{ text: '12개 구매 결제액이 108에서 120이 된다', probes: ['p1'], codePaths: ['src/cart.mjs'] }],
     questions: [
@@ -75,7 +81,7 @@ export async function judgedTask({ commit = true, config, baseFiles = {}, editDr
   editDraft(draft);
   await writeFile(taskPaths(home, taskId).draft, JSON.stringify(draft));
   await submitDraft({ home, taskId });
-  return { upstream, repo, home, taskId, sourceHash: prepared.source.hash, probeSetHash: probes.probeSetHash };
+  return { probeSetHash: probes.probeSetHash };
 }
 
 /**

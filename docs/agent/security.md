@@ -24,13 +24,16 @@ The development agent has shell and file write access. Heirloom therefore does n
 
 - Binds to `127.0.0.1` only. Other computers cannot connect.
 - Rejects requests whose `Host` or `Origin` is not the dashboard address. It sends no CORS headers and rejects cross-site requests (`Sec-Fetch-Site: cross-site`).
-- Requests that change state (predict, judge, discard) need a session token. The server creates the token in memory at start and never writes it to disk.
+- Requests that change state (probe permit, predict, judge, discard) need a session token. The server creates the token in memory at start and never writes it to disk.
 - The page uses a strict Content Security Policy that blocks inline scripts.
 
 ## Probe runs
 
 A probe run executes the commands of the agent's probes file, the test command and the setup commands, once on the base and once on the head of the change.
 
+- Before anything runs, the dashboard shows every command in full and you allow or deny them (탐침 실행 허락). Your answer is signed with your key and kept in `~/.heirloom/tasks/<taskId>/probe-permits/`; an unsigned or altered file allows nothing.
+- An allowance covers the exact commands (argument lists) in it. The same command later runs in the same repository without asking again; any new or changed command asks again.
+- An allowance does not cover the repository code a command runs. A test command allowed once runs whatever the tests are at that time, including tests the agent changed later.
 - They run without a shell, in temporary worktrees outside the repository (removed afterwards), with your user's permissions. The network is not limited.
 - The commands are recorded with their outputs in `~/.heirloom/tasks/<taskId>/probes/`, so you can see what ran.
 - A probe that runs too long is killed with its process group (`timeoutSeconds`, default 30).
@@ -40,7 +43,8 @@ A probe run executes the commands of the agent's probes file, the test command a
 A program running as the same OS user, such as the development agent itself, can bypass this:
 
 - **Reading the key file.** When the private key is kept in a file, a program running as the same user can read it and forge approvals. A keychain reduces this risk but does not remove it.
-- **Judging through the dashboard.** A program running as the same user can load the dashboard page, take the session token, and call the prediction and judgment API.
+- **Judging through the dashboard.** A program running as the same user can load the dashboard page, take the session token, and call the prediction, judgment and probe permit API.
+- **Running commands directly.** The probe permit governs what Heirloom runs. The agent can still run commands itself with whatever permissions its host gives it.
 - **Reading outputs before predicting.** Probe outputs are on disk under `~/.heirloom/tasks/<taskId>/probes/` from the moment they run. Hiding them in the dashboard keeps a human honest, not a program.
 
 These limits concern deliberate bypasses. For detection, Heirloom keeps:

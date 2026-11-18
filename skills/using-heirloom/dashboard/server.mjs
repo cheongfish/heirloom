@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { draftDigest } from '../lib/canonical.mjs';
 import { loadUserConfig } from '../lib/config.mjs';
 import { HeirloomError, classifyError } from '../lib/errors.mjs';
-import { appendEvent, deriveState, readEvents } from '../lib/events.mjs';
+import { appendEvent, deriveState, readEvents, repeatedReturns } from '../lib/events.mjs';
 import { readJson } from '../lib/fsx.mjs';
 import { findUnhandedChanges, isStaleTask } from '../lib/overview.mjs';
 import { ensureDir, homePaths, taskPaths } from '../lib/paths.mjs';
@@ -20,6 +20,7 @@ import { appliedTaskMerged } from '../lib/record-status.mjs';
 import { PATTERNS } from '../lib/schema.mjs';
 import { VERSION } from '../lib/version.mjs';
 import { isJudgedDraft, judgeTask, judgeView, recordPredictions, redactedDraft } from './judge.mjs';
+import { decideProbePermit, permitPending, probePermitView } from '../lib/probe-permit.mjs';
 
 const MAX_BODY = 1024 * 1024;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -198,6 +199,8 @@ export async function createDashboardServer(options) {
         state,
         // An applied task without a PR is finished once it reaches its target branch.
         merged: state === 'applied' ? await appliedTaskMerged({ home, taskId }) : null,
+        // Probe commands wait for the person's allowance before they run.
+        permitPending: permitPending(events),
         branch: input?.branch ?? null,
         repoRoot: input?.repo.root ?? null,
         repoId: input?.repo.id ?? null,
@@ -249,6 +252,9 @@ export async function createDashboardServer(options) {
       check: (await readJson(paths.check)) ?? null,
       draftSha256: draft === undefined ? null : draftDigest(draft),
       events,
+      // Questions sent back REDESIGN_AFTER times or more: the screen recommends agreeing on the design again.
+      repeatedReturns: repeatedReturns(events),
+      probePermit: await probePermitView({ home, taskId }),
       approvals,
       latestApproval: latest ?? null,
     };
@@ -305,7 +311,7 @@ export async function createDashboardServer(options) {
       if (!String(req.headers['content-type'] ?? '').startsWith('application/json')) {
         return fail(res, 415, 'E_INPUT', 'application/json 본문만 받음');
       }
-      const action = /^\/api\/tasks\/([^/]+)\/(discard|predict|judge)$/.exec(pathname);
+      const action = /^\/api\/tasks\/([^/]+)\/(discard|predict|judge|probe-permit)$/.exec(pathname);
       if (!action) return fail(res, 404, 'E_NOT_FOUND', '경로가 없음');
       const taskId = decodeURIComponent(action[1]);
       if (!(await exists(taskPaths(home, taskId).dir))) return fail(res, 404, 'E_NOT_FOUND', '작업이 없음');
@@ -313,6 +319,11 @@ export async function createDashboardServer(options) {
       if (action[2] === 'predict') {
         log(`predict ${taskId} sec-fetch-site=${req.headers['sec-fetch-site'] ?? '-'} origin=${req.headers.origin ?? '-'}`);
         return json(res, 200, { ok: true, ...(await recordPredictions({ home, taskId, request: body })) });
+      }
+      if (action[2] === 'probe-permit') {
+        log(`probe-permit ${taskId} sec-fetch-site=${req.headers['sec-fetch-site'] ?? '-'} origin=${req.headers.origin ?? '-'}`);
+        const permit = await decideProbePermit({ home, taskId, request: body, keystore });
+        return json(res, 200, { ok: true, permit });
       }
       if (action[2] === 'judge') {
         log(`judge ${taskId} ua=${JSON.stringify(req.headers['user-agent'] ?? '')} sec-fetch-site=${req.headers['sec-fetch-site'] ?? '-'} origin=${req.headers.origin ?? '-'}`);

@@ -22,7 +22,7 @@ Read the result:
 
 - `alreadyPrepared: true`, `state` `awaiting_approval` or later: report the existing handoff and stop without drafting.
 - `alreadyPrepared: true`, `state` `returned`: nothing changed since the person sent the work back. Fix what `previousJudgment` lists first, then run this skill again.
-- Non-null `previousJudgment`: the last judgment returned these questions (`verdict` `revert`: the behavior is wrong; `split`: move it out of this branch), with the person's `reason`. This round must address each one; ask about the changed behavior again. When a returned question cited the spec, `spec.choice` says what the spec becomes, and `spec.parts` lists the cited lines:
+- Non-null `previousJudgment`: the last judgment returned these questions (`verdict` `revert`: the behavior is wrong; `split`: move it out of this branch), with the person's `reason`. This round must address each one; ask about the changed behavior again, keeping the returned question's `id` so the dashboard can tell it is the same question. `timesReturned` counts how often that question has been sent back; at 2 or more, the fixes are not converging: before another round, report it to the user and recommend agreeing on the design of that behavior first, and continue only when the user says how. When a returned question cited the spec, `spec.choice` says what the spec becomes, and `spec.parts` lists the cited lines:
   - `spec-wrong`: the behavior should never have been there. Fix or remove the cited lines and leave one line `거절: <reason>` in their place.
   - `defer`: right, but not in this change. Mark the cited lines themselves with `보류: <follow-up issue, or the reason>`.
   - `snapshot`: leave the spec alone; the PR paragraph will say the cited part is not implemented.
@@ -59,8 +59,14 @@ Write a probes file outside the repository (for example next to `draftPath`):
 - `setup`: commands run once in each worktree before the probes, for example `[["npm", "ci"]]`. The worktrees have no ignored files such as `node_modules`. The project setting `probe.setup` is used when the file has none.
 
 ```sh
-node <this skill>/scripts/probe.mjs --task <taskId> --file <probes file>
+node <this skill>/scripts/probe.mjs --task <taskId> --file <probes file> [--timeout-minutes <n>]
 ```
+
+Nothing runs until the person allows the commands. Commands they allowed before in this repository (exactly the same argument list) run right away. Otherwise the script shows every command in the dashboard and waits for the answer, 8 minutes by default; give the Bash call a longer timeout, or run it in the background if the host wakes you on completion.
+
+- `permission.state: "allowed"`: the probes ran; read the result below.
+- `permission.state: "pending"` (`timedOut: true`): no answer yet. Tell the user the dashboard (`permission.dashboardUrl`) waits for their allowance of `permission.commands`, then run the same command again; it waits for the same request. Do not change the probes file meanwhile: changed commands make a new request.
+- `E_INPUT` "사람이 탐침 명령을 거절함": the message carries the person's reason. Change the probes file accordingly and run again. Never run the commands yourself to get around a denial.
 
 Read `probes` (outputs per side, `sameOutput`), `tests.changed` (tests whose result differs), `warnings` and `probeSetHash`. If every probe shows the same output on both sides, or a probe fails for a reason unrelated to the change (missing setup, wrong path), fix the probes file and run it again. The last run is the one the draft is checked against.
 
@@ -182,7 +188,7 @@ On completion, handle `data.state`:
 | `applied`, `pr_created` | Report already applied elsewhere. |
 | `discarded`, `expired` | Report; do not apply. |
 | `stale` | Report code changed during review. After changes finish, rerun this skill for a recheck. |
-| `returned` | The person sent the work back; `data.returned` lists the questions and reasons. Report them, change the code (for `split`, move that behavior out of this branch), then rerun this skill. Do not open a PR. |
+| `returned` | The person sent the work back; `data.returned` lists the questions and reasons. Report them, change the code (for `split`, move that behavior out of this branch), then rerun this skill. Do not open a PR. If an item's `timesReturned` is 2 or more, stop after reporting and recommend agreeing on the design first, as in step 1. |
 | `timedOut: true`, still `awaiting_approval` | Report no approval yet; it remains applicable later. |
 
 ## 6. Report

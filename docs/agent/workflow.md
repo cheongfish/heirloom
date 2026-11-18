@@ -17,7 +17,7 @@ The agent does this.
 - **Work without a spec.** A small fix, a refactor or work asked for in the chat is handed off only when the user asks (`prepare-handoff --manual`). So that a chat-only user learns this, the stop hook tells the agent once per session when there are code changes without a linked spec, and the agent mentions it in one sentence when it reports the work as finished.
 - **Steps.**
   1. **Freeze.** Heirloom freezes the source state, the merge-base, the materials (spec, review documents) and the messages the user typed in the session.
-  2. **Probes.** The agent writes a probes file: commands whose output shows what the change does, and optionally the test command. Heirloom runs them itself, once in a temporary worktree of the merge-base and once of the head (uncommitted changes included), and records exit codes, output and hashes. With a test command it compares results per test and lists the tests whose result changed (`node --test --test-reporter=tap`, `pytest -v` and `jest --json` are read per test; anything else by exit code only). Expensive preparation such as `npm ci` goes into `probe.setup` ([Configuration](configuration.md#project-settings)).
+  2. **Probes.** The agent writes a probes file: commands whose output shows what the change does, and optionally the test command. Heirloom runs them itself, once in a temporary worktree of the merge-base and once of the head (uncommitted changes included), and records exit codes, output and hashes. With a test command it compares results per test and lists the tests whose result changed (`node --test --test-reporter=tap`, `pytest -v` and `jest --json` are read per test; anything else by exit code only). Expensive preparation such as `npm ci` goes into `probe.setup` ([Configuration](configuration.md#project-settings)). Nothing runs until you allow the commands in the dashboard; commands you allowed before in the same repository are not asked again ([Dashboard](dashboard.md#allowing-probe-commands)).
   3. **Draft.** From the recorded output the agent writes descriptions of the behavior differences and 3 to 5 questions:
      - `predict`: the result of a probe input, which you answer before seeing it;
      - `test-lock`: whether a test, read in plain words, guards this behavior;
@@ -56,6 +56,8 @@ A human does this. See [Dashboard](dashboard.md) for the screens.
 6. **Save.** The judgment is signed with your key together with the judged commit and the hashes of the probe outputs it rests on.
 
 Any revert or split ends in **되돌림** (returned): no PR is opened, and the agent gets your reasons and spec choices. If its session is still waiting it starts fixing right away; otherwise the next session start lists the returned task. When it hands off again, Heirloom refuses the draft while lines you called wrong or deferred are still there word for word.
+
+When the same question (same id) comes back to you a second time, the dashboard recommends agreeing on the design before another round, on the question and in the task's notices. The agent gets the count too (`timesReturned`) and stops to ask you instead of fixing again. Nothing else changes: the work is returned and no PR is opened, as with any return.
 
 The judgment can come hours later. In Claude Code, the agent waits in the background for up to 60 minutes after the handoff (in other hosts, when the host can run a command in the background): if you judge while the session is open, it continues right away. Otherwise the next session picks it up.
 

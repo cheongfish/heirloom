@@ -121,3 +121,17 @@ a.seed-list-item__root:active { background-color: var(--seed-color-bg-brand-weak
 .hl-command { display: block; white-space: pre-wrap; word-break: break-all; padding: 6px 8px; border-radius: 6px; background: var(--seed-color-bg-neutral-weak); }
 .hl-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
 .hl-output { margin: 0; white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--seed-color-stroke-neutral-muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+
+/* Question cards reviewed side by side (cardDeck in app.js): one card in view, the deck takes
+   its height, and the rest wait to the right. */
+.hl-deck-chips { gap: var(--seed-dimension-x1); }
+.hl-deck-chip[data-done] { color: var(--seed-color-fg-positive); }
+.hl-deck-chip[aria-current] { background: var(--seed-color-bg-brand-weak); color: var(--seed-color-fg-brand); box-shadow: inset 0 -2px 0 var(--seed-color-stroke-brand-solid); }
+.hl-deck-track {
+  display: flex; align-items: flex-start; gap: var(--seed-dimension-x4);
+  overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none;
+  overscroll-behavior-x: contain; transition: height 0.15s ease;
+}
+.hl-deck-track::-webkit-scrollbar { display: none; }
+.hl-deck-slide { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; }
+@media (prefers-reduced-motion: reduce) { .hl-deck-track { transition: none; scroll-behavior: auto; } }

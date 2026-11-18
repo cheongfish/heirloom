@@ -32,12 +32,12 @@ Of the dashed lines, phase tests work only when you turn on the [optional featur
 
 ### Handoff and probes
 - When spec-based work is done, the agent hands it off. Work asked for in the chat without a spec is handed off when the user asks.
-- The agent writes probes (commands) that show what the change does; Heirloom runs them itself in temporary worktrees of base and head and records the output. It runs the existing tests on both sides too and collects the tests whose results changed.
+- The agent writes probes (commands) that show what the change does; once you have read and allowed every command in the dashboard, Heirloom runs them itself in temporary worktrees of base and head and records the output. Commands allowed once in a repository are not asked again. It runs the existing tests on both sides too and collects the tests whose results changed.
 - From the recorded output the agent writes 3 to 5 questions and descriptions of the behavior differences. Numbers and quoted values in the descriptions must be in the actual output, and spec and conversation quotes must match their source; both are checked by machine. Claims no run confirmed are marked "no run evidence".
 ### Predict and judge
 - In the dashboard (`http://127.0.0.1:17380/`) you predict the results first. Until you save the predictions, the server sends no observed output, and saved predictions cannot be changed.
 - Once the results are revealed, you judge each question: as expected, my misunderstanding, answered, revert or split. The judgment is signed with your per-user key.
-- Any revert or split sends the work back to the agent with your reasons; no PR is opened.
+- Any revert or split sends the work back to the agent with your reasons; no PR is opened. When the same question is sent back a second time, the dashboard recommends agreeing on the design before another round of fixes.
 ### PR and commit status
 - When everything is accepted, the agent opens the PR (an MR on GitLab) and adds the "사람이 확인한 동작" (behavior a human confirmed) paragraph, built from the signed judgment only. Wrong predictions stay in it.
 - The `heirloom/understood` commit status goes on the commit that holds exactly the judged code. A commit pushed after the judgment has no status, which shows on the PR at once.
