@@ -1,6 +1,6 @@
 // Layout checks for the plugin tree. Each check takes the plugin root and
 // returns a list of human-readable violations (empty when the layout is valid).
-// See docs/HEIRLOOM-DESIGN.md sections 3 and 5 and AGENTS.md section 2.
+// See AGENTS.md sections 2, 3 and 5.
 
 import { createHash } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
