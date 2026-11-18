@@ -8,7 +8,7 @@ import { assertValid, indexSchema } from './schema.mjs';
 /**
  * @typedef {object} Index
  * @property {1} schemaVersion
- * @property {Record<string, { repoId: string, path: string, lastSeen: string, managed?: boolean, host?: string, hostAt?: string }>} worktrees
+ * @property {Record<string, { repoId: string, path: string, lastSeen: string, host?: string, hostAt?: string }>} worktrees
  *   `host`, `hostAt`: the host of the worktree's latest session and when it started
  * @property {Record<string, string>} tasks
  * @property {Record<string, { sourceHash: string, at: string }>} reminders

@@ -1,4 +1,5 @@
-// Session-start context: the handoff convention plus a short project index.
+// Session-start context: the handoff convention, two rules, the scope of decision records and
+// this worktree's open handoffs.
 // Read-only: never creates ids or files.
 
 import { readFile } from 'node:fs/promises';
@@ -6,19 +7,27 @@ import path from 'node:path';
 
 import { loadProjectConfig } from './config.mjs';
 import { deriveState, readEvents } from './events.mjs';
-import { changedFiles, repoInfo, resolveBase } from './git.mjs';
+import { repoInfo } from './git.mjs';
 import { readJson } from './fsx.mjs';
-import { matchesAny } from './glob.mjs';
 import { readIds } from './ids.mjs';
 import { findProjectRules } from './project-rules.mjs';
 import { remoteProvider, taskRemote } from './remote.mjs';
 import { taskPaths } from './paths.mjs';
 import { appliedTaskMerged, recordView } from './record-status.mjs';
 import { readIndex, tasksForWorktree } from './store.mjs';
-import { curationStatus } from './curation.mjs';
 import { testCadenceBlock } from './test-cadence.mjs';
+import { codeMatches } from './judgment-pr.mjs';
 
-const PENDING_SHOWN = 10;
+const SCOPE_SHOWN = 30;
+
+/** What the person chose for the spec of a question they sent back. @type {Record<string, string>} */
+const SPEC_LABEL = { 'spec-wrong': 'spec이 틀림', defer: '미룸', snapshot: '스냅샷' };
+
+/** Rules every session gets. The first carried most of the effect in the recall experiments. */
+const RULES = [
+  '요청이 기존 결정과 충돌하면 임의로 뒤집지 말고, 결정을 지키는 범위까지만 진행한 뒤 충돌을 알려라.',
+  'spec 문서는 작성 시점의 의도다. 현재 동작은 코드와 테스트가 정한다. `docs/specs/archive/`는 과거 기록이다.',
+];
 
 /**
  * Whether the task's target remote is neither GitHub nor GitLab, so no PR or MR can be opened.
@@ -32,9 +41,6 @@ async function prImpossible(home, taskId) {
   const { url } = await taskRemote(root, input.base.ref);
   return (await remoteProvider({ cwd: root, url })).provider === null;
 }
-
-/** @type {Record<import('./record-status.mjs').ChangeKind, string>} */
-const CHANGE_LABEL = { add: '추가 제안', update: '수정 제안', supersede: '대체 제안', deprecate: '폐기 제안', relate: '관계 추가 제안' };
 
 /** @param {string} text */
 function stripFrontmatter(text) {
@@ -71,88 +77,58 @@ async function projectSection(cwd, home) {
   } catch {
     return null;
   }
-  const config = await loadProjectConfig(info.root);
   const view = await recordView({ cwd: info.root, home });
   const errors = view.errors;
-  const current = view.records.filter((r) => r.status !== 'inactive');
-  /** @param {import('./record-status.mjs').ViewRecord} r */
-  const label = (r) => (r.status === 'pending' ? ' [머지 대기]' : '');
-  const axioms = current.filter((r) => r.doc.meta.kind === 'axiom');
-  const decisions = current.filter((r) => r.doc.meta.kind === 'decision');
+  // Only the scope of decisions is given, never their titles or text: the agent reads a record
+  // with recall-context once it knows which files it will change.
+  // Records from before 0.4 are past records and give no scope.
+  const scope = [...new Set(view.decisions.flatMap((d) => d.doc.meta.scope))].sort();
 
-  /** @type {string[]} */
-  let changed = [];
-  try {
-    const base = await resolveBase({ cwd: info.root, configBase: config.baseBranch });
-    changed = (await changedFiles({ root: info.root, mergeBase: base.mergeBase })).map((f) => f.path);
-  } catch {
-    // no target branch: keep the index unordered
-  }
-  /** @param {string[]} globs */
-  const related = (globs) => changed.some((file) => matchesAny(file, globs));
-  const ordered = [
-    ...decisions.filter((d) => related(d.doc.meta.codePaths)),
-    ...decisions.filter((d) => !related(d.doc.meta.codePaths)),
-  ];
-  const shown = ordered.slice(0, config.sessionIndex.maxDecisions);
-
-  const lines = ['## 활성 axiom'];
-  lines.push(...(axioms.length ? axioms.map((a) => `- ${a.id}${label(a)}: ${a.doc.meta.title}`) : ['- 없음']));
-  lines.push('', '## decision 색인 (현재 변경과 관련된 항목이 위)');
-  if (shown.length) {
-    for (const d of shown) {
-      const mark = related(d.doc.meta.codePaths) ? ' [관련]' : '';
-      lines.push(`- ${d.id}${mark}${label(d)}: ${d.doc.meta.title} — ${d.doc.meta.codePaths.join(', ') || '(경로 없음)'}`);
-    }
-    if (ordered.length > shown.length) lines.push(`- … ${ordered.length - shown.length}개 더 있음. 원문은 recall-context 스킬로 조회한다.`);
-  } else {
-    lines.push('- 없음');
-  }
-  if (view.pending.length) {
-    lines.push('', '## 다른 작업의 머지 대기 변경 (현재 규칙이 아님, 원문은 제공하지 않음)');
-    for (const p of view.pending.slice(0, PENDING_SHOWN)) {
-      lines.push(`- ${p.id}: ${CHANGE_LABEL[p.change]}${p.by ? ` → ${p.by}` : ''} (작업 ${p.taskId ?? '알 수 없음'}) — ${p.title}`);
-    }
-    if (view.pending.length > PENDING_SHOWN) lines.push(`- … ${view.pending.length - PENDING_SHOWN}건 더 있음.`);
+  const lines = ['## 규칙', ...RULES.map((r) => `- ${r}`)];
+  if (scope.length) {
+    lines.push('', '## 결정 기록 범위 (이 경로를 고치기 전에 recall-context 스킬로 기록을 읽는다)');
+    for (const glob of scope.slice(0, SCOPE_SHOWN)) lines.push(`- ${glob}`);
+    if (scope.length > SCOPE_SHOWN) lines.push(`- … ${scope.length - SCOPE_SHOWN}개 더 있음.`);
   }
   if (errors.length) lines.push('', `읽지 못한 기록 ${errors.length}개: ${errors.map((e) => e.split(': ')[0]).join(', ')}`);
 
   const ids = await readIds(info, home);
-  const managed = ids ? (await readIndex(home)).worktrees[ids.worktreeId]?.managed === true : false;
-  if (ids && !managed) {
+  if (ids) {
     const index = await readIndex(home);
     /** @type {string[]} */
     const pending = [];
     for (const { taskId } of tasksForWorktree(index, ids.worktreeId)) {
-      const state = deriveState(await readEvents(taskPaths(home, taskId).events));
+      const events = await readEvents(taskPaths(home, taskId).events);
+      const state = deriveState(events);
       if (state === 'approved') pending.push(`- ${taskId}: 승인됨, 아직 반영되지 않음 → 사용자에게 알리고, 요청하면 apply-approval 스킬로 처리한다.`);
       else if (state === 'applied') {
         if (await appliedTaskMerged({ home, taskId })) continue;
         if (await prImpossible(home, taskId)) pending.push(`- ${taskId}: 기록 파일을 썼고 PR·MR은 만들 수 없음(지원하지 않는 원격) → 사용자가 직접 머지한다. 대상 브랜치에 머지되면 이 목록에서 빠진다.`);
         else pending.push(`- ${taskId}: 기록 파일을 썼지만 PR이 아직 없음 → apply-approval 스킬로 이어서 처리한다.`);
       }
-      else if (state === 'stale') pending.push(`- ${taskId}: 승인 이후 소스나 자료가 바뀜(재확인 필요) → prepare-handoff를 다시 실행하면 바뀐 부분과 연결된 항목만 다시 승인받는다. 기존 승인은 보존된다.`);
+      else if (state === 'stale') pending.push(`- ${taskId}: 판정 이후 코드가 바뀜(재확인 필요) → prepare-handoff를 다시 실행하면 탐침 출력이 달라진 질문만 다시 판정받는다. 기존 판정은 보존된다.`);
       else if (state === 'awaiting_approval') pending.push(`- ${taskId}: 대시보드에서 사람의 승인을 기다리는 중.`);
+      else if (state === 'pr_created') {
+        if (await appliedTaskMerged({ home, taskId })) continue;
+        // After the PR, new commits are not covered by the judgment.
+        const pr = /** @type {any} */ (events.filter((e) => e.type === 'pr_created').at(-1));
+        const input = /** @type {any} */ (await readJson(taskPaths(home, taskId).input));
+        if (typeof pr?.statusSha === 'string' && input && !(await codeMatches({ input, judgedFiles: input.source.files })).ok) {
+          pending.push(`- ${taskId}: PR ${pr.url}의 판정은 ${pr.statusSha.slice(0, 7)} 기준인데 그 뒤 코드가 바뀜. 새 커밋에는 heirloom/understood 상태가 없다 → 변경을 마쳤으면 prepare-handoff로 재확인한다.`);
+        }
+      }
+      else if (state === 'returned') {
+        const returned = /** @type {any} */ (events.filter((e) => e.type === 'returned').at(-1));
+        const why = (returned?.items ?? []).map((/** @type {any} */ i) => `${i.id} ${i.verdict === 'split' ? '분리' : '되돌림'}${i.spec ? `(spec: ${SPEC_LABEL[i.spec] ?? i.spec})` : ''}: ${i.reason}`).join('; ');
+        pending.push(`- ${taskId}: 사람이 판정에서 되돌림(${why}) → 코드와 spec을 고친 뒤 prepare-handoff를 다시 실행한다.`);
+      }
     }
     if (pending.length) lines.push('', '## 이 작업 트리의 미처리 인계', ...pending);
-
-    const curation = await curationStatus({ home, repoId: ids.repoId }).catch(() => null);
-    if (curation?.inProgress.length) lines.push('', `맥락 정리: 진행 중(작업 ${curation.inProgress.map((t) => t.taskId).join(', ')}). 대시보드에서 확인한다.`);
-    else if (curation?.notify) {
-      lines.push('', `맥락 정리 안내: 검토하지 않은 decision이 ${curation.unreviewed}개다. 사용자가 원하면 대시보드에서 '정리 실행'을 고를 수 있다. 직접 실행하지 않는다.`);
-    }
   }
 
   const { commitGuides } = await findProjectRules(info.root);
   if (commitGuides.length) lines.push('', '## 커밋 메시지 지침 파일 (내용을 읽고 따른다)', ...commitGuides.map((g) => `- ${g}`));
 
-  const fetched = view.merge.fetchedAt ?? '기록 없음';
-  lines.push(
-    '',
-    view.merge.status === 'checked'
-      ? `머지 판정: ${view.merge.ref} 기준, 마지막 fetch ${fetched}. fetch하지 않았으므로 그 뒤의 머지는 반영되지 않았다. [머지 대기]는 이 작업이 승인했지만 아직 머지되지 않은 기록이다.`
-      : `머지 판정: 미확인(${view.merge.reason}). 마지막 fetch ${fetched}. 위 목록은 이 작업 트리의 기록 파일 기준이다.`,
-  );
   return lines.join('\n');
 }
 

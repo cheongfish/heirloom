@@ -1,6 +1,6 @@
 // Check and register the agent's draft.
 
-import { access } from 'node:fs/promises';
+import path from 'node:path';
 
 import { readConversation } from './conversation.mjs';
 import { openDashboard } from './dashboard-open.mjs';
@@ -11,20 +11,10 @@ import { readJson, writeFileAtomic, writeJsonAtomic } from './fsx.mjs';
 import { git } from './git.mjs';
 import { renderHandoff } from './handoff.mjs';
 import { taskPaths } from './paths.mjs';
-import { readRecords } from './records.mjs';
 import { assertValid, inputSchema } from './schema.mjs';
+import { unchangedSpecLines } from './spec-handling.mjs';
 import { currentSourceState, hashMaterial } from './state.mjs';
 import { withTaskLock } from './task-lock.mjs';
-
-/** @param {string} p */
-async function exists(p) {
-  try {
-    await access(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * @param {{ home: string, taskId: string }} options
@@ -38,7 +28,8 @@ export async function submitDraft({ home, taskId }) {
     }
     assertValid(inputSchema, input, paths.input);
 
-    const state = deriveState(await readEvents(paths.events));
+    const events = await readEvents(paths.events);
+    const state = deriveState(events);
     if (state !== 'prepared' && state !== 'drafted' && state !== 'awaiting_approval') {
       throw new HeirloomError('E_CONFLICT', `현재 상태(${state ?? '없음'})에서는 초안을 제출할 수 없음`, {
         hint: '새 변경을 인계하려면 prepare를 다시 실행한다.',
@@ -70,10 +61,13 @@ export async function submitDraft({ home, taskId }) {
       throw new HeirloomError('E_INPUT', `초안 파일이 없음: ${paths.draft}`, { hint: 'prepare-handoff 스킬의 형식대로 draft.json을 쓴다.' });
     }
 
-    const { records } = await readRecords(root);
     const repoFiles = (await git(['ls-files', '-co', '--exclude-standard', '-z'], { cwd: root })).split('\0').filter(Boolean);
     const conversation = await readConversation(paths.conversation);
-    const result = await checkDraft({ root, input, draft, records, repoFiles, conversation });
+    const probes = (await readJson(path.join(paths.probes, 'result.json'))) ?? null;
+    const result = await checkDraft({ root, input, draft, repoFiles, conversation, probes });
+    // Spec lines the person said were wrong or deferred must change before the work goes
+    // back to them.
+    result.errors.push(...(await unchangedSpecLines({ home, taskId, root, events })));
     const ok = result.errors.length === 0;
     await writeJsonAtomic(paths.check, {
       schemaVersion: 1,
@@ -91,17 +85,14 @@ export async function submitDraft({ home, taskId }) {
     }
 
     await writeJsonAtomic(paths.draft, result.draft);
-    if (!(await exists(paths.draftInitial))) await writeJsonAtomic(paths.draftInitial, result.draft);
     await writeFileAtomic(paths.handoff, renderHandoff({ input, draft: result.draft, warnings: result.warnings }));
     const newState = await appendEvent(paths.events, { type: 'awaiting_approval' });
 
     return {
       taskId,
       state: newState,
-      recordIds: result.draft.records.filter((/** @type {any} */ r) => r.op === 'add').map((/** @type {any} */ r) => r.id),
       warnings: result.warnings,
       handoffPath: paths.handoff,
-      quickApproval: result.draft.records.length === 0,
       dashboardUrl: null,
     };
   });

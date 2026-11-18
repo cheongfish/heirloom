@@ -18,7 +18,7 @@ import { specsReadInTranscript } from './transcript.mjs';
 /**
  * @typedef {object} StopDecision
  * @property {boolean} remind
- * @property {'stop_hook_active' | 'not_git' | 'no_base' | 'managed' | 'no_changes' | 'no_code_changes' | 'no_spec' | 'already_noticed' | 'notice' | 'already_reminded' | 'handoff_requested' | 'remind' | 'recheck' | 'recheck_not_needed'} reason
+ * @property {'stop_hook_active' | 'not_git' | 'no_base' | 'no_changes' | 'no_code_changes' | 'no_spec' | 'already_noticed' | 'notice' | 'already_reminded' | 'handoff_requested' | 'remind' | 'recheck' | 'recheck_not_needed'} reason
  * @property {string} [message] text for the agent when `remind` is true
  */
 
@@ -48,7 +48,7 @@ export function recheckMessage(taskId, paths) {
   return [
     `Heirloom 재확인 안내: 승인된 작업 ${taskId}의 코드나 자료가 승인 이후 바뀌었다.`,
     `바뀐 파일: ${paths.slice(0, 10).join(', ')}${paths.length > 10 ? ` 외 ${paths.length - 10}개` : ''}`,
-    '이 변경을 마쳤다면, 사용자에게 완료를 보고하기 전에 prepare-handoff 스킬을 다시 실행해 증분 재확인을 시작한다. 바뀐 부분과 연결된 항목만 다시 승인받는다.',
+    '이 변경을 마쳤다면, 사용자에게 완료를 보고하기 전에 prepare-handoff 스킬을 다시 실행해 재확인을 시작한다. 탐침 출력이 달라진 질문만 다시 확인받는다. PR이 이미 있으면 새 커밋에는 판정 상태(heirloom/understood)가 없다.',
     '아직 작업 중이거나, 사용자 입력을 기다리거나, 중단·오류로 멈춘 상태라면 그대로 종료한다.',
     '이 안내는 같은 상태에서 다시 나오지 않는다.',
   ].join('\n');
@@ -106,8 +106,6 @@ export async function evaluateStop({ cwd, home, stopHookActive, transcriptPath }
   }
   const known = await readIds(info, home);
   const index = known ? await readIndex(home) : null;
-  // A curation worktree is driven by its curation task, never by handoff reminders.
-  if (known && index?.worktrees[known.worktreeId]?.managed) return { remind: false, reason: 'managed' };
 
   const config = await loadProjectConfig(info.root);
   let base;

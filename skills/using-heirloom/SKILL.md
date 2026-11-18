@@ -5,7 +5,7 @@ description: "Heirloom session conventions for context recall, handoffs, and hum
 
 # Using Heirloom
 
-Heirloom hands off finished work for dashboard approval and preserves approved decisions for later tasks. A handoff reports readiness; it proves neither correctness nor approval.
+Heirloom hands off finished work for a human to predict and judge in the dashboard before merge, and keeps the few decisions later work must respect as anchored records. A handoff reports readiness; it proves neither correctness nor approval.
 
 ## When to request a handoff
 
@@ -21,22 +21,21 @@ Never guess the target branch, task identifier or spec; leave unknown values unk
 
 ## Project context
 
-The session-start `<heirloom-project>` block lists active axioms and a decision index, with related decisions first. It names the target branch and last fetch time.
+The session-start `<heirloom-project>` block gives two rules, the paths that decision records cover, and this worktree's open handoffs. It never gives record titles or text.
 
-- Active records are merged into that branch.
-- `[머지 대기]` records are approved by this task but unmerged; they apply only here.
-- Other tasks' pending changes are not rules. Do not follow them; report conflicts.
-
-`[관련]` reflects files already changed and may be absent initially. Before editing, use `recall-context` with the intended paths to read full records. Do not discover rules by reading `.heirloom/decisions/` or `.heirloom/axioms/` directly: working-tree files may be superseded or unmerged.
+- Follow the two rules for the whole session.
+- Before editing a file under a listed path, use `recall-context` with the intended paths and read the full records. Its result says which records are active, pending for this task, or other tasks' unmerged changes (not rules; report conflicts).
+- Do not discover rules by reading `.heirloom/decisions/` or `.heirloom/axioms/` directly: working-tree files may be unmerged, and records from before 0.4 (schema 1 decisions, axioms) are past records, not rules.
 
 ## Approval boundary
 
 Only humans approve, through the dashboard.
 
 - Never create or edit `~/.heirloom/tasks/*/approvals/` or hand-edit `.heirloom/decisions/` and `.heirloom/axioms/`.
-- Only `apply-approval` writes records from verified signed approval. Do not claim approval before verification.
+- Only `apply-approval` writes decision records, from a verified signed judgment. Do not claim approval before verification.
 - Report approved but unapplied handoffs listed at session start; apply when the user asks.
-- When this session's approval wait (`prepare-handoff` step 4) reports `approved`, run `apply-approval` immediately without asking again.
+- A handoff listed as returned (되돌림) was sent back in the dashboard with reasons. Report it; when the user asks, fix the code and hand off again with `prepare-handoff`.
+- When this session's approval wait (`prepare-handoff` step 5) reports `approved`, run `apply-approval` immediately without asking again.
 
 ## Dashboard
 
