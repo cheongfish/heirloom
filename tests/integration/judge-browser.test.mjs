@@ -189,14 +189,14 @@ test('browser: sending the same question back a second time recommends agreeing 
   await page.getByRole('radiogroup', { name: 'q4 판정' }).getByRole('radio', { name: '답함' }).click();
   await page.getByLabel('q4 답').fill('100');
   const card = page.locator('#question-q1');
-  assert.match(await card.innerText(), /이전에 1번 되돌린 질문[\s\S]*1번째 되돌림: 12개에도 할인이 붙어야 한다/);
+  assert.match(await card.innerText(), /이전에 1번 되돌린 질문[\s\S]*1차: 12개에도 할인이 붙어야 한다/);
   await page.getByRole('radiogroup', { name: 'q1 판정' }).getByRole('radio', { name: '되돌림' }).click();
-  assert.match(await card.innerText(), /2번째 되돌림: 설계부터 다시 합의하길 권함/);
+  assert.match(await card.innerText(), /설계부터 다시 합의하세요[\s\S]*이번이 2번째 되돌림입니다/);
   await page.getByLabel('q1 이유').fill('여전히 할인이 없다');
   await page.getByRole('button', { name: /^판정 저장/ }).click();
   await page.getByText('판정 내용').first().waitFor();
   await page.getByRole('tab', { name: /개요/ }).click();
-  assert.match(await page.locator('main').innerText(), /설계부터 다시 합의하길 권함[\s\S]*q1 2번/);
+  assert.match(await page.locator('main').innerText(), /설계부터 다시 합의하세요[\s\S]*q1을 2번 되돌렸습니다[\s\S]*2차: 여전히 할인이 없다/);
   assert.equal(deriveState(await readEvents(taskPaths(home, taskId).events)), 'returned');
   assert.deepEqual(errors, []);
 });

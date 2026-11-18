@@ -476,7 +476,6 @@ function changedFiles(files) {
 function boundaryCard(task) {
   const input = task.input;
   if (!input) return callout('critical', '입력 없음', '이 작업의 input.json을 찾지 못했습니다.');
-  const match = reviewMatch(input);
   return h(
     'section',
     { class: 'hl-card' },
@@ -490,8 +489,6 @@ function boundaryCard(task) {
       h('dd', {}, h('code', {}, input.branch ?? '(분리된 HEAD)'), ' → ', h('code', {}, input.base.ref)),
       h('dt', {}, '검토 대상 상태'),
       h('dd', {}, '소스 ', h('code', {}, short(input.source.hash)), ' · merge-base ', h('code', {}, input.base.mergeBase.slice(0, 12))),
-      h('dt', {}, '리뷰한 상태'),
-      h('dd', {}, match === null ? h('span', { class: 'hl-muted' }, '알 수 없음') : match ? badge('positive', '현재 소스와 같음') : badge('critical', '현재 소스와 다름')),
       h('dt', {}, '인계 방식'),
       h('dd', {}, input.trigger === 'manual' ? '수동 요청' : '자동(spec 기반)', input.sdlcTaskRef ? ` · ${input.sdlcTaskRef}` : ''),
       h('dt', {}, '준비 시각'),
@@ -536,6 +533,9 @@ function noticesBlock(task) {
   return items.length ? h('section', { class: 'hl-stack' }, items) : null;
 }
 
+/** @param {{ reason: string }[]} returns @returns {Child[]} */
+const returnLines = (returns) => returns.map((r, i) => [h('br'), `${i + 1}차: ${r.reason}`]);
+
 /**
  * Questions sent back twice or more: recommend agreeing on the design before another round.
  * @param {{ id: string, returns: { verdict: string, reason: string }[] }[]} repeated
@@ -543,12 +543,11 @@ function noticesBlock(task) {
 function redesignCallout(repeated) {
   return callout(
     'warning',
-    '설계부터 다시 합의하길 권함',
+    '설계부터 다시 합의하세요',
     h(
       'span',
       {},
-      `같은 질문이 여러 번 되돌려졌습니다(${repeated.map((r) => `${r.id} ${r.returns.length}번`).join(', ')}). 에이전트에게 한 번 더 고치게 하기 전에, 이 동작을 어떻게 할지 설계부터 다시 합의하세요.`,
-      repeated.map((r) => [h('br'), `${r.id}: `, r.returns.map((x) => x.reason).join(' → ')]),
+      repeated.map((r, i) => [i ? h('br') : null, `${r.id}을 ${r.returns.length}번 되돌렸습니다. 다시 고치게 하기 전에 원하는 동작부터 정하세요.`, returnLines(r.returns)]),
     ),
   );
 }
@@ -564,13 +563,9 @@ function pastReturns(q, verdict, limit) {
   const past = q.returns ?? [];
   if (!past.length) return null;
   const times = past.length + (verdict && RETURNING.has(verdict) ? 1 : 0);
-  const lines = past.map((/** @type {any} */ r, /** @type {number} */ i) => [i ? h('br') : null, `${i + 1}번째 ${VERDICT_LABEL[r.verdict] ?? r.verdict}: ${r.reason}`]);
-  if (times < limit) return callout('neutral', `이전에 ${past.length}번 되돌린 질문`, h('span', {}, lines));
-  return callout(
-    'warning',
-    times > past.length ? `${times}번째 되돌림: 설계부터 다시 합의하길 권함` : `이미 ${past.length}번 되돌린 질문: 설계부터 다시 합의하길 권함`,
-    h('span', {}, lines, h('br'), '고친 코드로 같은 질문이 다시 걸렸습니다. 이번에도 되돌린다면 에이전트에게 다시 고치게 하기보다, 이 동작을 어떻게 할지 먼저 합의하세요.'),
-  );
+  if (times < limit) return callout('neutral', `이전에 ${past.length}번 되돌린 질문`, h('span', {}, past.map((/** @type {any} */ r, /** @type {number} */ i) => [i ? h('br') : null, `${i + 1}차: ${r.reason}`])));
+  const lead = times > past.length ? `이번이 ${times}번째 되돌림입니다.` : `${q.id}을 ${past.length}번 되돌렸습니다.`;
+  return callout('warning', '설계부터 다시 합의하세요', h('span', {}, `${lead} 다시 고치게 하기 전에 원하는 동작부터 정하세요.`, returnLines(past)));
 }
 
 const discardButton = button(BUTTON.smallOutline, '작업 폐기', () => void discardTask());
@@ -625,7 +620,6 @@ function permitPanel(task) {
       sync();
     }
   }
-  const fresh = request.commands.filter((/** @type {any} */ c) => !c.known).length;
   sync();
   return h(
     'div',
@@ -634,11 +628,7 @@ function permitPanel(task) {
       'section',
       { class: 'hl-card hl-stack' },
       h('h2', { class: 'hl-section-title' }, '탐침 실행 허락'),
-      h(
-        'p',
-        { class: 'hl-muted hl-small' },
-        `에이전트가 아래 명령을 이번 변경의 base와 head 임시 worktree에서 각각 실행하려 합니다(새 명령 ${fresh}개). 명령은 셸 없이, 에이전트 세션과 같은 권한으로 실행되며 네트워크도 막지 않습니다. 허락하면 이 저장소에서 같은 명령은 다시 묻지 않습니다. 명령이 실행하는 저장소 코드(테스트 등)는 허락한 뒤에도 바뀔 수 있습니다.`,
-      ),
+      h('p', { class: 'hl-muted hl-small' }, '이번 변경이 실제로 무엇을 바꾸는지 base와 head에서 직접 실행해 확인하려는 명령입니다.'),
       h(
         'ul',
         { class: 'hl-files' },
