@@ -108,11 +108,12 @@ Ask 3 to 5 questions about what the person most likely does not know yet. The pe
 
 | Kind | Asks | Needs |
 | --- | --- | --- |
-| `predict` | the head result of a probe input. `answerType` `number`, `text`, or `choice` with `choices` | `probe` |
+| `predict` | the head result of a probe input. `answerType` `number` for a numeric result, otherwise `choice` with exactly 4 `choices` | `probe` |
 | `test-lock` | whether a test, read in plain words, guards this change's behavior | `test`: a name from `tests.changed`, or `<file>:<line>` in a test file this change touched; `plain`: what the test asserts |
 | `intent` | whether the spec or the user's words match the actual behavior | `probe`, `sources` with exact quotes |
 | `fork` | a choice the code and tests leave open | `probes`, `codePaths`, `whyOpen`: why the choice is open (no reason in code, tests or commits) |
 
+- A `choice` prediction is scored only when exactly one choice appears in the probe's head output, and submit refuses it otherwise. The other three must not be substrings of that output: a distractor cut from the start of the right answer (`"new"` for `"new v2"`) also appears in it.
 - Prefer probes whose outputs differ and behaviors a reviewer could get wrong. Do not ask what the prompt already gives away.
 - Any question may cite `sources`. Documents: `{"ref": "<path>", "lines": [from, to], "quote": "<exact text from those lines>"}`. Conversation: `{"ref": "@conversation", "quote": "<exact text from one message>"}`, without `lines`. Read `conversation.path`; cite only text the user typed, never agent or tool output. A bare agreement to your proposal is not a stated choice.
 - Ask a `fork` question only for a choice the change makes without a stated reason. A document or typed user message that states both the choice and the reason settles it: cite it in an `intent` question instead.
