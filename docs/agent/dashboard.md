@@ -34,6 +34,10 @@ The task screen shows the title, the state badge, the task ID and `branch → ba
 | 개요 (overview) | Task boundary (repository, branch, reviewed source state, changed files grouped as 신규/수정/삭제 (new/modified/deleted), materials), warnings, and for a recheck the judgment it builds on and changed files no behavior description points at. A badge shows how many notices need attention. |
 | 예측 n/m → 판정 n/m (predict → judge) | The questions. The label counts what is done. |
 
+### Question cards
+
+Questions (and discussion candidates) are cards reviewed side by side, one in view at a time, instead of one long column. Move with **← 이전** / **다음 →**, the question chips above the cards (a done card shows ✓), or a horizontal swipe. The line next to the title counts the cards and how many are done.
+
 ### Allowing probe commands
 
 Before Heirloom runs the agent's probes, the task screen opens on **탐침 실행 허락** (allow probe commands). One line says why: to run the change on base and head and see what it actually does. It lists every command that would run on base and head: setup commands (준비), probes (탐침, with id and title) and the test command (테스트), each in full. Commands you allowed before in this repository are marked 이전에 허락함; the others 새 명령 (new).

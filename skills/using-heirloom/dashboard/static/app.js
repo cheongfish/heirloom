@@ -738,6 +738,7 @@ const AFTER_MERGE_HELP = {
  * @property {HTMLElement} status
  * @property {boolean} dirty
  * @property {boolean} busy
+ * @property {{ refresh: () => void } | null} deck the question cards, reviewed side by side
  */
 
 /** @type {JudgeForm | null} */
@@ -762,6 +763,7 @@ function newJudgeForm(task) {
     status: h('div', { class: 'hl-stack' }),
     dirty: false,
     busy: false,
+    deck: null,
   };
 }
 
@@ -813,6 +815,78 @@ function predictionCard(f, q) {
   return h('section', { class: 'hl-card hl-stack', id: `question-${q.id}` }, body);
 }
 
+/**
+ * Cards reviewed side by side instead of one long column: one card in view, moved with the
+ * previous and next buttons, the chips, or a horizontal swipe. The strip of chips shows which
+ * cards are done, and the deck takes the height of the card in view.
+ * @param {string} title
+ * @param {{ id: string, label: string, card: HTMLElement, done: () => boolean }[]} items
+ * @returns {{ root: HTMLElement, refresh: () => void }}
+ */
+function cardDeck(title, items) {
+  const slides = items.map((it, i) => h('div', { class: 'hl-deck-slide', role: 'group', 'aria-roledescription': '카드', 'aria-label': `${it.label} (${i + 1}/${items.length})` }, it.card));
+  const track = h('div', { class: 'hl-deck-track' }, slides);
+  let current = 0;
+  const position = h('span', { class: 'hl-muted hl-small' });
+  const prev = /** @type {HTMLButtonElement} */ (button(BUTTON.smallOutline, '← 이전', () => go(current - 1)));
+  const next = /** @type {HTMLButtonElement} */ (button(BUTTON.smallOutline, '다음 →', () => go(current + 1)));
+  const chips = items.map((it, i) => /** @type {HTMLButtonElement} */ (button(BUTTON.smallGhost, it.label, () => go(i), { 'aria-label': `${it.label}로 이동` })));
+  const fit = () => {
+    const slide = slides[current];
+    if (slide) track.style.height = `${slide.offsetHeight}px`;
+  };
+  const refresh = () => {
+    chips.forEach((chip, i) => {
+      const done = items[i].done();
+      chip.className = i === current ? BUTTON.smallWeak : BUTTON.smallGhost;
+      chip.classList.add('hl-deck-chip');
+      chip.toggleAttribute('data-done', done);
+      chip.textContent = `${items[i].label}${done ? ' ✓' : ''}`;
+      if (i === current) chip.setAttribute('aria-current', 'true');
+      else chip.removeAttribute('aria-current');
+    });
+    position.textContent = `${current + 1} / ${items.length} · 완료 ${items.filter((it) => it.done()).length}`;
+    prev.disabled = current === 0;
+    next.disabled = current === items.length - 1;
+    slides.forEach((slide, i) => slide.toggleAttribute('inert', i !== current));
+    fit();
+  };
+  /** @param {number} i */
+  const go = (i) => {
+    current = Math.max(0, Math.min(items.length - 1, i));
+    track.scrollTo({ left: slides[current].offsetLeft - slides[0].offsetLeft, behavior: 'smooth' });
+    refresh();
+  };
+  // A swipe or trackpad scroll moves the card in view too.
+  let frame = 0;
+  track.addEventListener('scroll', () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => {
+      const left = track.scrollLeft;
+      let nearest = 0;
+      slides.forEach((slide, i) => {
+        if (Math.abs(slide.offsetLeft - slides[0].offsetLeft - left) < Math.abs(slides[nearest].offsetLeft - slides[0].offsetLeft - left)) nearest = i;
+      });
+      if (nearest !== current) {
+        current = nearest;
+        refresh();
+      }
+    });
+  });
+  // A card grows when a reason or an answer field opens.
+  new ResizeObserver(fit).observe(track);
+  for (const slide of slides) new ResizeObserver(() => slide === slides[current] && fit()).observe(slide);
+  refresh();
+  const root = h(
+    'section',
+    { class: 'hl-deck hl-stack', 'aria-label': title },
+    h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, title), h('div', { class: 'hl-row' }, position, prev, next)),
+    h('div', { class: 'hl-row hl-deck-chips' }, chips),
+    track,
+  );
+  return { root, refresh };
+}
+
 /** @param {JudgeForm} f */
 function predictPanel(f) {
   const j = f.task.judge;
@@ -827,7 +901,7 @@ function predictPanel(f) {
     j.questions.length > 5 ? callout('warning', `질문이 ${j.questions.length}개`, '이 변경은 한 번에 이해하기에 클 수 있습니다. 나눌 수 있는지 에이전트와 상의해 보세요.') : null,
     j.setupFailed ? callout('warning', '탐침 준비 명령 실패', '실행 환경을 갖추지 못한 채 탐침이 돌았습니다. 결과가 실행 실패일 수 있습니다.') : null,
     recheckNotice(j),
-    first.map((/** @type {any} */ q) => predictionCard(f, q)),
+    first.length ? predictDeck(f, first) : null,
     later.length
       ? h('section', { class: 'hl-card hl-stack' }, h('h2', { class: 'hl-section-title' }, '결과를 본 뒤 답할 질문'), h('ul', { class: 'hl-files' }, later.map((/** @type {any} */ q) => h('li', {}, badge('neutral', QUESTION_KIND[q.kind] ?? q.kind), ` ${q.prompt}`))))
       : null,
@@ -844,6 +918,19 @@ function predictPanel(f) {
     f.status,
     h('div', { class: 'hl-row' }, reveal),
   );
+}
+
+/**
+ * @param {JudgeForm} f
+ * @param {any[]} questions
+ */
+function predictDeck(f, questions) {
+  const deck = cardDeck(
+    '결과 예측',
+    questions.map((q) => ({ id: q.id, label: q.id, card: predictionCard(f, q), done: () => f.predictions.has(q.id) })),
+  );
+  f.deck = deck;
+  return deck.root;
 }
 
 /** @param {any} run */
@@ -1134,12 +1221,25 @@ function judgePanel(f) {
         )
       : null,
     recheckNotice(j),
-    j.questions.map((/** @type {any} */ q) => judgeCard(f, q)),
-    (j.discussions ?? []).map((/** @type {any} */ d) => discussionCard(f, d)),
+    judgeDeck(f),
     f.lifecycle,
     f.status,
     h('div', { class: 'hl-row' }, submit),
   );
+}
+
+/**
+ * The questions and discussion candidates to judge, side by side.
+ * @param {JudgeForm} f
+ */
+function judgeDeck(f) {
+  const j = f.task.judge;
+  const deck = cardDeck('질문 판정', [
+    ...j.questions.map((/** @type {any} */ q) => ({ id: q.id, label: q.id, card: judgeCard(f, q), done: () => Boolean(q.carried) || f.verdicts.has(q.id) })),
+    ...(j.discussions ?? []).map((/** @type {any} */ d) => ({ id: d.id, label: d.id, card: discussionCard(f, d), done: () => f.discussions.has(d.id) })),
+  ]);
+  f.deck = deck;
+  return deck.root;
 }
 
 /** Why the current step cannot be saved yet. @param {JudgeForm} f @returns {string[]} */
@@ -1171,6 +1271,7 @@ function judgeBlockers(f) {
 function refreshJudge() {
   if (!judge) return;
   drawLifecycle(judge);
+  judge.deck?.refresh();
   const why = judgeBlockers(judge);
   const target = /** @type {HTMLButtonElement | null} */ (document.getElementById(judge.task.judge.revealed ? 'judge-submit' : 'reveal'));
   if (target) {

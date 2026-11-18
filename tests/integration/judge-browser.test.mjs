@@ -24,6 +24,13 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const { PLAYWRIGHT_CORE, CHROMIUM } = process.env;
 const skip = PLAYWRIGHT_CORE && CHROMIUM ? false : 'PLAYWRIGHT_CORE와 CHROMIUM이 없음';
 
+/**
+ * Bring a question card into view: the cards sit side by side, one in view at a time.
+ * @param {any} page
+ * @param {string} id
+ */
+const on = (page, id) => page.getByRole('button', { name: `${id}로 이동` }).click();
+
 test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) => {
   const pw = await import(pathToFileURL(path.join(/** @type {string} */ (PLAYWRIGHT_CORE), 'index.mjs')).href);
   const { chromium } = pw.default ?? pw;
@@ -46,7 +53,9 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   const reveal = page.getByRole('button', { name: '예측 저장하고 결과 보기' });
   assert.equal(await reveal.isDisabled(), true, 'disabled until every prediction is in');
 
+  await on(page, 'q1');
   await page.getByLabel('q1 예측').fill(OBSERVED.base);
+  await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await reveal.click();
   await page.getByText('동작 차이').first().waitFor();
@@ -54,17 +63,21 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   assert.ok(after.includes(OBSERVED.head), 'the head output is revealed');
   assert.match(after, /틀림/);
   const q1 = page.getByRole('radiogroup', { name: 'q1 판정' });
+  await on(page, 'q1');
   assert.equal(await q1.getByRole('radio', { name: '예상대로' }).isDisabled(), true, 'a wrong prediction cannot be judged as expected');
 
   await q1.getByRole('radio', { name: '잘못 알았음' }).click();
+  await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 판정' }).getByRole('radio', { name: '예상대로' }).click();
   const q3 = page.getByRole('radiogroup', { name: 'q3 판정' });
+  await on(page, 'q4');
   await page.getByRole('radiogroup', { name: 'q4 판정' }).getByRole('radio', { name: '답함' }).click();
   const submit = page.getByRole('button', { name: /^판정 저장/ });
   assert.equal(await submit.isDisabled(), true, 'the open choice still needs an answer');
   await page.getByLabel('q4 답').fill('100으로 한다');
 
   // Sending back q3, which cites the spec, asks what the spec becomes and hides the lifetime.
+  await on(page, 'q3');
   await q3.getByRole('radio', { name: '되돌림' }).click();
   await page.getByLabel('q3 이유').fill('경계는 10개로 둔다');
   assert.equal(await page.getByRole('radiogroup', { name: 'spec 수명' }).count(), 0, 'no lifetime while work goes back');
@@ -118,13 +131,19 @@ test('browser: keep a fork answer in the repository and confirm a discussion', {
   page.on('dialog', (/** @type {any} */ d) => d.accept());
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
+  await on(page, 'q1');
   await page.getByLabel('q1 예측').fill(OBSERVED.base);
+  await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
   await page.getByText('동작 차이').first().waitFor();
+  await on(page, 'q1');
   await page.getByRole('radiogroup', { name: 'q1 판정' }).getByRole('radio', { name: '잘못 알았음' }).click();
+  await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 판정' }).getByRole('radio', { name: '예상대로' }).click();
+  await on(page, 'q3');
   await page.getByRole('radiogroup', { name: 'q3 판정' }).getByRole('radio', { name: '의도와 같음' }).click();
+  await on(page, 'q4');
   await page.getByRole('radiogroup', { name: 'q4 판정' }).getByRole('radio', { name: '답함' }).click();
   await page.getByLabel('q4 답').fill('100으로 한다');
   const keep = page.getByRole('radiogroup', { name: 'q4 남길 곳' });
@@ -133,6 +152,7 @@ test('browser: keep a fork answer in the repository and confirm a discussion', {
   const submit = page.getByRole('button', { name: /^판정 저장/ });
   assert.match(await page.locator('main').innerText(), /확인하지 않은 토론 결정: x1/);
   assert.equal(await submit.isDisabled(), true);
+  await on(page, 'x1');
   await page.getByRole('radiogroup', { name: 'x1 확인' }).getByRole('radio', { name: '확정된 결정이 맞다' }).click();
   await submit.click();
   await page.getByText('판정 내용').first().waitFor();
@@ -180,16 +200,22 @@ test('browser: sending the same question back a second time recommends agreeing 
   page.on('dialog', (/** @type {any} */ d) => d.accept());
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
+  await on(page, 'q1');
   await page.getByLabel('q1 예측').fill(OBSERVED.head);
+  await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
   await page.getByText('동작 차이').first().waitFor();
+  await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 판정' }).getByRole('radio', { name: '예상대로' }).click();
+  await on(page, 'q3');
   await page.getByRole('radiogroup', { name: 'q3 판정' }).getByRole('radio', { name: '의도와 같음' }).click();
+  await on(page, 'q4');
   await page.getByRole('radiogroup', { name: 'q4 판정' }).getByRole('radio', { name: '답함' }).click();
   await page.getByLabel('q4 답').fill('100');
   const card = page.locator('#question-q1');
   assert.match(await card.innerText(), /이전에 1번 되돌린 질문[\s\S]*1차: 12개에도 할인이 붙어야 한다/);
+  await on(page, 'q1');
   await page.getByRole('radiogroup', { name: 'q1 판정' }).getByRole('radio', { name: '되돌림' }).click();
   assert.match(await card.innerText(), /설계부터 다시 합의하세요[\s\S]*이번이 2번째 되돌림입니다/);
   await page.getByLabel('q1 이유').fill('여전히 할인이 없다');
