@@ -31,6 +31,17 @@ const skip = PLAYWRIGHT_CORE && CHROMIUM ? false : 'PLAYWRIGHT_CORE와 CHROMIUM�
  */
 const on = (page, id) => page.getByRole('button', { name: `${id}로 이동` }).click();
 
+/**
+ * Confirm in the page's dialog (an in-page <dialog>, never window.confirm).
+ * @param {any} page
+ * @param {string} name the confirming button
+ */
+async function confirmWith(page, name) {
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name, exact: true }).click();
+  await dialog.waitFor({ state: 'detached' });
+}
+
 test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) => {
   const pw = await import(pathToFileURL(path.join(/** @type {string} */ (PLAYWRIGHT_CORE), 'index.mjs')).href);
   const { chromium } = pw.default ?? pw;
@@ -43,7 +54,7 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   /** @type {string[]} */
   const errors = [];
   page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
-  page.on('dialog', (/** @type {any} */ d) => d.accept());
+  page.on('dialog', (/** @type {any} */ d) => void d.dismiss().then(() => errors.push(`native dialog: ${d.message()}`)));
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).waitFor();
@@ -52,19 +63,45 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   assert.match(before, /qty: 12, unit: 10/, 'the probe command is shown');
   const reveal = page.getByRole('button', { name: '예측 저장하고 결과 보기' });
   assert.equal(await reveal.isDisabled(), true, 'disabled until every prediction is in');
+  await page.getByRole('tab', { name: /개요/ }).click();
+  const overview = await page.locator('#panel-overview').innerText();
+  assert.match(overview, /^동작 차이\s*예측을 저장하면/, 'the overview opens on what changed, held back until the predictions');
+  assert.ok(!overview.includes(OBSERVED.head));
+  await page.getByRole('tab', { name: /예측/ }).click();
 
   await on(page, 'q1');
   await page.getByLabel('q1 예측').fill(OBSERVED.base);
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await reveal.click();
-  await page.getByText('동작 차이').first().waitFor();
+  // The confirmation is a dialog in the page: same words, focus on the confirming button,
+  // Escape cancels and gives focus back.
+  const dialog = page.getByRole('dialog');
+  assert.match(await dialog.innerText(), /예측을 저장하고 결과를 볼까요\? 저장한 예측은 바꿀 수 없습니다\./);
+  assert.equal(await page.locator(':focus').innerText(), '결과 보기', 'focus starts on the confirming button');
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'detached' });
+  assert.equal(await page.locator(':focus').getAttribute('id'), 'reveal', 'and goes back to the button that asked');
+  assert.ok(!(await page.locator('main').innerText()).includes(OBSERVED.head), 'nothing is saved or shown after cancelling');
+  await reveal.click();
+  await confirmWith(page, '결과 보기');
+  await page.getByRole('heading', { name: '질문 판정' }).waitFor();
   const after = await page.locator('main').innerText();
   assert.ok(after.includes(OBSERVED.head), 'the head output is revealed');
   assert.match(after, /틀림/);
+  // q1, q3 and q4 all rest on p1: its command and outputs are shown once, and the cards name it.
+  assert.equal(after.match(/qty: 12, unit: 10/g)?.length, 1, 'the probe command is shown once');
+  const probe = await page.locator('#probe-p1').innerText();
+  assert.match(probe, new RegExp(`이전 \\(base\\)\\s*${OBSERVED.base}[\\s\\S]*이후 \\(head\\)\\s*${OBSERVED.head}`));
+  for (const id of ['q1', 'q3', 'q4']) {
+    const card = await page.locator(`#question-${id}`).innerText();
+    assert.match(card, /12개 구매 결제액/, `${id} names the probe it rests on`);
+    assert.doesNotMatch(card, /qty: 12/, `${id} does not repeat the command`);
+  }
   const q1 = page.getByRole('radiogroup', { name: 'q1 판정' });
   await on(page, 'q1');
   assert.equal(await q1.getByRole('radio', { name: '예상대로' }).isDisabled(), true, 'a wrong prediction cannot be judged as expected');
+  assert.equal(await page.locator('#question-q1').getByText('「예상대로」: 예측이 틀려 고를 수 없음').isVisible(), true, 'and the card says why');
 
   await q1.getByRole('radio', { name: '잘못 알았음' }).click();
   await on(page, 'q2');
@@ -82,7 +119,9 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   await page.getByLabel('q3 이유').fill('경계는 10개로 둔다');
   assert.equal(await page.getByRole('radiogroup', { name: 'spec 수명' }).count(), 0, 'no lifetime while work goes back');
   assert.equal(await submit.isDisabled(), true, 'the spec choice is required');
-  assert.match(await page.locator('main').innerText(), /spec 처리를 고르지 않은 질문: q3/);
+  const why = page.getByText(/^저장 전에 필요: spec 처리를 고르지 않은 질문: q3$/);
+  const [button, reason] = [await submit.boundingBox(), await why.boundingBox()];
+  assert.ok(reason.x > button.x + button.width && reason.y < button.y + button.height, 'the reason sits right next to the disabled button');
   await page.getByRole('radiogroup', { name: 'q3 spec 처리' }).getByRole('radio', { name: 'spec이 틀렸다' }).click();
   assert.equal(await submit.isDisabled(), false);
 
@@ -99,7 +138,12 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   const done = await page.locator('main').innerText();
   assert.match(done, /모두 수용/);
   assert.match(done, /머지할 때 spec: 유지 \(소유자: 결제팀\)/);
+  assert.doesNotMatch(done, /탐침 묶음|ap-[0-9a-z]+/, 'internal ids stay behind 자세히');
   assert.equal(deriveState(await readEvents(taskPaths(home, taskId).events)), 'approved');
+  assert.match(done, /다음 단계: 반영 요청\s*에이전트에게 "승인한 작업 반영해 줘"라고 요청하세요/, 'the next step is to ask the agent to apply it');
+  await page.goto(`http://127.0.0.1:${server.port}/`);
+  await page.getByText('반영 대기', { exact: true }).waitFor();
+  assert.match(await page.locator('main').innerText(), /반영 대기[\s\S]*다음 단계: 에이전트에게 "승인한 작업 반영해 줘"라고 요청하세요/);
   assert.deepEqual(errors, []);
 });
 
@@ -121,7 +165,7 @@ test('browser: a choice prediction lists its four choices one per line and is sc
   /** @type {string[]} */
   const errors = [];
   page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
-  page.on('dialog', (/** @type {any} */ d) => d.accept());
+  page.on('dialog', (/** @type {any} */ d) => void d.dismiss().then(() => errors.push(`native dialog: ${d.message()}`)));
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
   await on(page, 'q1');
@@ -138,7 +182,8 @@ test('browser: a choice prediction lists its four choices one per line and is sc
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
-  await page.getByText('동작 차이').first().waitFor();
+  await confirmWith(page, '결과 보기');
+  await page.getByRole('heading', { name: '질문 판정' }).waitFor();
   await on(page, 'q1');
   assert.match(await page.locator('#question-q1').innerText(), /맞음/);
   assert.deepEqual(errors, []);
@@ -169,7 +214,7 @@ test('browser: keep a fork answer in the repository and confirm a discussion', {
   /** @type {string[]} */
   const errors = [];
   page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
-  page.on('dialog', (/** @type {any} */ d) => d.accept());
+  page.on('dialog', (/** @type {any} */ d) => void d.dismiss().then(() => errors.push(`native dialog: ${d.message()}`)));
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
   await on(page, 'q1');
@@ -177,7 +222,8 @@ test('browser: keep a fork answer in the repository and confirm a discussion', {
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
-  await page.getByText('동작 차이').first().waitFor();
+  await confirmWith(page, '결과 보기');
+  await page.getByRole('heading', { name: '질문 판정' }).waitFor();
   await on(page, 'q1');
   await page.getByRole('radiogroup', { name: 'q1 판정' }).getByRole('radio', { name: '잘못 알았음' }).click();
   await on(page, 'q2');
@@ -209,6 +255,82 @@ test('browser: keep a fork answer in the repository and confirm a discussion', {
   const judgment = JSON.parse(await readFile(path.join(taskPaths(home, taskId).approvals, `${(await readEvents(taskPaths(home, taskId).events)).find((e) => e.type === 'approved')?.approvalId}.json`), 'utf8'));
   assert.equal(judgment.items.find((/** @type {any} */ i) => i.id === 'q4').keep.action, 'record');
   assert.equal(judgment.discussions[0].confirmed, true);
+  assert.deepEqual(errors, []);
+});
+
+test('browser: discarding the task is a destructive button at the bottom of the overview tab', { skip, timeout: 120_000 }, async (t) => {
+  const pw = await import(pathToFileURL(path.join(/** @type {string} */ (PLAYWRIGHT_CORE), 'index.mjs')).href);
+  const { chromium } = pw.default ?? pw;
+  const { home, taskId } = await judgedTask();
+  const server = await createDashboardServer({ home, port: 0, version: '0.0.0-test', codeHash: 'test', keystore: 'file' });
+  t.after(() => server.close());
+  const browser = await chromium.launch({ executablePath: CHROMIUM, headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  /** @type {string[]} */
+  const errors = [];
+  page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
+  page.on('dialog', (/** @type {any} */ d) => void d.dismiss().then(() => errors.push(`native dialog: ${d.message()}`)));
+
+  await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
+  await page.getByRole('heading', { name: '결과 예측' }).waitFor();
+  const discard = page.getByRole('button', { name: '작업 폐기' });
+  assert.equal(await discard.count(), 0, 'not by the title, nor on the questions');
+  await page.getByRole('tab', { name: /개요/ }).click();
+  const panel = page.locator('#panel-overview');
+  assert.equal(await panel.getByRole('button', { name: '작업 폐기' }).count(), 1, 'it is on the overview tab');
+  assert.equal(await panel.locator('> :last-child').getByRole('button', { name: '작업 폐기' }).count(), 1, 'at its bottom');
+  assert.match(await discard.getAttribute('class') ?? '', /variant_criticalSolid/, 'in the destructive style');
+  await discard.click();
+  assert.match(await page.getByRole('dialog').innerText(), /이 인계를 폐기할까요\? 폐기한 작업은 판정하거나 반영할 수 없습니다\./);
+  await confirmWith(page, '폐기');
+  await page.getByText('폐기됨').first().waitFor();
+  assert.equal(deriveState(await readEvents(taskPaths(home, taskId).events)), 'discarded');
+  assert.equal(await discard.count(), 0, 'a discarded task cannot be discarded again');
+  assert.deepEqual(errors, []);
+});
+
+test('browser: a judgment that sends work back says the kept answer is not recorded', { skip, timeout: 120_000 }, async (t) => {
+  const pw = await import(pathToFileURL(path.join(/** @type {string} */ (PLAYWRIGHT_CORE), 'index.mjs')).href);
+  const { chromium } = pw.default ?? pw;
+  const anchors = [{ file: 'test/small.test.mjs', test: 'small orders pay full price' }];
+  const { home, taskId, sourceHash } = await judgedTask({
+    baseFiles: { 'test/small.test.mjs': "import { test } from 'node:test';\ntest('small orders pay full price', () => {});\n" },
+    editDraft: (d) => {
+      d.questions[3].decision = { scope: ['src/cart.mjs'], anchors };
+    },
+  });
+  const draft = /** @type {any} */ (await readJson(taskPaths(home, taskId).draft));
+  await recordPredictions({ home, taskId, request: { draftSha256: draftDigest(draft), answers: { q1: OBSERVED.head, q2: 'yes' } } });
+  await judgeTask({
+    home,
+    taskId,
+    keystore: 'file',
+    request: {
+      draftSha256: draftDigest(draft),
+      sourceHash,
+      items: [
+        { id: 'q1', verdict: 'revert', reason: '12개에도 할인이 붙어야 한다' },
+        { id: 'q2', verdict: 'as-expected' },
+        { id: 'q3', verdict: 'as-expected' },
+        { id: 'q4', verdict: 'answered', answer: '100', keep: 'repo' },
+      ],
+    },
+  });
+  const server = await createDashboardServer({ home, port: 0, version: '0.0.0-test', codeHash: 'test', keystore: 'file' });
+  t.after(() => server.close());
+  const browser = await chromium.launch({ executablePath: CHROMIUM, headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  /** @type {string[]} */
+  const errors = [];
+  page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
+
+  await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
+  await page.getByRole('tab', { name: '판정 내용' }).click();
+  const summary = await page.locator('#panel-approval').innerText();
+  assert.match(summary, /q4 .*되돌려서 결정 기록을 남기지 않음/);
+  assert.doesNotMatch(summary, /로 남김/, 'a sent-back judgment writes no record');
   assert.deepEqual(errors, []);
 });
 
@@ -246,7 +368,7 @@ test('browser: sending the same question back a second time recommends agreeing 
   /** @type {string[]} */
   const errors = [];
   page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
-  page.on('dialog', (/** @type {any} */ d) => d.accept());
+  page.on('dialog', (/** @type {any} */ d) => void d.dismiss().then(() => errors.push(`native dialog: ${d.message()}`)));
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
   await on(page, 'q1');
@@ -254,7 +376,8 @@ test('browser: sending the same question back a second time recommends agreeing 
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
-  await page.getByText('동작 차이').first().waitFor();
+  await confirmWith(page, '결과 보기');
+  await page.getByRole('heading', { name: '질문 판정' }).waitFor();
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 판정' }).getByRole('radio', { name: '예상대로' }).click();
   await on(page, 'q3');
@@ -269,6 +392,8 @@ test('browser: sending the same question back a second time recommends agreeing 
   assert.match(await card.innerText(), /설계부터 다시 합의하세요[\s\S]*이번이 2번째 되돌림입니다/);
   await page.getByLabel('q1 이유').fill('여전히 할인이 없다');
   await page.getByRole('button', { name: /^판정 저장/ }).click();
+  assert.match(await page.getByRole('dialog').innerText(), /되돌림이나 분리가 있어 작업이 에이전트에게 되돌아갑니다\. PR은 열리지 않습니다\. 저장할까요\?/);
+  await confirmWith(page, '저장');
   await page.getByText('판정 내용').first().waitFor();
   await page.getByRole('tab', { name: /개요/ }).click();
   assert.match(await page.locator('main').innerText(), /설계부터 다시 합의하세요[\s\S]*q1을 2번 되돌렸습니다[\s\S]*2차: 여전히 할인이 없다/);
@@ -288,7 +413,7 @@ test('browser: the work summary titles the task, and tests read in plain words w
   const plain = '5개 구매는 정가로 결제된다';
   const note = '12개 구매에 대량 할인이 붙는지 본다';
   const anchors = [{ file: 'src/cart.mjs', symbol: 'total' }, { file: 'test/small.test.mjs', test: 'small orders pay full price', plain }];
-  const { home, taskId } = await judgedTask({
+  const { repo, home, taskId } = await judgedTask({
     remote: 'https://github.com/acme/widgets.git',
     baseFiles: { 'test/small.test.mjs': "import { test } from 'node:test';\ntest('small orders pay full price', () => {});\n" },
     editDraft: (d) => {
@@ -306,10 +431,15 @@ test('browser: the work summary titles the task, and tests read in plain words w
   /** @type {string[]} */
   const errors = [];
   page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
-  page.on('dialog', (/** @type {any} */ d) => d.accept());
+  page.on('dialog', (/** @type {any} */ d) => void d.dismiss().then(() => errors.push(`native dialog: ${d.message()}`)));
 
   await page.goto(`http://127.0.0.1:${server.port}/`);
-  await page.getByRole('link', { name: new RegExp(summary) }).waitFor();
+  const row = page.getByRole('link', { name: new RegExp(summary) });
+  await row.waitFor();
+  const rowText = await row.innerText();
+  assert.ok(rowText.includes(path.basename(repo.dir)), 'the row names the repository');
+  assert.ok(!rowText.includes(repo.dir), 'by its folder name, not its full path');
+  assert.ok(!rowText.includes(taskId), 'the task id stays on the task screen');
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
   await page.getByRole('heading', { level: 1, name: summary }).waitFor();
@@ -317,11 +447,19 @@ test('browser: the work summary titles the task, and tests read in plain words w
   await on(page, 'q1');
   await page.getByLabel('q1 예측').fill(OBSERVED.base);
   await on(page, 'q2');
+  const lock = page.locator('#question-q2');
+  assert.equal(await lock.getByText(note).isVisible(), true, 'a test-lock question reads in plain words');
+  assert.equal(await lock.getByText('bulk discount for 12').isVisible(), false, 'its test name stays behind 자세히');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
-  await page.getByText('동작 차이').first().waitFor();
+  await confirmWith(page, '결과 보기');
+  await page.getByRole('heading', { name: '질문 판정' }).waitFor();
+  await on(page, 'q2');
+  assert.match(await lock.innerText(), /결과: 통과 → 실패/);
+  assert.equal(await lock.getByText('bulk discount for 12').isVisible(), false);
 
   const tests = page.locator('details', { hasText: '결과가 바뀐 테스트' });
+  assert.match(await tests.locator('summary').innerText(), /^테스트: 통과 2 → 통과 1·실패 1, 결과가 바뀐 테스트 1개$/);
   await tests.locator('summary').click();
   const changed = await tests.locator('ul').innerText();
   assert.match(changed, new RegExp(`${note} · 통과 → 실패`));
@@ -340,5 +478,12 @@ test('browser: the work summary titles the task, and tests read in plain words w
   const fork = page.locator('#question-q4');
   assert.equal(await fork.getByText(plain).isVisible(), true);
   assert.equal(await fork.getByText('test/small.test.mjs').isVisible(), false);
+
+  await page.getByRole('tab', { name: /개요/ }).click();
+  const overview = await page.locator('#panel-overview').innerText();
+  assert.match(overview, /^동작 차이\s*12개 구매 결제액이 108에서 120이 된다/, 'the overview opens on what changed');
+  assert.ok(!overview.includes(repo.dir), 'where the handoff came from stays behind 자세히');
+  assert.match(overview, /인계에 빠진 자료\s*최종 리뷰 자료 없음/, 'what is missing reads in plain words');
+  assert.doesNotMatch(overview, /sdlcTaskRef/, 'with no internal field names');
   assert.deepEqual(errors, []);
 });
