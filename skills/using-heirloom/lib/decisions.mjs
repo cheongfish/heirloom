@@ -32,7 +32,9 @@ function decisionDoc({ id, choice, question, proposal, source, taskId, approval,
       choice,
       question,
       scope: proposal.scope,
-      anchors: proposal.anchors,
+      // The plain words of a test anchor are for the person judging the draft; the record
+      // keeps only where the decision is held.
+      anchors: proposal.anchors.map(({ plain, ...where }) => where),
       source: [source],
       replaces: proposal.replaces ?? null,
       taskId,

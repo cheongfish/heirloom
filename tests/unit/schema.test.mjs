@@ -9,6 +9,8 @@ import {
   eventSchema,
   indexSchema,
   projectConfigSchema,
+  draftV2Schema,
+  decisionSchema,
 } from '../../skills/using-heirloom/lib/schema.mjs';
 
 const H = 'a'.repeat(64);
@@ -92,4 +94,70 @@ test('assertValid throws E_INPUT with all errors', () => {
       return e.code === 'E_INPUT' && /config\.json/.test(e.message) && /baseBranch/.test(e.message) && /maxRecords/.test(e.message);
     },
   );
+});
+
+/** A schema 2 draft with a fork decision proposal and a discussion, each anchored by a test. */
+function draft() {
+  const anchors = [
+    { file: 'src/cart.mjs', symbol: 'total' },
+    { file: 'test/cart.test.mjs', test: 'small orders pay full price', plain: '5개 구매는 정가로 결제된다' },
+  ];
+  return {
+    schemaVersion: 2,
+    taskId: 't-20261112-3h7k2p9m',
+    inputSourceHash: `sha256:${H}`,
+    probeSetHash: `sha256:${H}`,
+    summary: '대량 할인 경계를 10개에서 100개로 올림',
+    behaviorDiffs: [],
+    questions: [
+      { id: 'q1', kind: 'fork', probes: ['p1'], codePaths: ['src/cart.mjs'], prompt: '경계는?', whyOpen: '이유가 없다', decision: { scope: ['src/cart.mjs'], anchors } },
+    ],
+    inferences: [],
+    notes: '',
+    discussions: [{ id: 'x1', url: 'https://example.com/pull/1', quote: 'q', choice: 'c', scope: ['src/cart.mjs'], anchors }],
+    testNotes: [{ test: 'bulk discount for 12', plain: '12개 구매에 대량 할인이 붙는다' }],
+  };
+}
+
+test('draft v2: summary, plain words on test anchors and testNotes are accepted, and all three are optional', () => {
+  assert.deepEqual(validate(draftV2Schema, draft()), []);
+  const bare = /** @type {any} */ (draft());
+  delete bare.summary;
+  delete bare.testNotes;
+  for (const a of [...bare.questions[0].decision.anchors, ...bare.discussions[0].anchors]) delete a.plain;
+  assert.deepEqual(validate(draftV2Schema, bare), [], 'drafts written before these fields still read');
+});
+
+test('draft v2: an empty or multi-line summary, plain words on a symbol anchor and a malformed test note are refused', () => {
+  const d = /** @type {any} */ (draft());
+  d.summary = '할인 경계를 올림\n그리고 테스트를 고침';
+  d.questions[0].decision.anchors[0].plain = 'total이 결제액을 계산한다';
+  d.discussions[0].anchors[1].plain = '';
+  d.testNotes = [{ test: 'bulk discount for 12' }, { test: 'x', plain: 'y', extra: 1 }];
+  const errors = validate(draftV2Schema, d);
+  assert.ok(errors.includes('$.summary: 한 줄로 쓴다'), errors.join('\n'));
+  assert.ok(errors.includes('$.questions[0].decision.anchors[0]: plain은 테스트 앵커에만 쓴다'), errors.join('\n'));
+  assert.ok(errors.includes('$.discussions[0].anchors[1].plain: 비어 있으면 안 됨'), errors.join('\n'));
+  assert.ok(errors.includes('$.testNotes[0].plain: 필수 필드가 없음'), errors.join('\n'));
+  assert.ok(errors.includes('$.testNotes[1].extra: 허용되지 않는 필드'), errors.join('\n'));
+  assert.ok(validate(draftV2Schema, { ...draft(), summary: ' ' }).includes('$.summary: 비어 있으면 안 됨'));
+});
+
+test('decision record: the plain words of a draft anchor do not belong in the record', () => {
+  const record = /** @type {any} */ ({
+    schemaVersion: 2,
+    id: 'd-7k3q9m2x',
+    kind: 'decision',
+    choice: 'c',
+    question: 'q',
+    scope: ['src/cart.mjs'],
+    anchors: [{ file: 'test/cart.test.mjs', test: 'small orders pay full price' }],
+    source: [{ kind: 'fork-answer', approval: 'ap-000000000000', question: 'q1' }],
+    replaces: null,
+    taskId: 't-20261112-3h7k2p9m',
+    approval: { id: 'ap-000000000000', signer: 'SHA256:x', approvedAt: '2026-11-12T00:00:00Z' },
+  });
+  assert.deepEqual(validate(decisionSchema, record), []);
+  record.anchors[0] = { ...record.anchors[0], plain: 'p' };
+  assert.deepEqual(validate(decisionSchema, record), ['$.anchors[0].plain: 허용되지 않는 필드']);
 });

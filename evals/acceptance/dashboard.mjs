@@ -11,7 +11,7 @@
 //   { "tab": "결정" }                              탭 이름(화면 표시)으로 탭 열기
 //   { "decide": "결정 항목 1", "value": "승인" }      카드(aria-label 앞부분)의 승인/거절/보류
 //   { "fill": "<입력 aria-label>", "value": "…", "nth": 0 }  입력 채우기
-//   { "click": "<단추 이름>", "nth": 0 }            단추 누르기 (확인창은 자동 수락)
+//   { "click": "<단추 이름>", "nth": 0 }            단추 누르기 (화면 안 확인 대화 상자는 자동 확인)
 //   { "wait": 1000 }                               ms 기다리기
 //   { "waitText": "…" }                            본문에 글자가 나타날 때까지 기다리기 (최대 60초)
 //   { "exec": "<셸 명령>" }                          화면을 연 채로 명령 실행 (검토 중 변경 흉내)
@@ -47,7 +47,6 @@ const consoleErrors = [];
 page.on('console', (m) => {
   if (m.type() === 'error') consoleErrors.push(m.text());
 });
-page.on('dialog', (d) => void d.accept());
 /** @type {any[]} */
 const log = [];
 let ok = true;
@@ -63,7 +62,12 @@ try {
         const card = page.locator(`article[aria-label^="${step.decide}"]`).first();
         await card.getByRole('radio', { name: step.value }).first().click();
       } else if (step.fill) await page.getByLabel(step.fill, { exact: true }).nth(step.nth ?? 0).fill(step.value);
-      else if (step.click) await page.getByRole('button', { name: step.click, exact: true }).nth(step.nth ?? 0).click();
+      else if (step.click) {
+        await page.getByRole('button', { name: step.click, exact: true }).nth(step.nth ?? 0).click();
+        // A step that cannot be undone asks in an in-page dialog (confirmDialog in app.js).
+        const dialog = page.locator('dialog[open]');
+        if (await dialog.count()) await dialog.locator('button[value="ok"]').click();
+      }
       else if (step.wait) await page.waitForTimeout(step.wait);
       else if (step.exec) log.push({ exec: execSync(step.exec, { encoding: 'utf8', shell: '/bin/bash' }).trim() });
       else if (step.waitText) await page.getByText(step.waitText).first().waitFor({ timeout: 60_000 });
