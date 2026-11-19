@@ -255,6 +255,38 @@ test('browser: keep a fork answer in the repository and confirm a discussion', {
   assert.deepEqual(errors, []);
 });
 
+test('browser: discarding the task is a destructive button at the bottom of the overview tab', { skip, timeout: 120_000 }, async (t) => {
+  const pw = await import(pathToFileURL(path.join(/** @type {string} */ (PLAYWRIGHT_CORE), 'index.mjs')).href);
+  const { chromium } = pw.default ?? pw;
+  const { home, taskId } = await judgedTask();
+  const server = await createDashboardServer({ home, port: 0, version: '0.0.0-test', codeHash: 'test', keystore: 'file' });
+  t.after(() => server.close());
+  const browser = await chromium.launch({ executablePath: CHROMIUM, headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  /** @type {string[]} */
+  const errors = [];
+  page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
+  page.on('dialog', (/** @type {any} */ d) => void d.dismiss().then(() => errors.push(`native dialog: ${d.message()}`)));
+
+  await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
+  await page.getByRole('heading', { name: '결과 예측' }).waitFor();
+  const discard = page.getByRole('button', { name: '작업 폐기' });
+  assert.equal(await discard.count(), 0, 'not by the title, nor on the questions');
+  await page.getByRole('tab', { name: /개요/ }).click();
+  const panel = page.locator('#panel-overview');
+  assert.equal(await panel.getByRole('button', { name: '작업 폐기' }).count(), 1, 'it is on the overview tab');
+  assert.equal(await panel.locator('> :last-child').getByRole('button', { name: '작업 폐기' }).count(), 1, 'at its bottom');
+  assert.match(await discard.getAttribute('class') ?? '', /variant_criticalSolid/, 'in the destructive style');
+  await discard.click();
+  assert.match(await page.getByRole('dialog').innerText(), /이 인계를 폐기할까요\? 폐기한 작업은 판정하거나 반영할 수 없습니다\./);
+  await confirmWith(page, '폐기');
+  await page.getByText('폐기됨').first().waitFor();
+  assert.equal(deriveState(await readEvents(taskPaths(home, taskId).events)), 'discarded');
+  assert.equal(await discard.count(), 0, 'a discarded task cannot be discarded again');
+  assert.deepEqual(errors, []);
+});
+
 test('browser: a judgment that sends work back says the kept answer is not recorded', { skip, timeout: 120_000 }, async (t) => {
   const pw = await import(pathToFileURL(path.join(/** @type {string} */ (PLAYWRIGHT_CORE), 'index.mjs')).href);
   const { chromium } = pw.default ?? pw;
