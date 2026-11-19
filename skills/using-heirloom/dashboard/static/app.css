@@ -77,6 +77,12 @@ textarea.seed-text-input__value.hl-one-line { min-height: 0; resize: none; }
 
 .hl-blocked { color: var(--seed-color-fg-warning); }
 .hl-blocked:empty { display: none; }
+/* SEED's disabled fill is the page ground: a disabled main button would read as faint text.
+   Keep its shape on the card colour with an outline. */
+.hl-main :is(.seed-action-button--variant_brandSolid, .seed-action-button--variant_criticalSolid):is(:disabled, [data-disabled]) {
+  background: var(--seed-color-bg-layer-default);
+  box-shadow: inset 0 0 0 1px var(--seed-color-stroke-neutral-weak);
+}
 
 .hl-decision { width: min(100%, 360px); }
 .hl-choice { width: min(100%, 520px); }

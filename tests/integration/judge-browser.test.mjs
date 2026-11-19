@@ -118,7 +118,9 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   await page.getByLabel('q3 이유').fill('경계는 10개로 둔다');
   assert.equal(await page.getByRole('radiogroup', { name: 'spec 수명' }).count(), 0, 'no lifetime while work goes back');
   assert.equal(await submit.isDisabled(), true, 'the spec choice is required');
-  assert.match(await page.locator('main').innerText(), /spec 처리를 고르지 않은 질문: q3/);
+  const why = page.getByText(/^저장 전에 필요: spec 처리를 고르지 않은 질문: q3$/);
+  const [button, reason] = [await submit.boundingBox(), await why.boundingBox()];
+  assert.ok(reason.x > button.x + button.width && reason.y < button.y + button.height, 'the reason sits right next to the disabled button');
   await page.getByRole('radiogroup', { name: 'q3 spec 처리' }).getByRole('radio', { name: 'spec이 틀렸다' }).click();
   assert.equal(await submit.isDisabled(), false);
 

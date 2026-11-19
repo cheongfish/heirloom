@@ -793,7 +793,8 @@ const AFTER_MERGE_HELP = {
  * @property {string} owner who owns a kept spec
  * @property {HTMLElement} lifecycle
  * @property {boolean | null} lifecycleFor whether the lifetime box was drawn for an accepting judgment
- * @property {HTMLElement} status
+ * @property {HTMLElement} status why the last save failed
+ * @property {HTMLElement} why what is still needed before saving, next to the button
  * @property {boolean} dirty
  * @property {boolean} busy
  * @property {{ refresh: () => void } | null} deck the question cards, reviewed side by side
@@ -819,6 +820,7 @@ function newJudgeForm(task) {
     lifecycle: h('div', { class: 'hl-stack' }),
     lifecycleFor: null,
     status: h('div', { class: 'hl-stack' }),
+    why: h('span', { class: 'hl-small hl-blocked' }),
     dirty: false,
     busy: false,
     deck: null,
@@ -995,7 +997,7 @@ function predictPanel(f) {
       h('ul', { class: 'hl-files' }, j.commands.map((/** @type {any} */ c) => h('li', {}, h('span', { class: 'hl-muted' }, `${c.id} ${c.title}: `), h('code', {}, commandText(c.run))))),
     ),
     f.status,
-    h('div', { class: 'hl-row' }, reveal),
+    h('div', { class: 'hl-row' }, reveal, f.why),
   );
 }
 
@@ -1341,7 +1343,7 @@ function judgePanel(f) {
     judgeDeck(f),
     f.lifecycle,
     f.status,
-    h('div', { class: 'hl-row' }, submit),
+    h('div', { class: 'hl-row' }, submit, f.why),
   );
 }
 
@@ -1396,7 +1398,7 @@ function refreshJudge() {
     target.toggleAttribute('data-disabled', target.disabled);
     if (judge.task.judge.revealed) target.textContent = [...judge.verdicts.values()].some((v) => RETURNING.has(v)) ? '판정 저장 (작업 되돌림)' : '판정 저장';
   }
-  if (!judge.busy) replace(judge.status, why.length ? h('span', { class: 'hl-small hl-blocked' }, `저장 전에 필요: ${why.join(' · ')}`) : null);
+  judge.why.textContent = why.length ? `저장 전에 필요: ${why.join(' · ')}` : '';
   discardButton.disabled = judge.busy;
   refreshTabLabels();
 }
@@ -1408,6 +1410,7 @@ function refreshJudge() {
  */
 async function judgeStep(f, title, work) {
   f.busy = true;
+  replace(f.status);
   refreshJudge();
   try {
     await work();
