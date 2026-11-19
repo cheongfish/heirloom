@@ -31,6 +31,17 @@ const skip = PLAYWRIGHT_CORE && CHROMIUM ? false : 'PLAYWRIGHT_CORE와 CHROMIUM�
  */
 const on = (page, id) => page.getByRole('button', { name: `${id}로 이동` }).click();
 
+/**
+ * Confirm in the page's dialog (an in-page <dialog>, never window.confirm).
+ * @param {any} page
+ * @param {string} name the confirming button
+ */
+async function confirmWith(page, name) {
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name, exact: true }).click();
+  await dialog.waitFor({ state: 'detached' });
+}
+
 test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) => {
   const pw = await import(pathToFileURL(path.join(/** @type {string} */ (PLAYWRIGHT_CORE), 'index.mjs')).href);
   const { chromium } = pw.default ?? pw;
@@ -43,7 +54,7 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   /** @type {string[]} */
   const errors = [];
   page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
-  page.on('dialog', (/** @type {any} */ d) => d.accept());
+  page.on('dialog', (/** @type {any} */ d) => void d.dismiss().then(() => errors.push(`native dialog: ${d.message()}`)));
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).waitFor();
@@ -63,6 +74,17 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await reveal.click();
+  // The confirmation is a dialog in the page: same words, focus on the confirming button,
+  // Escape cancels and gives focus back.
+  const dialog = page.getByRole('dialog');
+  assert.match(await dialog.innerText(), /예측을 저장하고 결과를 볼까요\? 저장한 예측은 바꿀 수 없습니다\./);
+  assert.equal(await page.locator(':focus').innerText(), '결과 보기', 'focus starts on the confirming button');
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'detached' });
+  assert.equal(await page.locator(':focus').getAttribute('id'), 'reveal', 'and goes back to the button that asked');
+  assert.ok(!(await page.locator('main').innerText()).includes(OBSERVED.head), 'nothing is saved or shown after cancelling');
+  await reveal.click();
+  await confirmWith(page, '결과 보기');
   await page.getByRole('heading', { name: '질문 판정' }).waitFor();
   const after = await page.locator('main').innerText();
   assert.ok(after.includes(OBSERVED.head), 'the head output is revealed');
@@ -140,7 +162,7 @@ test('browser: a choice prediction lists its four choices one per line and is sc
   /** @type {string[]} */
   const errors = [];
   page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
-  page.on('dialog', (/** @type {any} */ d) => d.accept());
+  page.on('dialog', (/** @type {any} */ d) => void d.dismiss().then(() => errors.push(`native dialog: ${d.message()}`)));
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
   await on(page, 'q1');
@@ -157,6 +179,7 @@ test('browser: a choice prediction lists its four choices one per line and is sc
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
+  await confirmWith(page, '결과 보기');
   await page.getByRole('heading', { name: '질문 판정' }).waitFor();
   await on(page, 'q1');
   assert.match(await page.locator('#question-q1').innerText(), /맞음/);
@@ -188,7 +211,7 @@ test('browser: keep a fork answer in the repository and confirm a discussion', {
   /** @type {string[]} */
   const errors = [];
   page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
-  page.on('dialog', (/** @type {any} */ d) => d.accept());
+  page.on('dialog', (/** @type {any} */ d) => void d.dismiss().then(() => errors.push(`native dialog: ${d.message()}`)));
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
   await on(page, 'q1');
@@ -196,6 +219,7 @@ test('browser: keep a fork answer in the repository and confirm a discussion', {
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
+  await confirmWith(page, '결과 보기');
   await page.getByRole('heading', { name: '질문 판정' }).waitFor();
   await on(page, 'q1');
   await page.getByRole('radiogroup', { name: 'q1 판정' }).getByRole('radio', { name: '잘못 알았음' }).click();
@@ -309,7 +333,7 @@ test('browser: sending the same question back a second time recommends agreeing 
   /** @type {string[]} */
   const errors = [];
   page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
-  page.on('dialog', (/** @type {any} */ d) => d.accept());
+  page.on('dialog', (/** @type {any} */ d) => void d.dismiss().then(() => errors.push(`native dialog: ${d.message()}`)));
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
   await on(page, 'q1');
@@ -317,6 +341,7 @@ test('browser: sending the same question back a second time recommends agreeing 
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
+  await confirmWith(page, '결과 보기');
   await page.getByRole('heading', { name: '질문 판정' }).waitFor();
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 판정' }).getByRole('radio', { name: '예상대로' }).click();
@@ -332,6 +357,8 @@ test('browser: sending the same question back a second time recommends agreeing 
   assert.match(await card.innerText(), /설계부터 다시 합의하세요[\s\S]*이번이 2번째 되돌림입니다/);
   await page.getByLabel('q1 이유').fill('여전히 할인이 없다');
   await page.getByRole('button', { name: /^판정 저장/ }).click();
+  assert.match(await page.getByRole('dialog').innerText(), /되돌림이나 분리가 있어 작업이 에이전트에게 되돌아갑니다\. PR은 열리지 않습니다\. 저장할까요\?/);
+  await confirmWith(page, '저장');
   await page.getByText('판정 내용').first().waitFor();
   await page.getByRole('tab', { name: /개요/ }).click();
   assert.match(await page.locator('main').innerText(), /설계부터 다시 합의하세요[\s\S]*q1을 2번 되돌렸습니다[\s\S]*2차: 여전히 할인이 없다/);
@@ -369,7 +396,7 @@ test('browser: the work summary titles the task, and tests read in plain words w
   /** @type {string[]} */
   const errors = [];
   page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
-  page.on('dialog', (/** @type {any} */ d) => d.accept());
+  page.on('dialog', (/** @type {any} */ d) => void d.dismiss().then(() => errors.push(`native dialog: ${d.message()}`)));
 
   await page.goto(`http://127.0.0.1:${server.port}/`);
   const row = page.getByRole('link', { name: new RegExp(summary) });
@@ -390,6 +417,7 @@ test('browser: the work summary titles the task, and tests read in plain words w
   assert.equal(await lock.getByText('bulk discount for 12').isVisible(), false, 'its test name stays behind 자세히');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
+  await confirmWith(page, '결과 보기');
   await page.getByRole('heading', { name: '질문 판정' }).waitFor();
   await on(page, 'q2');
   assert.match(await lock.innerText(), /결과: 통과 → 실패/);

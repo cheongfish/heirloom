@@ -45,7 +45,7 @@ test('browser: allow probe commands before they run', { skip, timeout: 120_000 }
   /** @type {string[]} */
   const errors = [];
   page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
-  page.on('dialog', (/** @type {any} */ d) => d.accept());
+  page.on('dialog', (/** @type {any} */ d) => void d.dismiss().then(() => errors.push(`native dialog: ${d.message()}`)));
 
   await page.goto(`http://127.0.0.1:${server.port}/`);
   await page.getByText('탐침 실행 허락 대기').waitFor();
@@ -57,6 +57,9 @@ test('browser: allow probe commands before they run', { skip, timeout: 120_000 }
   assert.match(text, /node -e "import\('\.\/src\/a\.mjs'\)/, 'the whole command is shown');
   assert.equal(await page.getByRole('button', { name: '거절' }).isDisabled(), true, 'a denial needs a reason');
   await page.getByRole('button', { name: '허락하고 실행' }).click();
+  const dialog = page.getByRole('dialog');
+  assert.match(await dialog.innerText(), /이 명령들을 base와 head 임시 worktree에서 실행해도 될까요\?/);
+  await dialog.getByRole('button', { name: '실행', exact: true }).click();
   const out = /** @type {any} */ (await waiting);
   assert.equal(out.permission.state, 'allowed');
   assert.equal(out.probes[0].head.stdout, '2\n');
