@@ -193,6 +193,7 @@ export async function createDashboardServer(options) {
       const events = await readEvents(paths.events);
       if (!events.length) continue;
       const input = /** @type {any} */ (await readJson(paths.input));
+      const draft = /** @type {any} */ (await readJson(paths.draft));
       const state = deriveState(events);
       tasks.push({
         taskId,
@@ -202,6 +203,8 @@ export async function createDashboardServer(options) {
         // Probe commands wait for the person's allowance before they run.
         permitPending: permitPending(events),
         branch: input?.branch ?? null,
+        // What the work did, in the agent's words: the row's title when the draft has one.
+        summary: typeof draft?.summary === 'string' ? draft.summary : null,
         repoRoot: input?.repo.root ?? null,
         repoId: input?.repo.id ?? null,
         worktreeId: input?.worktree.id ?? null,

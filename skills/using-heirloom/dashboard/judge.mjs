@@ -213,7 +213,7 @@ export async function judgeView({ home, taskId }) {
     inferences: draft.inferences,
     notes: draft.notes,
     probes: (probes?.probes ?? []).map(probeView),
-    tests: probes?.tests ? { comparison: probes.tests.comparison, changed: probes.tests.changed, base: { exitCode: probes.tests.base.exitCode, counts: probes.tests.base.counts }, head: { exitCode: probes.tests.head.exitCode, counts: probes.tests.head.counts } } : null,
+    tests: probes?.tests ? { comparison: probes.tests.comparison, changed: withNotes(probes.tests.changed, draft.testNotes), base: { exitCode: probes.tests.base.exitCode, counts: probes.tests.base.counts }, head: { exitCode: probes.tests.head.exitCode, counts: probes.tests.head.counts } } : null,
     observed: Object.fromEntries(
       draft.questions.map((/** @type {any} */ q) => [
         q.id,
@@ -224,11 +224,28 @@ export async function judgeView({ home, taskId }) {
 }
 
 /**
+ * The tests whose result changed, each with what it asserts in plain words when the draft says.
+ * @param {any[]} changed
+ * @param {{ test: string, plain: string }[] | undefined} notes
+ */
+const withNotes = (changed, notes = []) => {
+  const plain = new Map(notes.map((n) => [n.test, n.plain]));
+  return changed.map((t) => (plain.has(t.name) ? { ...t, plain: plain.get(t.name) } : t));
+};
+
+/**
  * The draft without anything that shows a result, for a screen that has not revealed yet.
  * @param {any} draft
  */
 export function redactedDraft(draft) {
-  return { schemaVersion: draft.schemaVersion, taskId: draft.taskId, inputSourceHash: draft.inputSourceHash, probeSetHash: draft.probeSetHash, questions: draft.questions };
+  return {
+    schemaVersion: draft.schemaVersion,
+    taskId: draft.taskId,
+    inputSourceHash: draft.inputSourceHash,
+    probeSetHash: draft.probeSetHash,
+    ...(draft.summary === undefined ? {} : { summary: draft.summary }),
+    questions: draft.questions,
+  };
 }
 
 /**

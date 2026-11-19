@@ -338,8 +338,8 @@ const taskRow = (t) =>
     h(
       'div',
       { class: 'seed-list-item__content' },
-      h('span', { class: 'seed-list-item__title' }, t.branch ?? '(브랜치 없음)'),
-      h('span', { class: 'seed-list-item__detail' }, `${t.repoRoot ?? '저장소 알 수 없음'} · ${t.taskId} · 갱신 ${when(t.updatedAt)}`),
+      h('span', { class: 'seed-list-item__title' }, t.summary ?? t.branch ?? '(브랜치 없음)'),
+      h('span', { class: 'seed-list-item__detail' }, [t.summary ? t.branch : null, t.repoRoot ?? '저장소 알 수 없음', t.taskId, `갱신 ${when(t.updatedAt)}`].filter(Boolean).join(' · ')),
     ),
     h('div', { class: 'seed-list-item__suffix' }, h('div', { class: 'hl-row' }, t.permitPending ? badge('warning', '허락 대기') : null, t.merged === true ? badge('positive', '머지됨') : stateBadge(t.state))),
   );
@@ -417,13 +417,17 @@ function reviewMatch(input) {
   return reviewed.every((/** @type {any} */ m) => m.reviewedSourceHash === input.source.hash);
 }
 
+/** What the work did, in the agent's words; the branch for a draft without a summary. @param {any} task */
+const taskTitle = (task) => task.draft?.summary ?? task.input?.branch ?? '인계 검토';
+
 /** @param {any} task */
 function titleBlock(task) {
   const input = task.input;
+  document.title = `${taskTitle(task)} · Heirloom`;
   return h(
     'section',
     { class: 'hl-stack-tight' },
-    h('div', { class: 'hl-spread' }, h('h1', { class: 'hl-title' }, '인계 검토'), h('div', { class: 'hl-row' }, stateBadge(task.state), h('code', { class: 'hl-muted' }, task.taskId))),
+    h('div', { class: 'hl-spread' }, h('h1', { class: 'hl-title' }, taskTitle(task)), h('div', { class: 'hl-row' }, stateBadge(task.state), h('code', { class: 'hl-muted' }, task.taskId))),
     h(
       'div',
       { class: 'hl-spread' },
@@ -1058,6 +1062,25 @@ function judgeCard(f, q) {
 /** @param {any} a an anchor of a decision record */
 const anchorText = (a) => (a.test ? `테스트 ${a.test} (${a.file})` : `${a.file}의 ${a.symbol}`);
 
+/**
+ * The tests that lock a proposed decision, in plain words. Where the code holds it and the
+ * scope stay behind 자세히: the person judges what the tests assert, not where they live.
+ * @param {{ scope: string[], anchors: any[], replaces?: string }} p a decision proposal or discussion candidate
+ */
+const anchorBlock = (p) =>
+  h(
+    'div',
+    { class: 'hl-stack-tight' },
+    h('span', { class: 'hl-muted hl-small' }, '이 결정을 잠그는 테스트'),
+    h('ul', { class: 'hl-files hl-small' }, p.anchors.filter((a) => a.test).map((a) => h('li', {}, a.plain ?? a.test))),
+    h(
+      'details',
+      { class: 'hl-small' },
+      h('summary', {}, '자세히'),
+      h('span', { class: 'hl-muted' }, `범위 ${p.scope.join(', ')} · 앵커 ${p.anchors.map(anchorText).join(', ')}${p.replaces ? ` · ${p.replaces} 대체` : ''}`),
+    ),
+  );
+
 /** Where an answered fork question is kept. @param {JudgeForm} f @param {any} q */
 function keepBlock(f, q) {
   /** @type {[string, string][]} */
@@ -1088,13 +1111,7 @@ function keepBlock(f, q) {
         },
       }),
       note,
-      q.decision
-        ? h(
-            'span',
-            { class: 'hl-muted hl-small' },
-            `범위 ${q.decision.scope.join(', ')} · 앵커 ${q.decision.anchors.map(anchorText).join(', ')}${q.decision.replaces ? ` · ${q.decision.replaces} 대체` : ''}`,
-          )
-        : null,
+      q.decision ? anchorBlock(q.decision) : null,
     ),
   );
 }
@@ -1111,7 +1128,7 @@ function discussionCard(f, d) {
     h('p', { class: 'hl-question' }, d.choice),
     h('blockquote', {}, d.quote),
     h('p', { class: 'hl-muted hl-small' }, h('a', { href: d.url, target: '_blank', rel: 'noopener noreferrer' }, d.url), d.fetched?.author ? ` · 작성자 ${d.fetched.author}` : ''),
-    h('span', { class: 'hl-muted hl-small' }, `범위 ${d.scope.join(', ')} · 앵커 ${d.anchors.map(anchorText).join(', ')}${d.replaces ? ` · ${d.replaces} 대체` : ''}`),
+    anchorBlock(d),
     choiceControl({
       label: `${d.id} 확인`,
       options: DISCUSSION_OPTIONS,
@@ -1224,7 +1241,7 @@ function judgePanel(f) {
           {},
           h('summary', {}, `테스트: base ${j.tests.base.counts.pass}/${j.tests.base.counts.fail} → head ${j.tests.head.counts.pass}/${j.tests.head.counts.fail} (통과/실패), 결과가 바뀐 테스트 ${j.tests.changed.length}개`),
           j.tests.changed.length
-            ? h('ul', { class: 'hl-files' }, j.tests.changed.map((/** @type {any} */ t) => h('li', {}, h('code', {}, t.name), ` ${TEST_STATUS[t.base] ?? t.base} → ${TEST_STATUS[t.head] ?? t.head}`)))
+            ? h('ul', { class: 'hl-files' }, j.tests.changed.map((/** @type {any} */ t) => h('li', {}, t.plain ? h('span', { title: t.name }, t.plain) : h('code', {}, t.name), h('span', { class: 'hl-muted' }, ` · ${TEST_STATUS[t.base] ?? t.base} → ${TEST_STATUS[t.head] ?? t.head}`))))
             : h('p', { class: 'hl-muted' }, j.tests.comparison === 'tests' ? '없음' : '테스트별 결과를 읽지 못해 종료 코드만 비교했습니다.'),
         )
       : null,
