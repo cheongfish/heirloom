@@ -176,6 +176,16 @@ test('v2: test-lock points at a changed test or a line of a changed test file', 
   assert.deepEqual(await errorsFor('some other test'), ['$.questions[1].test: 결과가 달라진 테스트도, 이번 변경이 고친 테스트 파일의 위치도 아님 (some other test)']);
 });
 
+test('v2: a test note names a test whose result changed in the cited probe run', async () => {
+  const root = await fixture();
+  const d = draft();
+  d.testNotes = [
+    { test: 'bulk discount for 12', plain: '12개 구매에 대량 할인이 붙는다' },
+    { test: 'no such test', plain: '없는 테스트' },
+  ];
+  assert.deepEqual((await run(root, d)).errors, ['$.testNotes[1].test: 탐침 실행에서 결과가 바뀐 테스트가 아님 (no such test)']);
+});
+
 test('v2: spec and conversation quotes must match exactly what was written', async () => {
   const root = await fixture();
   const d = draft();

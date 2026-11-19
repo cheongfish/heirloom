@@ -27,6 +27,8 @@ const ANCHORS = [
   { file: 'src/cart.mjs', symbol: 'total' },
   { file: 'test/small.test.mjs', test: 'small orders pay full price' },
 ];
+/** The same anchors as a draft writes them: the test anchor says in plain words what it asserts. */
+const DRAFT_ANCHORS = ANCHORS.map((a) => ('test' in a ? { ...a, plain: '5개 구매는 정가로 결제된다' } : a));
 const OLD_ID = 'd-aaaaaaaa';
 /** A schema 2 record already on the target branch. */
 const OLD_RECORD = serializeRecord({
@@ -86,7 +88,7 @@ test('a decision proposal is checked against the repository and the recorded tes
 });
 
 test('keeping a fork answer in the repository writes a record that replaces the old one', async () => {
-  const t = await judgedTask(withFork((q) => { q.decision = { scope: ['src/cart.mjs'], anchors: ANCHORS, replaces: OLD_ID }; }));
+  const t = await judgedTask(withFork((q) => { q.decision = { scope: ['src/cart.mjs'], anchors: DRAFT_ANCHORS, replaces: OLD_ID }; }));
   const bad = await judge({ home: t.home, taskId: t.taskId, sourceHash: t.sourceHash, verdicts: { q3: { verdict: 'as-expected', keep: 'repo' } } }).catch((e) => e.message);
   assert.match(bad, /q3: 저장소에 남기거나 기록을 지우는 것은 답한 열린 선택에서만 고름/);
   const retireBad = await judge({ home: t.home, taskId: t.taskId, sourceHash: t.sourceHash, verdicts: { q4: { verdict: 'answered', answer: '100으로 한다', keep: 'retire' } } }).catch((e) => e.message);
@@ -108,7 +110,7 @@ test('keeping a fork answer in the repository writes a record that replaces the 
   const meta = decisions[0].meta;
   assert.equal(meta.choice, '100개부터 할인한다');
   assert.equal(meta.question, '경계를 100으로 할까요, 50으로 할까요?');
-  assert.deepEqual(meta.anchors, ANCHORS);
+  assert.deepEqual(meta.anchors, ANCHORS, 'the record keeps where the decision is held, not the plain words of the draft');
   assert.equal(meta.replaces, OLD_ID);
   assert.deepEqual(meta.source, [{ kind: 'fork-answer', approval: judgment.id, question: 'q4' }]);
   assert.match(await readFile(path.join(t.repo.dir, file), 'utf8'), /## 사람의 답 \(원문\)\n\n"100개부터 할인한다"/);
