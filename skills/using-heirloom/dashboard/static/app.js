@@ -29,6 +29,8 @@ const BUTTON = {
     'seed-action-button seed-action-button--variant_neutralSolid seed-action-button--size_medium seed-action-button--layout_withText seed-action-button--size_medium-layout_withText',
   outline:
     'seed-action-button seed-action-button--variant_neutralOutline seed-action-button--size_medium seed-action-button--layout_withText seed-action-button--size_medium-layout_withText',
+  critical:
+    'seed-action-button seed-action-button--variant_criticalSolid seed-action-button--size_medium seed-action-button--layout_withText seed-action-button--size_medium-layout_withText',
   smallWeak:
     'seed-action-button seed-action-button--variant_neutralWeak seed-action-button--size_small seed-action-button--layout_withText seed-action-button--size_small-layout_withText',
   smallOutline:
@@ -46,6 +48,15 @@ const BADGE = {
   positive: 'seed-badge__root seed-badge__root--size_medium seed-badge__root--variant_weak seed-badge__root--tone_positive-variant_weak',
   warning: 'seed-badge__root seed-badge__root--size_medium seed-badge__root--variant_weak seed-badge__root--tone_warning-variant_weak',
   critical: 'seed-badge__root seed-badge__root--size_medium seed-badge__root--variant_weak seed-badge__root--tone_critical-variant_weak',
+};
+
+/** State badges, read at a glance on the task list and the task title. @type {Record<Tone, string>} */
+const BADGE_LARGE = {
+  neutral: 'seed-badge__root seed-badge__root--size_large seed-badge__root--variant_weak seed-badge__root--tone_neutral-variant_weak hl-state',
+  informative: 'seed-badge__root seed-badge__root--size_large seed-badge__root--variant_weak seed-badge__root--tone_informative-variant_weak hl-state',
+  positive: 'seed-badge__root seed-badge__root--size_large seed-badge__root--variant_weak seed-badge__root--tone_positive-variant_weak hl-state',
+  warning: 'seed-badge__root seed-badge__root--size_large seed-badge__root--variant_weak seed-badge__root--tone_warning-variant_weak hl-state',
+  critical: 'seed-badge__root seed-badge__root--size_large seed-badge__root--variant_weak seed-badge__root--tone_critical-variant_weak hl-state',
 };
 
 /** @type {Record<Tone, { root: string, title: string, description: string }>} */
@@ -145,8 +156,8 @@ function replace(el, ...children) {
   append(el, children);
 }
 
-/** @param {Tone} tone @param {string} label */
-const badge = (tone, label) => h('span', { class: BADGE[tone] }, h('span', { class: 'seed-badge__label' }, label));
+/** @param {Tone} tone @param {string} label @param {Record<Tone, string>} [size] */
+const badge = (tone, label, size = BADGE) => h('span', { class: size[tone] }, h('span', { class: 'seed-badge__label' }, label));
 
 /**
  * @param {Tone} tone
@@ -169,6 +180,35 @@ function callout(tone, title, description) {
  * @param {Record<string, unknown>} [props]
  */
 const button = (cls, label, onclick, props = {}) => h('button', { type: 'button', class: cls, onclick, ...props }, label);
+
+/**
+ * Ask before a step that cannot be undone, in the page instead of window.confirm. As there,
+ * focus starts on the confirming button; Escape or 취소 cancels, and focus goes back to where
+ * it was.
+ * @param {string} message
+ * @param {string} confirmLabel
+ * @param {{ danger?: boolean }} [options]
+ * @returns {Promise<boolean>}
+ */
+function confirmDialog(message, confirmLabel, { danger = false } = {}) {
+  const back = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const ok = h('button', { type: 'submit', value: 'ok', class: danger ? BUTTON.critical : BUTTON.primary }, confirmLabel);
+  const dialog = h(
+    'dialog',
+    { class: 'hl-dialog', 'aria-labelledby': 'hl-dialog-message' },
+    h('form', { method: 'dialog', class: 'hl-stack' }, h('p', { id: 'hl-dialog-message' }, message), h('div', { class: 'hl-row hl-dialog-actions' }, h('button', { type: 'submit', value: 'cancel', class: BUTTON.outline }, '취소'), ok)),
+  );
+  document.body.append(dialog);
+  return new Promise((resolve) => {
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      back?.focus();
+      resolve(dialog.returnValue === 'ok');
+    });
+    dialog.showModal();
+    ok.focus();
+  });
+}
 
 /** @param {string | null | undefined} hash */
 const short = (hash) => (hash ? hash.replace(/^sha256:/, '').slice(0, 12) : '없음');
@@ -267,12 +307,14 @@ const STATE = {
 /** @param {string | null} state */
 const stateBadge = (state) => {
   const [tone, label] = STATE[state ?? ''] ?? ['neutral', state ?? '알 수 없음'];
-  return badge(tone, label);
+  return badge(tone, label, BADGE_LARGE);
 };
 
 const FINISHED = new Set(['pr_created', 'discarded', 'expired']);
 /** Approved, waiting for the agent to write the records and open the PR. */
 const APPLYING = new Set(['approved', 'applied']);
+/** What the person does next for an approved task. */
+const APPLY_HINT = '에이전트에게 "승인한 작업 반영해 줘"라고 요청하세요. 에이전트가 apply-approval로 결정 기록을 쓰고 PR을 엽니다.';
 
 /** @param {string} taskId @param {string | null} repoId @param {string | null} worktreeId */
 const taskHref = (taskId, repoId, worktreeId) => `/r/${repoId ?? '-'}/w/${worktreeId ?? '-'}/t/${taskId}`;
@@ -322,13 +364,8 @@ function listSection(title, rows, empty) {
   );
 }
 
-/**
- * One line for the overview sections that have nothing to show, so empty cards do not push
- * the waiting approvals down.
- * @param {string[]} titles
- */
-const emptySections = (titles) =>
-  titles.length ? h('p', { class: 'hl-muted hl-small hl-empty-sections' }, `비어 있는 목록: ${titles.join(' · ')}`) : null;
+/** The repository's folder name; the full path is on the task screen. @param {string | null} root */
+const repoName = (root) => (root ? root.split(/[\\/]/).filter(Boolean).at(-1) : null) ?? '저장소 알 수 없음';
 
 /** @param {any} t */
 const taskRow = (t) =>
@@ -338,10 +375,10 @@ const taskRow = (t) =>
     h(
       'div',
       { class: 'seed-list-item__content' },
-      h('span', { class: 'seed-list-item__title' }, t.branch ?? '(브랜치 없음)'),
-      h('span', { class: 'seed-list-item__detail' }, `${t.repoRoot ?? '저장소 알 수 없음'} · ${t.taskId} · 갱신 ${when(t.updatedAt)}`),
+      h('span', { class: 'seed-list-item__title' }, t.summary ?? t.branch ?? '(브랜치 없음)'),
+      h('span', { class: 'seed-list-item__detail' }, [t.summary ? t.branch : null, repoName(t.repoRoot), `갱신 ${when(t.updatedAt)}`].filter(Boolean).join(' · ')),
     ),
-    h('div', { class: 'seed-list-item__suffix' }, h('div', { class: 'hl-row' }, t.permitPending ? badge('warning', '허락 대기') : null, t.merged === true ? badge('positive', '머지됨') : stateBadge(t.state))),
+    h('div', { class: 'seed-list-item__suffix' }, h('div', { class: 'hl-row' }, t.permitPending ? badge('warning', '허락 대기', BADGE_LARGE) : null, t.merged === true ? badge('positive', '머지됨', BADGE_LARGE) : stateBadge(t.state))),
   );
 
 /** @param {any} t a listed task: finished, or applied without a PR and already merged */
@@ -367,7 +404,7 @@ async function renderOverview() {
         'div',
         { class: 'seed-list-item__content' },
         h('span', { class: 'seed-list-item__title' }, `${c.branch ?? '(브랜치 없음)'} · 코드 파일 ${c.files.length}개 변경`),
-        h('span', { class: 'seed-list-item__detail' }, `${c.path} · 대상 ${c.base} · 소스 상태 ${short(c.sourceHash)}`),
+        h('span', { class: 'seed-list-item__detail' }, `${c.path} · 대상 ${c.base}`),
       ),
       h('div', { class: 'seed-list-item__suffix' }, badge('warning', '인계 안 됨')),
     ),
@@ -381,27 +418,19 @@ async function renderOverview() {
       )
     : null;
 
-  // Sections below the waiting approvals are drawn only when they have rows; the empty ones
-  // are named on one line at the end.
-  /** @type {string[]} */
-  const empty = [];
+  // Sections below the waiting approvals are drawn only when they have rows.
   /** @param {string} title @param {Child[]} rows @param {Child} [note] */
-  const optional = (title, rows, note = null) => {
-    if (rows.length || note) return h('div', {}, listSection(title, rows, `${title} 항목이 없습니다.`), note);
-    empty.push(title);
-    return null;
-  };
+  const optional = (title, rows, note = null) => (rows.length || note ? h('div', {}, listSection(title, rows, `${title} 항목이 없습니다.`), note) : null);
   replace(
     main,
     h('h1', { class: 'hl-title' }, '전체 목록'),
     permits.length ? listSection('탐침 실행 허락 대기', permits.map(taskRow), '') : null,
     listSection('승인 대기', waiting.map(taskRow), '승인을 기다리는 인계가 없습니다.'),
-    optional('반영 대기', applying.map(taskRow)),
+    optional('반영 대기', applying.map(taskRow), applying.length ? h('p', { class: 'hl-empty hl-small' }, `다음 단계: ${APPLY_HINT}`) : null),
     optional('인계되지 않은 변경', unhandedRows, uncheckedNote),
     optional(`오래된 미처리 건 (${data.staleDays}일 이상)`, stale.map(taskRow)),
     optional('진행 중', open.map(taskRow)),
     optional('최근 끝난 작업', done.map(taskRow)),
-    emptySections(empty),
   );
 }
 
@@ -417,20 +446,18 @@ function reviewMatch(input) {
   return reviewed.every((/** @type {any} */ m) => m.reviewedSourceHash === input.source.hash);
 }
 
+/** What the work did, in the agent's words; the branch for a draft without a summary. @param {any} task */
+const taskTitle = (task) => task.draft?.summary ?? task.input?.branch ?? '인계 검토';
+
 /** @param {any} task */
 function titleBlock(task) {
   const input = task.input;
+  document.title = `${taskTitle(task)} · Heirloom`;
   return h(
     'section',
     { class: 'hl-stack-tight' },
-    h('div', { class: 'hl-spread' }, h('h1', { class: 'hl-title' }, '인계 검토'), h('div', { class: 'hl-row' }, stateBadge(task.state), h('code', { class: 'hl-muted' }, task.taskId))),
-    h(
-      'div',
-      { class: 'hl-spread' },
-      input ? h('p', {}, h('code', {}, input.branch ?? '(분리된 HEAD)'), ' → ', h('code', {}, input.base.ref)) : h('span'),
-      // Discard is rare and cannot be undone: it sits by the title, away from the judgment.
-      judge?.task.taskId === task.taskId ? discardButton : null,
-    ),
+    h('div', { class: 'hl-spread' }, h('h1', { class: 'hl-title' }, taskTitle(task)), h('div', { class: 'hl-row' }, stateBadge(task.state), h('code', { class: 'hl-muted' }, task.taskId))),
+    input ? h('p', {}, h('code', {}, input.branch ?? '(분리된 HEAD)'), ' → ', h('code', {}, input.base.ref)) : null,
   );
 }
 
@@ -472,7 +499,29 @@ function changedFiles(files) {
   );
 }
 
-/** @param {any} task */
+/**
+ * What the work changed, first on the overview: the behavior differences as judged, or as the
+ * agent wrote them. They hold observed values, so they wait for the predictions.
+ * @param {any} task
+ */
+function changesCard(task) {
+  const a = task.latestApproval;
+  const hidden = task.judge && !task.judge.revealed;
+  const diffs = a?.kind === 'judgment' && a.target.draftSha256 === task.draftSha256 ? a.behaviorDiffs.final : task.draft?.behaviorDiffs?.map((/** @type {any} */ d) => d.text);
+  if (!hidden && !diffs) return null;
+  return h(
+    'section',
+    { class: 'hl-card' },
+    h('h2', { class: 'hl-section-title' }, '동작 차이'),
+    hidden
+      ? h('p', { class: 'hl-muted' }, '예측을 저장하면 에이전트가 설명한 동작 차이가 보입니다.')
+      : diffs.length
+        ? h('ul', { class: 'hl-files hl-stack-tight' }, diffs.map((/** @type {string} */ t) => h('li', {}, t)))
+        : h('p', { class: 'hl-muted' }, '동작 차이 설명이 없습니다.'),
+  );
+}
+
+/** Changed files, and where the handoff came from behind 자세히. @param {any} task */
 function boundaryCard(task) {
   const input = task.input;
   if (!input) return callout('critical', '입력 없음', '이 작업의 input.json을 찾지 못했습니다.');
@@ -480,28 +529,31 @@ function boundaryCard(task) {
     'section',
     { class: 'hl-card' },
     h('h2', { class: 'hl-section-title' }, '작업 경계'),
-    h(
-      'dl',
-      { class: 'hl-meta' },
-      h('dt', {}, '저장소'),
-      h('dd', {}, h('code', {}, input.repo.root)),
-      h('dt', {}, '브랜치'),
-      h('dd', {}, h('code', {}, input.branch ?? '(분리된 HEAD)'), ' → ', h('code', {}, input.base.ref)),
-      h('dt', {}, '검토 대상 상태'),
-      h('dd', {}, '소스 ', h('code', {}, short(input.source.hash)), ' · merge-base ', h('code', {}, input.base.mergeBase.slice(0, 12))),
-      h('dt', {}, '인계 방식'),
-      h('dd', {}, input.trigger === 'manual' ? '수동 요청' : '자동(spec 기반)', input.sdlcTaskRef ? ` · ${input.sdlcTaskRef}` : ''),
-      h('dt', {}, '준비 시각'),
-      h('dd', {}, when(input.createdAt)),
-    ),
     changedFiles(input.source.files),
     h(
       'details',
       {},
-      h('summary', {}, `자료 ${input.materials.length}개`),
-      input.materials.length
-        ? h('ul', { class: 'hl-files' }, input.materials.map((/** @type {any} */ m) => h('li', {}, h('span', { class: 'hl-muted' }, `${m.role} `), h('code', {}, m.ref), h('span', { class: 'hl-muted' }, ` ${short(m.sha256)}`))))
-        : h('p', { class: 'hl-muted' }, '연결된 자료가 없습니다.'),
+      h('summary', {}, '자세히'),
+      h(
+        'dl',
+        { class: 'hl-meta' },
+        h('dt', {}, '저장소'),
+        h('dd', {}, h('code', {}, input.repo.root)),
+        h('dt', {}, '검토 대상 상태'),
+        h('dd', {}, '소스 ', h('code', {}, short(input.source.hash)), ' · merge-base ', h('code', {}, input.base.mergeBase.slice(0, 12))),
+        h('dt', {}, '인계 방식'),
+        h('dd', {}, input.trigger === 'manual' ? '수동 요청' : '자동(spec 기반)', input.sdlcTaskRef ? ` · ${input.sdlcTaskRef}` : ''),
+        h('dt', {}, '준비 시각'),
+        h('dd', {}, when(input.createdAt)),
+        h('dt', {}, '자료'),
+        h(
+          'dd',
+          {},
+          input.materials.length
+            ? h('ul', { class: 'hl-files' }, input.materials.map((/** @type {any} */ m) => h('li', {}, h('span', { class: 'hl-muted' }, `${m.role} `), h('code', {}, m.ref), h('span', { class: 'hl-muted' }, ` ${short(m.sha256)}`))))
+            : '없음',
+        ),
+      ),
     ),
   );
 }
@@ -513,6 +565,16 @@ function boundaryCard(task) {
 function attentionCount(task) {
   return (task?.input && reviewMatch(task.input) === false ? 1 : 0) + (task?.check?.warnings?.length ? 1 : 0) + (task?.repeatedReturns?.length ? 1 : 0);
 }
+
+/**
+ * What prepare could not find (input.unknowns), in the person's words. A missing ticket, a
+ * manual handoff without a spec and a detached HEAD are left out: nothing to act on, and the
+ * branch line already shows the HEAD.
+ * @type {Record<string, string | null>}
+ */
+const UNKNOWN = { sdlcTaskRef: null, spec: null, branch: null, review: '최종 리뷰 자료 없음', reviewedSourceHash: '최종 리뷰가 본 커밋을 알 수 없음' };
+/** @param {string} u */
+const unknownText = (u) => (u.startsWith('material:') ? `찾지 못한 자료 ${u.slice('material:'.length)}` : u in UNKNOWN ? UNKNOWN[u] : u);
 
 /** @param {any} task */
 function noticesBlock(task) {
@@ -528,7 +590,8 @@ function noticesBlock(task) {
     items.push(callout('warning', '검사 경고', h('span', {}, lines.map((/** @type {string} */ l, /** @type {number} */ i) => [i ? h('br') : null, l]))));
   }
   if (task.repeatedReturns?.length) items.push(redesignCallout(task.repeatedReturns));
-  if (input?.unknowns?.length) items.push(callout('neutral', '확인하지 못한 값', input.unknowns.join(', ')));
+  const missing = (input?.unknowns ?? []).map(unknownText).filter(Boolean);
+  if (missing.length) items.push(callout('neutral', '인계에 빠진 자료', missing.join(', ')));
   if (draft?.notes) items.push(callout('informative', '에이전트 메모', draft.notes));
   return items.length ? h('section', { class: 'hl-stack' }, items) : null;
 }
@@ -568,12 +631,14 @@ function pastReturns(q, verdict, limit) {
   return callout('warning', '설계부터 다시 합의하세요', h('span', {}, `${lead} 다시 고치게 하기 전에 원하는 동작부터 정하세요.`, returnLines(past)));
 }
 
-const discardButton = button(BUTTON.smallOutline, '작업 폐기', () => void discardTask());
+const discardButton = button(BUTTON.critical, '작업 폐기', () => void discardTask());
+/** Discard is rare and cannot be undone: it closes the overview tab, away from the judgment. */
+const discardSection = h('section', { class: 'hl-stack-tight' }, h('div', { class: 'hl-row' }, discardButton), h('p', { class: 'hl-muted hl-small' }, '이 인계를 끝냅니다. 폐기한 작업은 판정하거나 반영할 수 없습니다.'));
 
 async function discardTask() {
   if (!judge) return;
   const j = judge;
-  if (!window.confirm('이 인계를 폐기할까요? 폐기한 작업은 판정하거나 반영할 수 없습니다.')) return;
+  if (!(await confirmDialog('이 인계를 폐기할까요? 폐기한 작업은 판정하거나 반영할 수 없습니다.', '폐기', { danger: true }))) return;
   await judgeStep(j, '폐기 실패', () => post(`/api/tasks/${encodeURIComponent(j.task.taskId)}/discard`, { reason: 'user' }));
 }
 
@@ -606,7 +671,7 @@ function permitPanel(task) {
   };
   /** @param {'allowed' | 'denied'} decision */
   async function decide(decision) {
-    if (decision === 'allowed' && !window.confirm('이 명령들을 base와 head 임시 worktree에서 실행해도 될까요? 이 저장소에서 같은 명령은 다시 묻지 않습니다.')) return;
+    if (decision === 'allowed' && !(await confirmDialog('이 명령들을 base와 head 임시 worktree에서 실행해도 될까요? 이 저장소에서 같은 명령은 다시 묻지 않습니다.', '실행'))) return;
     allow.disabled = true;
     deny.disabled = true;
     try {
@@ -652,14 +717,16 @@ function permitPanel(task) {
 
 /**
  * A radio group styled as a SEED segmented control, with any options. Starts empty.
- * @param {{ label: string, options: [string, string][], value: string | null, disabled?: Set<string>, onchange: (value: string) => void }} o
+ * `vertical` lists the options one per line, for options that are sentences; `titles` are
+ * tooltips that say what an option means.
+ * @param {{ label: string, options: [string, string][], value: string | null, disabled?: Set<string>, vertical?: boolean, titles?: Record<string, string>, onchange: (value: string) => void }} o
  */
-function choiceControl({ label, options, value, disabled = new Set(), onchange }) {
-  const root = h('div', { class: 'seed-segmented-control__root hl-decision hl-choice', role: 'radiogroup', 'aria-label': label });
+function choiceControl({ label, options, value, disabled = new Set(), vertical = false, titles = {}, onchange }) {
+  const root = h('div', { class: `seed-segmented-control__root hl-decision hl-choice${vertical ? ' hl-choice--vertical' : ''}`, role: 'radiogroup', 'aria-label': label });
   root.style.setProperty('--segment-count', String(options.length));
-  root.append(h('div', { class: 'seed-segmented-control__indicator', 'aria-hidden': 'true' }));
+  if (!vertical) root.append(h('div', { class: 'seed-segmented-control__indicator', 'aria-hidden': 'true' }));
   /** @type {HTMLButtonElement[]} */
-  const items = options.map(([v, text]) => h('button', { type: 'button', role: 'radio', class: 'seed-segmented-control__item', 'data-value': v, disabled: disabled.has(v) }, text));
+  const items = options.map(([v, text]) => h('button', { type: 'button', role: 'radio', class: 'seed-segmented-control__item', 'data-value': v, disabled: disabled.has(v), title: titles[v] }, text));
   root.append(...items);
   /** @param {string | null} v */
   const set = (v) => {
@@ -735,7 +802,8 @@ const AFTER_MERGE_HELP = {
  * @property {string} owner who owns a kept spec
  * @property {HTMLElement} lifecycle
  * @property {boolean | null} lifecycleFor whether the lifetime box was drawn for an accepting judgment
- * @property {HTMLElement} status
+ * @property {HTMLElement} status why the last save failed
+ * @property {HTMLElement} why what is still needed before saving, next to the button
  * @property {boolean} dirty
  * @property {boolean} busy
  * @property {{ refresh: () => void } | null} deck the question cards, reviewed side by side
@@ -761,6 +829,7 @@ function newJudgeForm(task) {
     lifecycle: h('div', { class: 'hl-stack' }),
     lifecycleFor: null,
     status: h('div', { class: 'hl-stack' }),
+    why: h('span', { class: 'hl-small hl-blocked' }),
     dirty: false,
     busy: false,
     deck: null,
@@ -795,12 +864,30 @@ const questionSources = (sources) =>
       )
     : null;
 
+/**
+ * A test-lock question's test in plain words; its name, and what each run gave, behind 자세히.
+ * @param {any} q
+ * @param {Child} [more]
+ */
+const testLockTest = (q, more = null) =>
+  h(
+    'div',
+    { class: 'hl-stack-tight' },
+    h('p', {}, q.plain),
+    h('details', { class: 'hl-small' }, h('summary', {}, '자세히'), h('span', { class: 'hl-muted' }, '테스트 ', h('code', {}, q.test), more)),
+  );
+
+/** The answers to a test-lock question. @type {[string, string][]} */
+const TEST_LOCK_OPTIONS = [['yes', '예'], ['no', '아니오']];
+/** @param {string} v */
+const testLockLabel = (v) => TEST_LOCK_OPTIONS.find(([k]) => k === v)?.[1] ?? v;
+
 /** @param {JudgeForm} f @param {any} q */
 function predictionCard(f, q) {
   /** @type {Child[]} */
   const body = [questionHead(q), h('p', { class: 'hl-question' }, q.prompt)];
   if (q.kind === 'predict') body.push(probeCommand(f.task, q.probe));
-  if (q.kind === 'test-lock') body.push(h('p', {}, h('code', {}, q.test), h('span', { class: 'hl-muted' }, ` — ${q.plain}`)));
+  if (q.kind === 'test-lock') body.push(testLockTest(q));
   body.push(questionSources(q.sources));
   /** @param {string} v */
   const set = (v) => {
@@ -809,8 +896,8 @@ function predictionCard(f, q) {
     f.dirty = true;
     refreshJudge();
   };
-  if (q.kind === 'test-lock') body.push(choiceControl({ label: `${q.id} 답`, options: [['yes', '예'], ['no', '아니오']], value: f.predictions.get(q.id) ?? null, onchange: set }));
-  else if (q.answerType === 'choice') body.push(choiceControl({ label: `${q.id} 답`, options: q.choices.map((/** @type {string} */ c) => [c, c]), value: f.predictions.get(q.id) ?? null, onchange: set }));
+  if (q.kind === 'test-lock') body.push(choiceControl({ label: `${q.id} 답`, options: TEST_LOCK_OPTIONS, value: f.predictions.get(q.id) ?? null, onchange: set }));
+  else if (q.answerType === 'choice') body.push(choiceControl({ label: `${q.id} 답`, options: q.choices.map((/** @type {string} */ c) => [c, c]), value: f.predictions.get(q.id) ?? null, vertical: true, onchange: set }));
   else body.push(fieldBlock('내 예측', textInput({ value: f.predictions.get(q.id) ?? '', label: `${q.id} 예측`, placeholder: q.answerType === 'number' ? '숫자' : '결과', oninput: set })));
   return h('section', { class: 'hl-card hl-stack', id: `question-${q.id}` }, body);
 }
@@ -820,10 +907,11 @@ function predictionCard(f, q) {
  * previous and next buttons, the chips, or a horizontal swipe. The strip of chips shows which
  * cards are done, and the deck takes the height of the card in view.
  * @param {string} title
+ * @param {string} note one line under the title: the words the cards use
  * @param {{ id: string, label: string, card: HTMLElement, done: () => boolean }[]} items
  * @returns {{ root: HTMLElement, refresh: () => void }}
  */
-function cardDeck(title, items) {
+function cardDeck(title, note, items) {
   const slides = items.map((it, i) => h('div', { class: 'hl-deck-slide', role: 'group', 'aria-roledescription': '카드', 'aria-label': `${it.label} (${i + 1}/${items.length})` }, it.card));
   const track = h('div', { class: 'hl-deck-track' }, slides);
   let current = 0;
@@ -831,9 +919,12 @@ function cardDeck(title, items) {
   const prev = /** @type {HTMLButtonElement} */ (button(BUTTON.smallOutline, '← 이전', () => go(current - 1)));
   const next = /** @type {HTMLButtonElement} */ (button(BUTTON.smallOutline, '다음 →', () => go(current + 1)));
   const chips = items.map((it, i) => /** @type {HTMLButtonElement} */ (button(BUTTON.smallGhost, it.label, () => go(i), { 'aria-label': `${it.label}로 이동` })));
+  // The track is as tall as the card in view. A taller card next to it lets the track scroll
+  // down (focus or scrollIntoView while the height changes), which would cut off this card's top.
   const fit = () => {
     const slide = slides[current];
     if (slide) track.style.height = `${slide.offsetHeight}px`;
+    track.scrollTop = 0;
   };
   const refresh = () => {
     chips.forEach((chip, i) => {
@@ -851,10 +942,12 @@ function cardDeck(title, items) {
     slides.forEach((slide, i) => slide.toggleAttribute('inert', i !== current));
     fit();
   };
+  // A jump lands at once: a smooth scroll would pass the cards on the way, the scroll handler
+  // below would take each for the card in view, and the target could be left inert.
   /** @param {number} i */
   const go = (i) => {
     current = Math.max(0, Math.min(items.length - 1, i));
-    track.scrollTo({ left: slides[current].offsetLeft - slides[0].offsetLeft, behavior: 'smooth' });
+    track.scrollTo({ left: slides[current].offsetLeft - slides[0].offsetLeft, behavior: 'instant' });
     refresh();
   };
   // A swipe or trackpad scroll moves the card in view too.
@@ -881,6 +974,7 @@ function cardDeck(title, items) {
     'section',
     { class: 'hl-deck hl-stack', 'aria-label': title },
     h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, title), h('div', { class: 'hl-row' }, position, prev, next)),
+    h('p', { class: 'hl-muted hl-small' }, note),
     h('div', { class: 'hl-row hl-deck-chips' }, chips),
     track,
   );
@@ -897,7 +991,6 @@ function predictPanel(f) {
   return h(
     'div',
     { class: 'hl-stack' },
-    callout('informative', '먼저 결과를 예측하세요', '예측을 저장해야 실제 결과가 공개됩니다. 저장한 예측은 바꿀 수 없습니다. 틀린 예측도 그대로 PR에 남아 리뷰어에게 도움이 됩니다.'),
     j.questions.length > 5 ? callout('warning', `질문이 ${j.questions.length}개`, '이 변경은 한 번에 이해하기에 클 수 있습니다. 나눌 수 있는지 에이전트와 상의해 보세요.') : null,
     j.setupFailed ? callout('warning', '탐침 준비 명령 실패', '실행 환경을 갖추지 못한 채 탐침이 돌았습니다. 결과가 실행 실패일 수 있습니다.') : null,
     recheckNotice(j),
@@ -916,7 +1009,7 @@ function predictPanel(f) {
       h('ul', { class: 'hl-files' }, j.commands.map((/** @type {any} */ c) => h('li', {}, h('span', { class: 'hl-muted' }, `${c.id} ${c.title}: `), h('code', {}, commandText(c.run))))),
     ),
     f.status,
-    h('div', { class: 'hl-row' }, reveal),
+    h('div', { class: 'hl-row' }, reveal, f.why),
   );
 }
 
@@ -927,6 +1020,7 @@ function predictPanel(f) {
 function predictDeck(f, questions) {
   const deck = cardDeck(
     '결과 예측',
+    '탐침은 바뀌기 전(base)과 바뀐 뒤(head)에서 똑같이 실행해 결과를 비교하는 명령입니다. 결과를 보기 전에 무엇이 나올지 답하세요.',
     questions.map((q) => ({ id: q.id, label: q.id, card: predictionCard(f, q), done: () => f.predictions.has(q.id) })),
   );
   f.deck = deck;
@@ -939,21 +1033,37 @@ function outputBlock(run) {
   return h('div', { class: 'hl-stack-tight' }, h('pre', { class: 'hl-output' }, run.stdout || h('span', { class: 'hl-muted' }, '(출력 없음)')), tail ? h('span', { class: 'hl-muted hl-small' }, tail, run.stderr ? ` — ${run.stderr.slice(0, 300)}` : '') : null);
 }
 
-/** @param {any} task @param {string} id */
-function observedProbe(task, id) {
-  const p = task.judge.probes.find((/** @type {any} */ x) => x.id === id);
-  if (!p) return null;
+/**
+ * Every probe's command with its base and head output, once: the question cards and the
+ * behavior descriptions name the probes they rest on.
+ * @param {any} j
+ */
+function probeResults(j) {
+  if (!j.probes.length) return null;
   return h(
-    'div',
-    { class: 'hl-stack-tight' },
-    h('span', { class: 'hl-muted hl-small' }, `탐침 ${p.id}: ${p.title}`, p.same ? ' · base와 같음' : ''),
-    h('code', { class: 'hl-command' }, commandText(p.run)),
-    h('div', { class: 'hl-compare' }, h('div', {}, h('span', { class: 'hl-muted hl-small' }, '이전 (base)'), outputBlock(p.base)), h('div', {}, h('span', { class: 'hl-muted hl-small' }, '이후 (head)'), outputBlock(p.head))),
+    'section',
+    { class: 'hl-card hl-stack' },
+    h('h2', { class: 'hl-section-title' }, '탐침 결과'),
+    h('p', { class: 'hl-muted hl-small' }, '탐침은 바뀌기 전(base)과 바뀐 뒤(head)에서 똑같이 실행해 결과를 비교하는 명령입니다.'),
+    j.probes.map((/** @type {any} */ p) =>
+      h(
+        'div',
+        { class: 'hl-stack-tight hl-probe', id: `probe-${p.id}` },
+        h('div', { class: 'hl-row' }, h('strong', {}, p.title), p.same ? badge('neutral', 'base와 같음') : null),
+        h('code', { class: 'hl-command' }, commandText(p.run)),
+        h('div', { class: 'hl-compare' }, h('div', {}, h('span', { class: 'hl-muted hl-small' }, '이전 (base)'), outputBlock(p.base)), h('div', {}, h('span', { class: 'hl-muted hl-small' }, '이후 (head)'), outputBlock(p.head))),
+      ),
+    ),
   );
 }
 
+/** The probes a card or description rests on, by title. @param {any} task @param {string[]} ids */
+const probeTitles = (task, ids) => ids.map((id) => `「${commandOf(task, id)?.title ?? id}」`).join(', ');
+
 /** @type {Record<string, string>} */
 const TEST_STATUS = { pass: '통과', fail: '실패', skip: '건너뜀', absent: '없음' };
+/** Test counts on one side, e.g. "통과 1·실패 1". @param {{ pass: number, fail: number, skip: number }} c */
+const countText = (c) => [c.pass && `통과 ${c.pass}`, c.fail && `실패 ${c.fail}`, c.skip && `건너뜀 ${c.skip}`].filter(Boolean).join('·') || '결과 없음';
 
 /**
  * What a recheck says before the questions: which judgment it builds on, and changes no
@@ -991,26 +1101,29 @@ function judgeCard(f, q) {
   const history = h('div', {}, pastReturns(q, f.verdicts.get(q.id) ?? null, j.redesignAfter));
   body.push(history);
   if (prediction !== undefined) {
-    const shown = q.kind === 'test-lock' ? (prediction === 'yes' ? '예' : '아니오') : prediction;
+    const shown = q.kind === 'test-lock' ? testLockLabel(prediction) : prediction;
     body.push(
       h('div', { class: 'hl-row' }, h('span', {}, '내 예측: ', h('strong', {}, shown)), observed.correct === true ? badge('positive', '맞음') : observed.correct === false ? badge('critical', '틀림') : badge('neutral', '직접 비교')),
     );
   }
   if (q.kind === 'test-lock') {
-    body.push(h('p', {}, h('code', {}, q.test), h('span', { class: 'hl-muted' }, ` — ${q.plain}`)));
+    /** @param {any} t */
+    const change = (t) => `${TEST_STATUS[t.base] ?? t.base} → ${TEST_STATUS[t.head] ?? t.head}`;
+    // A question may name a test file: then each matched test is named with its result.
+    const others = observed.tests.filter((/** @type {any} */ t) => t.name !== q.test);
+    const where = observed.tests.map((/** @type {any} */ t) => t.location).filter(Boolean);
     body.push(
-      observed.tests.length
-        ? h('ul', { class: 'hl-files' }, observed.tests.map((/** @type {any} */ t) => h('li', {}, h('code', {}, t.name), ` ${TEST_STATUS[t.base] ?? t.base} → ${TEST_STATUS[t.head] ?? t.head}`, t.location ? h('span', { class: 'hl-muted' }, ` (${t.location})`) : null)))
-        : h('p', { class: 'hl-muted' }, '이 테스트는 base와 head에서 결과가 같습니다.'),
+      testLockTest(q, [where.length ? ` · ${where.join(', ')}` : null, others.map((/** @type {any} */ t) => [h('br'), h('code', {}, t.name), ` ${change(t)}`])]),
+      h('p', {}, observed.tests.length ? `결과: ${observed.tests.map(change).join(', ')}` : '이 테스트는 base와 head에서 결과가 같습니다.'),
     );
   }
-  for (const id of observed.probes) body.push(observedProbe(f.task, id));
+  if (observed.probes.length) body.push(h('p', { class: 'hl-muted hl-small' }, `근거 탐침 ${probeTitles(f.task, observed.probes)} · 출력은 위 탐침 결과에 있습니다.`));
   if (q.kind === 'fork') {
     body.push(h('p', { class: 'hl-muted hl-small' }, `코드: ${q.codePaths.join(', ')} · 열린 이유: ${q.whyOpen}`));
   }
-  const disabled = new Set();
-  if (observed.correct === false) disabled.add('as-expected');
-  if (observed.correct === true) disabled.add('my-misunderstanding');
+  // A right prediction cannot be a misunderstanding, nor a wrong one as expected.
+  const disabled = new Set(observed.correct === false ? ['as-expected'] : observed.correct === true ? ['my-misunderstanding'] : []);
+  const off = (VERDICT_OPTIONS[q.kind] ?? []).find(([v]) => disabled.has(v))?.[1];
   const verdict = f.verdicts.get(q.id) ?? null;
   const help = h('span', { class: 'hl-muted hl-small' }, verdict ? VERDICT_HELP[verdict] : '');
   const extra = h('div', { class: 'hl-stack-tight' });
@@ -1035,6 +1148,7 @@ function judgeCard(f, q) {
       options: VERDICT_OPTIONS[q.kind] ?? [],
       value: verdict,
       disabled,
+      titles: VERDICT_HELP,
       onchange: (v) => {
         f.verdicts.set(q.id, v);
         f.dirty = true;
@@ -1044,6 +1158,7 @@ function judgeCard(f, q) {
         refreshJudge();
       },
     }),
+    off ? h('span', { class: 'hl-muted hl-small' }, `「${off}」: 예측이 ${observed.correct ? '맞아' : '틀려'} 고를 수 없음`) : null,
     help,
     extra,
   );
@@ -1052,6 +1167,25 @@ function judgeCard(f, q) {
 
 /** @param {any} a an anchor of a decision record */
 const anchorText = (a) => (a.test ? `테스트 ${a.test} (${a.file})` : `${a.file}의 ${a.symbol}`);
+
+/**
+ * The tests that lock a proposed decision, in plain words. Where the code holds it and the
+ * scope stay behind 자세히: the person judges what the tests assert, not where they live.
+ * @param {{ scope: string[], anchors: any[], replaces?: string }} p a decision proposal or discussion candidate
+ */
+const anchorBlock = (p) =>
+  h(
+    'div',
+    { class: 'hl-stack-tight' },
+    h('span', { class: 'hl-muted hl-small' }, '이 결정을 잠그는 테스트'),
+    h('ul', { class: 'hl-files hl-small' }, p.anchors.filter((a) => a.test).map((a) => h('li', {}, a.plain ?? a.test))),
+    h(
+      'details',
+      { class: 'hl-small' },
+      h('summary', {}, '자세히'),
+      h('span', { class: 'hl-muted' }, `범위 ${p.scope.join(', ')} · 앵커 ${p.anchors.map(anchorText).join(', ')}${p.replaces ? ` · ${p.replaces} 대체` : ''}`),
+    ),
+  );
 
 /** Where an answered fork question is kept. @param {JudgeForm} f @param {any} q */
 function keepBlock(f, q) {
@@ -1083,16 +1217,13 @@ function keepBlock(f, q) {
         },
       }),
       note,
-      q.decision
-        ? h(
-            'span',
-            { class: 'hl-muted hl-small' },
-            `범위 ${q.decision.scope.join(', ')} · 앵커 ${q.decision.anchors.map(anchorText).join(', ')}${q.decision.replaces ? ` · ${q.decision.replaces} 대체` : ''}`,
-          )
-        : null,
+      q.decision ? anchorBlock(q.decision) : null,
     ),
   );
 }
+
+/** The answers to a discussion candidate: confirmed (yes) or not recorded (no). @type {[string, string][]} */
+const DISCUSSION_OPTIONS = [['yes', '확정된 결정이 맞다'], ['no', '기록하지 않음']];
 
 /** A decision the agent found settled in a PR or issue discussion. @param {JudgeForm} f @param {any} d */
 function discussionCard(f, d) {
@@ -1103,10 +1234,10 @@ function discussionCard(f, d) {
     h('p', { class: 'hl-question' }, d.choice),
     h('blockquote', {}, d.quote),
     h('p', { class: 'hl-muted hl-small' }, h('a', { href: d.url, target: '_blank', rel: 'noopener noreferrer' }, d.url), d.fetched?.author ? ` · 작성자 ${d.fetched.author}` : ''),
-    h('span', { class: 'hl-muted hl-small' }, `범위 ${d.scope.join(', ')} · 앵커 ${d.anchors.map(anchorText).join(', ')}${d.replaces ? ` · ${d.replaces} 대체` : ''}`),
+    anchorBlock(d),
     choiceControl({
       label: `${d.id} 확인`,
-      options: [['yes', '확정된 결정이 맞다'], ['no', '기록하지 않음']],
+      options: DISCUSSION_OPTIONS,
       value: f.discussions.has(d.id) ? (f.discussions.get(d.id) ? 'yes' : 'no') : null,
       onchange: (v) => {
         f.discussions.set(d.id, v === 'yes');
@@ -1202,7 +1333,7 @@ function judgePanel(f) {
               'div',
               { class: 'hl-stack-tight' },
               textInput({ value: f.diffs[i], multiline: true, label: `동작 차이 ${i + 1}`, oninput: (v) => { f.diffs[i] = v; f.dirty = true; refreshJudge(); } }),
-              h('span', { class: 'hl-muted hl-small' }, `근거 탐침 ${d.probes.join(', ')}${d.codePaths.length ? ` · ${d.codePaths.join(', ')}` : ''}`),
+              h('span', { class: 'hl-muted hl-small' }, `근거 탐침 ${probeTitles(f.task, d.probes)}${d.codePaths.length ? ` · ${d.codePaths.join(', ')}` : ''}`),
             ),
           )
         : h('p', { class: 'hl-muted' }, '동작 차이 설명이 없습니다.'),
@@ -1214,17 +1345,18 @@ function judgePanel(f) {
       ? h(
           'details',
           {},
-          h('summary', {}, `테스트: base ${j.tests.base.counts.pass}/${j.tests.base.counts.fail} → head ${j.tests.head.counts.pass}/${j.tests.head.counts.fail} (통과/실패), 결과가 바뀐 테스트 ${j.tests.changed.length}개`),
+          h('summary', {}, `테스트: ${countText(j.tests.base.counts)} → ${countText(j.tests.head.counts)}, 결과가 바뀐 테스트 ${j.tests.changed.length}개`),
           j.tests.changed.length
-            ? h('ul', { class: 'hl-files' }, j.tests.changed.map((/** @type {any} */ t) => h('li', {}, h('code', {}, t.name), ` ${TEST_STATUS[t.base] ?? t.base} → ${TEST_STATUS[t.head] ?? t.head}`)))
+            ? h('ul', { class: 'hl-files' }, j.tests.changed.map((/** @type {any} */ t) => h('li', {}, t.plain ? h('span', { title: t.name }, t.plain) : h('code', {}, t.name), h('span', { class: 'hl-muted' }, ` · ${TEST_STATUS[t.base] ?? t.base} → ${TEST_STATUS[t.head] ?? t.head}`))))
             : h('p', { class: 'hl-muted' }, j.tests.comparison === 'tests' ? '없음' : '테스트별 결과를 읽지 못해 종료 코드만 비교했습니다.'),
         )
       : null,
+    probeResults(j),
     recheckNotice(j),
     judgeDeck(f),
     f.lifecycle,
     f.status,
-    h('div', { class: 'hl-row' }, submit),
+    h('div', { class: 'hl-row' }, submit, f.why),
   );
 }
 
@@ -1234,7 +1366,7 @@ function judgePanel(f) {
  */
 function judgeDeck(f) {
   const j = f.task.judge;
-  const deck = cardDeck('질문 판정', [
+  const deck = cardDeck('질문 판정', '되돌림은 동작이 틀려 에이전트가 고치게 하고, 분리는 맞는 동작을 이번 PR에서 빼 따로 옮기게 합니다.', [
     ...j.questions.map((/** @type {any} */ q) => ({ id: q.id, label: q.id, card: judgeCard(f, q), done: () => Boolean(q.carried) || f.verdicts.has(q.id) })),
     ...(j.discussions ?? []).map((/** @type {any} */ d) => ({ id: d.id, label: d.id, card: discussionCard(f, d), done: () => f.discussions.has(d.id) })),
   ]);
@@ -1279,7 +1411,7 @@ function refreshJudge() {
     target.toggleAttribute('data-disabled', target.disabled);
     if (judge.task.judge.revealed) target.textContent = [...judge.verdicts.values()].some((v) => RETURNING.has(v)) ? '판정 저장 (작업 되돌림)' : '판정 저장';
   }
-  if (!judge.busy) replace(judge.status, why.length ? h('span', { class: 'hl-small hl-blocked' }, `저장 전에 필요: ${why.join(' · ')}`) : null);
+  judge.why.textContent = why.length ? `저장 전에 필요: ${why.join(' · ')}` : '';
   discardButton.disabled = judge.busy;
   refreshTabLabels();
 }
@@ -1291,6 +1423,7 @@ function refreshJudge() {
  */
 async function judgeStep(f, title, work) {
   f.busy = true;
+  replace(f.status);
   refreshJudge();
   try {
     await work();
@@ -1308,7 +1441,7 @@ async function judgeStep(f, title, work) {
 async function savePredictions() {
   if (!judge || judgeBlockers(judge).length) return;
   const f = judge;
-  if (!window.confirm('예측을 저장하고 결과를 볼까요? 저장한 예측은 바꿀 수 없습니다.')) return;
+  if (!(await confirmDialog('예측을 저장하고 결과를 볼까요? 저장한 예측은 바꿀 수 없습니다.', '결과 보기'))) return;
   await judgeStep(f, '예측을 저장하지 못함', () => post(`/api/tasks/${encodeURIComponent(f.task.taskId)}/predict`, { draftSha256: f.task.draftSha256, answers: Object.fromEntries(f.predictions) }));
 }
 
@@ -1316,7 +1449,7 @@ async function saveJudgment() {
   if (!judge || judgeBlockers(judge).length) return;
   const f = judge;
   const returning = [...f.verdicts.values()].some((v) => RETURNING.has(v));
-  if (returning && !window.confirm('되돌림이나 분리가 있어 작업이 에이전트에게 되돌아갑니다. PR은 열리지 않습니다. 저장할까요?')) return;
+  if (returning && !(await confirmDialog('되돌림이나 분리가 있어 작업이 에이전트에게 되돌아갑니다. PR은 열리지 않습니다. 저장할까요?', '저장'))) return;
   const items = f.task.judge.questions.filter((/** @type {any} */ q) => !q.carried).map((/** @type {any} */ q) => {
     const verdict = /** @type {string} */ (f.verdicts.get(q.id));
     return {
@@ -1338,15 +1471,29 @@ async function saveJudgment() {
 /** @type {Record<string, string>} */
 const VERDICT_LABEL = { 'as-expected': '예상대로', 'my-misunderstanding': '잘못 알았음', answered: '답함', revert: '되돌림', split: '분리' };
 
+/**
+ * Records are written and removed only when the judgment accepts the work (lib/decisions.mjs).
+ * @param {any} a the judgment
+ * @param {string} id the record an accepting judgment writes
+ */
+const recordText = (a, id) => (a.outcome === 'accepted' ? `결정 기록 ${id}로 남김` : '되돌려서 결정 기록을 남기지 않음');
+
 /** The signed judgment, after it was saved. @param {any} task */
 function judgmentSummaryCard(task) {
   const a = task.latestApproval;
   if (!a || a.kind !== 'judgment') return null;
+  // The approval keeps only the id of each discussion; its text is in the draft it judged.
+  const candidates = task.draftSha256 === a.target.draftSha256 ? (task.draft?.discussions ?? []) : [];
   return h(
     'section',
     { class: 'hl-card hl-stack' },
-    h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, '판정 내용'), h('div', { class: 'hl-row' }, a.outcome === 'accepted' ? badge('positive', '모두 수용') : badge('critical', '되돌림'), h('code', { class: 'hl-muted' }, a.id))),
-    h('p', { class: 'hl-muted hl-small' }, `head ${a.target.headSha ? a.target.headSha.slice(0, 12) : '알 수 없음'} · 탐침 묶음 ${short(a.target.probeSetHash)} · ${when(a.judgedAt)}`),
+    h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, '판정 내용'), a.outcome === 'accepted' ? badge('positive', '모두 수용', BADGE_LARGE) : badge('critical', '되돌림', BADGE_LARGE)),
+    h(
+      'details',
+      { class: 'hl-small' },
+      h('summary', {}, `${when(a.judgedAt)}에 판정 · 자세히`),
+      h('span', { class: 'hl-muted' }, `판정 ${a.id} · head ${a.target.headSha ? a.target.headSha.slice(0, 12) : '알 수 없음'} · 탐침 묶음 ${short(a.target.probeSetHash)}`),
+    ),
     h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, '동작 차이'), h('ul', { class: 'hl-files' }, a.behaviorDiffs.final.map((/** @type {string} */ t) => h('li', {}, t)))),
     h(
       'ul',
@@ -1357,10 +1504,19 @@ function judgmentSummaryCard(task) {
           {},
           badge(RETURNING.has(i.verdict) ? 'critical' : 'positive', VERDICT_LABEL[i.verdict] ?? i.verdict),
           ` ${i.id} ${i.prompt}`,
-          i.answer !== null ? h('span', { class: 'hl-muted' }, ` · 답: ${i.answer}${i.correct === false ? ' (틀림)' : i.correct === true ? ' (맞음)' : ''}`) : null,
+          i.answer !== null ? h('span', { class: 'hl-muted' }, ` · 답: ${i.kind === 'test-lock' ? testLockLabel(i.answer) : i.answer}${i.correct === false ? ' (틀림)' : i.correct === true ? ' (맞음)' : ''}`) : null,
           i.reason ? h('span', { class: 'hl-muted' }, ` · 이유: ${i.reason}`) : null,
           i.spec ? h('span', { class: 'hl-muted' }, ` · spec: ${SPEC_CHOICE_OPTIONS.find(([v]) => v === i.spec.choice)?.[1] ?? i.spec.choice}`) : null,
-          i.keep ? h('span', { class: 'hl-muted' }, i.keep.action === 'record' ? ` · 결정 기록 ${i.keep.id}로 남김` : ` · 결정 기록 ${i.keep.id} 지움`) : null,
+          i.keep ? h('span', { class: 'hl-muted' }, ` · ${i.keep.action === 'record' ? recordText(a, i.keep.id) : a.outcome === 'accepted' ? `결정 기록 ${i.keep.id} 지움` : `되돌려서 지우지 않음 (결정 기록 ${i.keep.id})`}`) : null,
+        ),
+      ),
+      (a.discussions ?? []).map((/** @type {any} */ c) =>
+        h(
+          'li',
+          {},
+          badge(c.confirmed ? 'positive' : 'neutral', DISCUSSION_OPTIONS[c.confirmed ? 0 : 1][1]),
+          ` ${c.id} ${candidates.find((/** @type {any} */ d) => d.id === c.id)?.choice ?? ''}`,
+          c.recordId ? h('span', { class: 'hl-muted' }, ` · ${recordText(a, c.recordId)}`) : null,
         ),
       ),
     ),
@@ -1408,8 +1564,10 @@ function tabLabel(id) {
     return [h('span', {}, `예측 ${first.filter((/** @type {any} */ q) => judge?.predictions.has(q.id)).length}/${first.length}`)];
   }
   const asked = j.questions.filter((/** @type {any} */ q) => !q.carried);
-  const done = asked.filter((/** @type {any} */ q) => judge?.verdicts.has(q.id)).length;
-  return [h('span', {}, `판정 ${done}/${asked.length}`), done === asked.length ? badge('positive', '완료') : null];
+  const discussions = j.discussions ?? [];
+  const done = asked.filter((/** @type {any} */ q) => judge?.verdicts.has(q.id)).length + discussions.filter((/** @type {any} */ d) => judge?.discussions.has(d.id)).length;
+  const total = asked.length + discussions.length;
+  return [h('span', {}, `판정 ${done}/${total}`), done === total ? badge('positive', '완료') : null];
 }
 
 function positionIndicator() {
@@ -1468,7 +1626,7 @@ function refreshTabLabels() {
 /** @param {any} task */
 function drawStatic(task) {
   replace(titleSlot, titleBlock(task));
-  replace(panels.overview, boundaryCard(task), noticesBlock(task));
+  replace(panels.overview, changesCard(task), noticesBlock(task), boundaryCard(task), judge ? discardSection : null);
   refreshTabLabels();
 }
 
@@ -1498,7 +1656,7 @@ function drawForm(task) {
   replace(panels.judge);
   const card = judgmentSummaryCard(task);
   const pr = prLink(task);
-  replace(panels.approval, pr, card);
+  replace(panels.approval, APPLYING.has(task.state) ? callout('informative', '다음 단계: 반영 요청', APPLY_HINT) : null, pr, card);
   drawTabs(card || pr ? ['overview', 'approval'] : ['overview']);
 }
 
