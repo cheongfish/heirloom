@@ -796,6 +796,11 @@ const questionSources = (sources) =>
       )
     : null;
 
+/** The answers to a test-lock question. @type {[string, string][]} */
+const TEST_LOCK_OPTIONS = [['yes', '예'], ['no', '아니오']];
+/** @param {string} v */
+const testLockLabel = (v) => TEST_LOCK_OPTIONS.find(([k]) => k === v)?.[1] ?? v;
+
 /** @param {JudgeForm} f @param {any} q */
 function predictionCard(f, q) {
   /** @type {Child[]} */
@@ -810,7 +815,7 @@ function predictionCard(f, q) {
     f.dirty = true;
     refreshJudge();
   };
-  if (q.kind === 'test-lock') body.push(choiceControl({ label: `${q.id} 답`, options: [['yes', '예'], ['no', '아니오']], value: f.predictions.get(q.id) ?? null, onchange: set }));
+  if (q.kind === 'test-lock') body.push(choiceControl({ label: `${q.id} 답`, options: TEST_LOCK_OPTIONS, value: f.predictions.get(q.id) ?? null, onchange: set }));
   else if (q.answerType === 'choice') body.push(choiceControl({ label: `${q.id} 답`, options: q.choices.map((/** @type {string} */ c) => [c, c]), value: f.predictions.get(q.id) ?? null, vertical: true, onchange: set }));
   else body.push(fieldBlock('내 예측', textInput({ value: f.predictions.get(q.id) ?? '', label: `${q.id} 예측`, placeholder: q.answerType === 'number' ? '숫자' : '결과', oninput: set })));
   return h('section', { class: 'hl-card hl-stack', id: `question-${q.id}` }, body);
@@ -991,7 +996,7 @@ function judgeCard(f, q) {
   const history = h('div', {}, pastReturns(q, f.verdicts.get(q.id) ?? null, j.redesignAfter));
   body.push(history);
   if (prediction !== undefined) {
-    const shown = q.kind === 'test-lock' ? (prediction === 'yes' ? '예' : '아니오') : prediction;
+    const shown = q.kind === 'test-lock' ? testLockLabel(prediction) : prediction;
     body.push(
       h('div', { class: 'hl-row' }, h('span', {}, '내 예측: ', h('strong', {}, shown)), observed.correct === true ? badge('positive', '맞음') : observed.correct === false ? badge('critical', '틀림') : badge('neutral', '직접 비교')),
     );
@@ -1094,6 +1099,9 @@ function keepBlock(f, q) {
   );
 }
 
+/** The answers to a discussion candidate: confirmed (yes) or not recorded (no). @type {[string, string][]} */
+const DISCUSSION_OPTIONS = [['yes', '확정된 결정이 맞다'], ['no', '기록하지 않음']];
+
 /** A decision the agent found settled in a PR or issue discussion. @param {JudgeForm} f @param {any} d */
 function discussionCard(f, d) {
   return h(
@@ -1106,7 +1114,7 @@ function discussionCard(f, d) {
     h('span', { class: 'hl-muted hl-small' }, `범위 ${d.scope.join(', ')} · 앵커 ${d.anchors.map(anchorText).join(', ')}${d.replaces ? ` · ${d.replaces} 대체` : ''}`),
     choiceControl({
       label: `${d.id} 확인`,
-      options: [['yes', '확정된 결정이 맞다'], ['no', '기록하지 않음']],
+      options: DISCUSSION_OPTIONS,
       value: f.discussions.has(d.id) ? (f.discussions.get(d.id) ? 'yes' : 'no') : null,
       onchange: (v) => {
         f.discussions.set(d.id, v === 'yes');
@@ -1342,6 +1350,8 @@ const VERDICT_LABEL = { 'as-expected': '예상대로', 'my-misunderstanding': '�
 function judgmentSummaryCard(task) {
   const a = task.latestApproval;
   if (!a || a.kind !== 'judgment') return null;
+  // The approval keeps only the id of each discussion; its text is in the draft it judged.
+  const candidates = task.draftSha256 === a.target.draftSha256 ? (task.draft?.discussions ?? []) : [];
   return h(
     'section',
     { class: 'hl-card hl-stack' },
@@ -1357,10 +1367,19 @@ function judgmentSummaryCard(task) {
           {},
           badge(RETURNING.has(i.verdict) ? 'critical' : 'positive', VERDICT_LABEL[i.verdict] ?? i.verdict),
           ` ${i.id} ${i.prompt}`,
-          i.answer !== null ? h('span', { class: 'hl-muted' }, ` · 답: ${i.answer}${i.correct === false ? ' (틀림)' : i.correct === true ? ' (맞음)' : ''}`) : null,
+          i.answer !== null ? h('span', { class: 'hl-muted' }, ` · 답: ${i.kind === 'test-lock' ? testLockLabel(i.answer) : i.answer}${i.correct === false ? ' (틀림)' : i.correct === true ? ' (맞음)' : ''}`) : null,
           i.reason ? h('span', { class: 'hl-muted' }, ` · 이유: ${i.reason}`) : null,
           i.spec ? h('span', { class: 'hl-muted' }, ` · spec: ${SPEC_CHOICE_OPTIONS.find(([v]) => v === i.spec.choice)?.[1] ?? i.spec.choice}`) : null,
           i.keep ? h('span', { class: 'hl-muted' }, i.keep.action === 'record' ? ` · 결정 기록 ${i.keep.id}로 남김` : ` · 결정 기록 ${i.keep.id} 지움`) : null,
+        ),
+      ),
+      (a.discussions ?? []).map((/** @type {any} */ c) =>
+        h(
+          'li',
+          {},
+          badge(c.confirmed ? 'positive' : 'neutral', DISCUSSION_OPTIONS[c.confirmed ? 0 : 1][1]),
+          ` ${c.id} ${candidates.find((/** @type {any} */ d) => d.id === c.id)?.choice ?? ''}`,
+          c.recordId ? h('span', { class: 'hl-muted' }, ` · 결정 기록 ${c.recordId}로 남김`) : null,
         ),
       ),
     ),
@@ -1408,8 +1427,10 @@ function tabLabel(id) {
     return [h('span', {}, `예측 ${first.filter((/** @type {any} */ q) => judge?.predictions.has(q.id)).length}/${first.length}`)];
   }
   const asked = j.questions.filter((/** @type {any} */ q) => !q.carried);
-  const done = asked.filter((/** @type {any} */ q) => judge?.verdicts.has(q.id)).length;
-  return [h('span', {}, `판정 ${done}/${asked.length}`), done === asked.length ? badge('positive', '완료') : null];
+  const discussions = j.discussions ?? [];
+  const done = asked.filter((/** @type {any} */ q) => judge?.verdicts.has(q.id)).length + discussions.filter((/** @type {any} */ d) => judge?.discussions.has(d.id)).length;
+  const total = asked.length + discussions.length;
+  return [h('span', {}, `판정 ${done}/${total}`), done === total ? badge('positive', '완료') : null];
 }
 
 function positionIndicator() {
