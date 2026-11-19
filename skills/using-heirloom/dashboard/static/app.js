@@ -859,10 +859,12 @@ function cardDeck(title, items) {
     slides.forEach((slide, i) => slide.toggleAttribute('inert', i !== current));
     fit();
   };
+  // A jump lands at once: a smooth scroll would pass the cards on the way, the scroll handler
+  // below would take each for the card in view, and the target could be left inert.
   /** @param {number} i */
   const go = (i) => {
     current = Math.max(0, Math.min(items.length - 1, i));
-    track.scrollTo({ left: slides[current].offsetLeft - slides[0].offsetLeft, behavior: 'smooth' });
+    track.scrollTo({ left: slides[current].offsetLeft - slides[0].offsetLeft, behavior: 'instant' });
     refresh();
   };
   // A swipe or trackpad scroll moves the card in view too.
