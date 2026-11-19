@@ -148,3 +148,13 @@ a.seed-list-item__root:active { background-color: var(--seed-color-bg-brand-weak
 .hl-deck-track::-webkit-scrollbar { display: none; }
 .hl-deck-slide { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; }
 @media (prefers-reduced-motion: reduce) { .hl-deck-track { transition: none; scroll-behavior: auto; } }
+
+/* Confirmation dialog (confirmDialog in app.js), in place of window.confirm. */
+.hl-dialog {
+  width: min(calc(100% - 2 * var(--seed-dimension-x4)), 440px);
+  padding: var(--seed-dimension-x5);
+  border: 0; border-radius: var(--seed-radius-r4);
+  background: var(--seed-color-bg-layer-floating); color: var(--seed-color-fg-neutral);
+}
+.hl-dialog::backdrop { background: var(--seed-color-bg-overlay); }
+.hl-dialog-actions { justify-content: flex-end; }

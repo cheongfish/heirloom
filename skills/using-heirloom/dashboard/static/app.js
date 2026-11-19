@@ -29,6 +29,8 @@ const BUTTON = {
     'seed-action-button seed-action-button--variant_neutralSolid seed-action-button--size_medium seed-action-button--layout_withText seed-action-button--size_medium-layout_withText',
   outline:
     'seed-action-button seed-action-button--variant_neutralOutline seed-action-button--size_medium seed-action-button--layout_withText seed-action-button--size_medium-layout_withText',
+  critical:
+    'seed-action-button seed-action-button--variant_criticalSolid seed-action-button--size_medium seed-action-button--layout_withText seed-action-button--size_medium-layout_withText',
   smallWeak:
     'seed-action-button seed-action-button--variant_neutralWeak seed-action-button--size_small seed-action-button--layout_withText seed-action-button--size_small-layout_withText',
   smallOutline:
@@ -169,6 +171,35 @@ function callout(tone, title, description) {
  * @param {Record<string, unknown>} [props]
  */
 const button = (cls, label, onclick, props = {}) => h('button', { type: 'button', class: cls, onclick, ...props }, label);
+
+/**
+ * Ask before a step that cannot be undone, in the page instead of window.confirm. As there,
+ * focus starts on the confirming button; Escape or 취소 cancels, and focus goes back to where
+ * it was.
+ * @param {string} message
+ * @param {string} confirmLabel
+ * @param {{ danger?: boolean }} [options]
+ * @returns {Promise<boolean>}
+ */
+function confirmDialog(message, confirmLabel, { danger = false } = {}) {
+  const back = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const ok = h('button', { type: 'submit', value: 'ok', class: danger ? BUTTON.critical : BUTTON.primary }, confirmLabel);
+  const dialog = h(
+    'dialog',
+    { class: 'hl-dialog', 'aria-labelledby': 'hl-dialog-message' },
+    h('form', { method: 'dialog', class: 'hl-stack' }, h('p', { id: 'hl-dialog-message' }, message), h('div', { class: 'hl-row hl-dialog-actions' }, h('button', { type: 'submit', value: 'cancel', class: BUTTON.outline }, '취소'), ok)),
+  );
+  document.body.append(dialog);
+  return new Promise((resolve) => {
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      back?.focus();
+      resolve(dialog.returnValue === 'ok');
+    });
+    dialog.showModal();
+    ok.focus();
+  });
+}
 
 /** @param {string | null | undefined} hash */
 const short = (hash) => (hash ? hash.replace(/^sha256:/, '').slice(0, 12) : '없음');
@@ -602,7 +633,7 @@ const discardButton = button(BUTTON.smallOutline, '작업 폐기', () => void di
 async function discardTask() {
   if (!judge) return;
   const j = judge;
-  if (!window.confirm('이 인계를 폐기할까요? 폐기한 작업은 판정하거나 반영할 수 없습니다.')) return;
+  if (!(await confirmDialog('이 인계를 폐기할까요? 폐기한 작업은 판정하거나 반영할 수 없습니다.', '폐기', { danger: true }))) return;
   await judgeStep(j, '폐기 실패', () => post(`/api/tasks/${encodeURIComponent(j.task.taskId)}/discard`, { reason: 'user' }));
 }
 
@@ -635,7 +666,7 @@ function permitPanel(task) {
   };
   /** @param {'allowed' | 'denied'} decision */
   async function decide(decision) {
-    if (decision === 'allowed' && !window.confirm('이 명령들을 base와 head 임시 worktree에서 실행해도 될까요? 이 저장소에서 같은 명령은 다시 묻지 않습니다.')) return;
+    if (decision === 'allowed' && !(await confirmDialog('이 명령들을 base와 head 임시 worktree에서 실행해도 될까요? 이 저장소에서 같은 명령은 다시 묻지 않습니다.', '실행'))) return;
     allow.disabled = true;
     deny.disabled = true;
     try {
@@ -1398,7 +1429,7 @@ async function judgeStep(f, title, work) {
 async function savePredictions() {
   if (!judge || judgeBlockers(judge).length) return;
   const f = judge;
-  if (!window.confirm('예측을 저장하고 결과를 볼까요? 저장한 예측은 바꿀 수 없습니다.')) return;
+  if (!(await confirmDialog('예측을 저장하고 결과를 볼까요? 저장한 예측은 바꿀 수 없습니다.', '결과 보기'))) return;
   await judgeStep(f, '예측을 저장하지 못함', () => post(`/api/tasks/${encodeURIComponent(f.task.taskId)}/predict`, { draftSha256: f.task.draftSha256, answers: Object.fromEntries(f.predictions) }));
 }
 
@@ -1406,7 +1437,7 @@ async function saveJudgment() {
   if (!judge || judgeBlockers(judge).length) return;
   const f = judge;
   const returning = [...f.verdicts.values()].some((v) => RETURNING.has(v));
-  if (returning && !window.confirm('되돌림이나 분리가 있어 작업이 에이전트에게 되돌아갑니다. PR은 열리지 않습니다. 저장할까요?')) return;
+  if (returning && !(await confirmDialog('되돌림이나 분리가 있어 작업이 에이전트에게 되돌아갑니다. PR은 열리지 않습니다. 저장할까요?', '저장'))) return;
   const items = f.task.judge.questions.filter((/** @type {any} */ q) => !q.carried).map((/** @type {any} */ q) => {
     const verdict = /** @type {string} */ (f.verdicts.get(q.id));
     return {
