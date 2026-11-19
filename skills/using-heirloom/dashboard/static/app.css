@@ -128,9 +128,12 @@ a.seed-list-item__root:active { background-color: var(--seed-color-bg-brand-weak
 
 /* Prediction and judgment (schema 2 drafts) */
 .hl-question { font-weight: 600; }
-.hl-command { display: block; white-space: pre-wrap; word-break: break-all; padding: 6px 8px; border-radius: 6px; background: var(--seed-color-bg-neutral-weak); }
+.hl-command { display: block; white-space: pre-wrap; word-break: break-all; }
 .hl-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
-.hl-output { margin: 0; white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--seed-color-stroke-neutral-muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+.hl-command, .hl-output { padding: var(--seed-dimension-x1_5) var(--seed-dimension-x2); border-radius: var(--seed-radius-r1_5); background: var(--seed-color-bg-neutral-weak); }
+/* Probe output is a read-only value: code on a tinted ground, not a bordered field. */
+.hl-output { margin: 0; white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+.hl-probe + .hl-probe { padding-top: var(--seed-dimension-x3); border-top: 1px solid var(--seed-color-stroke-neutral-muted); }
 
 /* Question cards reviewed side by side (cardDeck in app.js): one card in view, the deck takes
    its height, and the rest wait to the right. */

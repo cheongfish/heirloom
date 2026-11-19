@@ -946,18 +946,32 @@ function outputBlock(run) {
   return h('div', { class: 'hl-stack-tight' }, h('pre', { class: 'hl-output' }, run.stdout || h('span', { class: 'hl-muted' }, '(출력 없음)')), tail ? h('span', { class: 'hl-muted hl-small' }, tail, run.stderr ? ` — ${run.stderr.slice(0, 300)}` : '') : null);
 }
 
-/** @param {any} task @param {string} id */
-function observedProbe(task, id) {
-  const p = task.judge.probes.find((/** @type {any} */ x) => x.id === id);
-  if (!p) return null;
+/**
+ * Every probe's command with its base and head output, once: the question cards and the
+ * behavior descriptions name the probes they rest on.
+ * @param {any} j
+ */
+function probeResults(j) {
+  if (!j.probes.length) return null;
   return h(
-    'div',
-    { class: 'hl-stack-tight' },
-    h('span', { class: 'hl-muted hl-small' }, `탐침 ${p.id}: ${p.title}`, p.same ? ' · base와 같음' : ''),
-    h('code', { class: 'hl-command' }, commandText(p.run)),
-    h('div', { class: 'hl-compare' }, h('div', {}, h('span', { class: 'hl-muted hl-small' }, '이전 (base)'), outputBlock(p.base)), h('div', {}, h('span', { class: 'hl-muted hl-small' }, '이후 (head)'), outputBlock(p.head))),
+    'section',
+    { class: 'hl-card hl-stack' },
+    h('h2', { class: 'hl-section-title' }, '탐침 결과'),
+    h('p', { class: 'hl-muted hl-small' }, '탐침은 바뀌기 전(base)과 바뀐 뒤(head)에서 똑같이 실행해 결과를 비교하는 명령입니다.'),
+    j.probes.map((/** @type {any} */ p) =>
+      h(
+        'div',
+        { class: 'hl-stack-tight hl-probe', id: `probe-${p.id}` },
+        h('div', { class: 'hl-row' }, h('strong', {}, p.title), p.same ? badge('neutral', 'base와 같음') : null),
+        h('code', { class: 'hl-command' }, commandText(p.run)),
+        h('div', { class: 'hl-compare' }, h('div', {}, h('span', { class: 'hl-muted hl-small' }, '이전 (base)'), outputBlock(p.base)), h('div', {}, h('span', { class: 'hl-muted hl-small' }, '이후 (head)'), outputBlock(p.head))),
+      ),
+    ),
   );
 }
+
+/** The probes a card or description rests on, by title. @param {any} task @param {string[]} ids */
+const probeTitles = (task, ids) => ids.map((id) => `「${commandOf(task, id)?.title ?? id}」`).join(', ');
 
 /** @type {Record<string, string>} */
 const TEST_STATUS = { pass: '통과', fail: '실패', skip: '건너뜀', absent: '없음' };
@@ -1011,7 +1025,7 @@ function judgeCard(f, q) {
         : h('p', { class: 'hl-muted' }, '이 테스트는 base와 head에서 결과가 같습니다.'),
     );
   }
-  for (const id of observed.probes) body.push(observedProbe(f.task, id));
+  if (observed.probes.length) body.push(h('p', { class: 'hl-muted hl-small' }, `근거 탐침 ${probeTitles(f.task, observed.probes)} · 출력은 위 탐침 결과에 있습니다.`));
   if (q.kind === 'fork') {
     body.push(h('p', { class: 'hl-muted hl-small' }, `코드: ${q.codePaths.join(', ')} · 열린 이유: ${q.whyOpen}`));
   }
@@ -1225,7 +1239,7 @@ function judgePanel(f) {
               'div',
               { class: 'hl-stack-tight' },
               textInput({ value: f.diffs[i], multiline: true, label: `동작 차이 ${i + 1}`, oninput: (v) => { f.diffs[i] = v; f.dirty = true; refreshJudge(); } }),
-              h('span', { class: 'hl-muted hl-small' }, `근거 탐침 ${d.probes.join(', ')}${d.codePaths.length ? ` · ${d.codePaths.join(', ')}` : ''}`),
+              h('span', { class: 'hl-muted hl-small' }, `근거 탐침 ${probeTitles(f.task, d.probes)}${d.codePaths.length ? ` · ${d.codePaths.join(', ')}` : ''}`),
             ),
           )
         : h('p', { class: 'hl-muted' }, '동작 차이 설명이 없습니다.'),
@@ -1243,6 +1257,7 @@ function judgePanel(f) {
             : h('p', { class: 'hl-muted' }, j.tests.comparison === 'tests' ? '없음' : '테스트별 결과를 읽지 못해 종료 코드만 비교했습니다.'),
         )
       : null,
+    probeResults(j),
     recheckNotice(j),
     judgeDeck(f),
     f.lifecycle,
