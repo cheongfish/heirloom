@@ -44,6 +44,7 @@ h1, h2, h3, p { margin: 0; }
 .hl-main .seed-callout__title, .hl-main .seed-callout__description, .hl-banner-slot .seed-page-banner__description { overflow-wrap: anywhere; }
 
 .hl-muted { color: var(--seed-color-fg-neutral-subtle); }
+.hl-state { font-size: var(--seed-font-size-t3); line-height: var(--seed-line-height-t3); font-weight: var(--seed-font-weight-bold); }
 .hl-small { font-size: var(--seed-font-size-t3); line-height: var(--seed-line-height-t3); }
 .hl-title { font-size: var(--seed-font-size-t9); line-height: var(--seed-line-height-t9); font-weight: var(--seed-font-weight-bold); }
 .hl-section-title { font-size: var(--seed-font-size-t7); line-height: var(--seed-line-height-t7); font-weight: var(--seed-font-weight-bold); }

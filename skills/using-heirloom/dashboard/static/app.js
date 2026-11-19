@@ -50,6 +50,15 @@ const BADGE = {
   critical: 'seed-badge__root seed-badge__root--size_medium seed-badge__root--variant_weak seed-badge__root--tone_critical-variant_weak',
 };
 
+/** State badges, read at a glance on the task list and the task title. @type {Record<Tone, string>} */
+const BADGE_LARGE = {
+  neutral: 'seed-badge__root seed-badge__root--size_large seed-badge__root--variant_weak seed-badge__root--tone_neutral-variant_weak hl-state',
+  informative: 'seed-badge__root seed-badge__root--size_large seed-badge__root--variant_weak seed-badge__root--tone_informative-variant_weak hl-state',
+  positive: 'seed-badge__root seed-badge__root--size_large seed-badge__root--variant_weak seed-badge__root--tone_positive-variant_weak hl-state',
+  warning: 'seed-badge__root seed-badge__root--size_large seed-badge__root--variant_weak seed-badge__root--tone_warning-variant_weak hl-state',
+  critical: 'seed-badge__root seed-badge__root--size_large seed-badge__root--variant_weak seed-badge__root--tone_critical-variant_weak hl-state',
+};
+
 /** @type {Record<Tone, { root: string, title: string, description: string }>} */
 const CALLOUT = {
   neutral: {
@@ -147,8 +156,8 @@ function replace(el, ...children) {
   append(el, children);
 }
 
-/** @param {Tone} tone @param {string} label */
-const badge = (tone, label) => h('span', { class: BADGE[tone] }, h('span', { class: 'seed-badge__label' }, label));
+/** @param {Tone} tone @param {string} label @param {Record<Tone, string>} [size] */
+const badge = (tone, label, size = BADGE) => h('span', { class: size[tone] }, h('span', { class: 'seed-badge__label' }, label));
 
 /**
  * @param {Tone} tone
@@ -298,7 +307,7 @@ const STATE = {
 /** @param {string | null} state */
 const stateBadge = (state) => {
   const [tone, label] = STATE[state ?? ''] ?? ['neutral', state ?? '알 수 없음'];
-  return badge(tone, label);
+  return badge(tone, label, BADGE_LARGE);
 };
 
 const FINISHED = new Set(['pr_created', 'discarded', 'expired']);
@@ -369,7 +378,7 @@ const taskRow = (t) =>
       h('span', { class: 'seed-list-item__title' }, t.summary ?? t.branch ?? '(브랜치 없음)'),
       h('span', { class: 'seed-list-item__detail' }, [t.summary ? t.branch : null, repoName(t.repoRoot), `갱신 ${when(t.updatedAt)}`].filter(Boolean).join(' · ')),
     ),
-    h('div', { class: 'seed-list-item__suffix' }, h('div', { class: 'hl-row' }, t.permitPending ? badge('warning', '허락 대기') : null, t.merged === true ? badge('positive', '머지됨') : stateBadge(t.state))),
+    h('div', { class: 'seed-list-item__suffix' }, h('div', { class: 'hl-row' }, t.permitPending ? badge('warning', '허락 대기', BADGE_LARGE) : null, t.merged === true ? badge('positive', '머지됨', BADGE_LARGE) : stateBadge(t.state))),
   );
 
 /** @param {any} t a listed task: finished, or applied without a PR and already merged */
@@ -1475,7 +1484,7 @@ function judgmentSummaryCard(task) {
   return h(
     'section',
     { class: 'hl-card hl-stack' },
-    h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, '판정 내용'), a.outcome === 'accepted' ? badge('positive', '모두 수용') : badge('critical', '되돌림')),
+    h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, '판정 내용'), a.outcome === 'accepted' ? badge('positive', '모두 수용', BADGE_LARGE) : badge('critical', '되돌림', BADGE_LARGE)),
     h(
       'details',
       { class: 'hl-small' },
