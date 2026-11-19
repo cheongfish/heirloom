@@ -62,6 +62,15 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   const after = await page.locator('main').innerText();
   assert.ok(after.includes(OBSERVED.head), 'the head output is revealed');
   assert.match(after, /틀림/);
+  // q1, q3 and q4 all rest on p1: its command and outputs are shown once, and the cards name it.
+  assert.equal(after.match(/qty: 12, unit: 10/g)?.length, 1, 'the probe command is shown once');
+  const probe = await page.locator('#probe-p1').innerText();
+  assert.match(probe, new RegExp(`이전 \\(base\\)\\s*${OBSERVED.base}[\\s\\S]*이후 \\(head\\)\\s*${OBSERVED.head}`));
+  for (const id of ['q1', 'q3', 'q4']) {
+    const card = await page.locator(`#question-${id}`).innerText();
+    assert.match(card, /12개 구매 결제액/, `${id} names the probe it rests on`);
+    assert.doesNotMatch(card, /qty: 12/, `${id} does not repeat the command`);
+  }
   const q1 = page.getByRole('radiogroup', { name: 'q1 판정' });
   await on(page, 'q1');
   assert.equal(await q1.getByRole('radio', { name: '예상대로' }).isDisabled(), true, 'a wrong prediction cannot be judged as expected');
