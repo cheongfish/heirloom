@@ -919,9 +919,12 @@ function cardDeck(title, note, items) {
   const prev = /** @type {HTMLButtonElement} */ (button(BUTTON.smallOutline, '← 이전', () => go(current - 1)));
   const next = /** @type {HTMLButtonElement} */ (button(BUTTON.smallOutline, '다음 →', () => go(current + 1)));
   const chips = items.map((it, i) => /** @type {HTMLButtonElement} */ (button(BUTTON.smallGhost, it.label, () => go(i), { 'aria-label': `${it.label}로 이동` })));
+  // The track is as tall as the card in view. A taller card next to it lets the track scroll
+  // down (focus or scrollIntoView while the height changes), which would cut off this card's top.
   const fit = () => {
     const slide = slides[current];
     if (slide) track.style.height = `${slide.offsetHeight}px`;
+    track.scrollTop = 0;
   };
   const refresh = () => {
     chips.forEach((chip, i) => {

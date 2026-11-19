@@ -61,6 +61,8 @@ h1, h2, h3, p { margin: 0; }
   display: flex; flex-direction: column; gap: var(--seed-dimension-x4);
 }
 .hl-list-card { padding: var(--seed-dimension-x2) 0; gap: 0; }
+/* Slots a card fills later (verdict help, reason fields, past returns) take no gap while empty. */
+.hl-card > :empty { display: none; }
 
 .hl-meta { display: grid; grid-template-columns: max-content 1fr; gap: var(--seed-dimension-x1_5) var(--seed-dimension-x4); }
 .hl-meta dt { color: var(--seed-color-fg-neutral-subtle); }
