@@ -505,6 +505,16 @@ function attentionCount(task) {
   return (task?.input && reviewMatch(task.input) === false ? 1 : 0) + (task?.check?.warnings?.length ? 1 : 0) + (task?.repeatedReturns?.length ? 1 : 0);
 }
 
+/**
+ * What prepare could not find (input.unknowns), in the person's words. A missing ticket, a
+ * manual handoff without a spec and a detached HEAD are left out: nothing to act on, and the
+ * branch line already shows the HEAD.
+ * @type {Record<string, string | null>}
+ */
+const UNKNOWN = { sdlcTaskRef: null, spec: null, branch: null, review: '최종 리뷰 자료 없음', reviewedSourceHash: '최종 리뷰가 본 커밋을 알 수 없음' };
+/** @param {string} u */
+const unknownText = (u) => (u.startsWith('material:') ? `찾지 못한 자료 ${u.slice('material:'.length)}` : u in UNKNOWN ? UNKNOWN[u] : u);
+
 /** @param {any} task */
 function noticesBlock(task) {
   const draft = task.draft;
@@ -519,7 +529,8 @@ function noticesBlock(task) {
     items.push(callout('warning', '검사 경고', h('span', {}, lines.map((/** @type {string} */ l, /** @type {number} */ i) => [i ? h('br') : null, l]))));
   }
   if (task.repeatedReturns?.length) items.push(redesignCallout(task.repeatedReturns));
-  if (input?.unknowns?.length) items.push(callout('neutral', '확인하지 못한 값', input.unknowns.join(', ')));
+  const missing = (input?.unknowns ?? []).map(unknownText).filter(Boolean);
+  if (missing.length) items.push(callout('neutral', '인계에 빠진 자료', missing.join(', ')));
   if (draft?.notes) items.push(callout('informative', '에이전트 메모', draft.notes));
   return items.length ? h('section', { class: 'hl-stack' }, items) : null;
 }

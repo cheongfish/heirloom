@@ -345,5 +345,10 @@ test('browser: the work summary titles the task, and tests read in plain words w
   const fork = page.locator('#question-q4');
   assert.equal(await fork.getByText(plain).isVisible(), true);
   assert.equal(await fork.getByText('test/small.test.mjs').isVisible(), false);
+
+  await page.getByRole('tab', { name: /개요/ }).click();
+  const overview = await page.locator('#panel-overview').innerText();
+  assert.match(overview, /인계에 빠진 자료\s*최종 리뷰 자료 없음/, 'what is missing reads in plain words');
+  assert.doesNotMatch(overview, /sdlcTaskRef/, 'with no internal field names');
   assert.deepEqual(errors, []);
 });
