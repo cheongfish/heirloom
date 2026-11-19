@@ -108,6 +108,7 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   const done = await page.locator('main').innerText();
   assert.match(done, /모두 수용/);
   assert.match(done, /머지할 때 spec: 유지 \(소유자: 결제팀\)/);
+  assert.doesNotMatch(done, /탐침 묶음|ap-[0-9a-z]+/, 'internal ids stay behind 자세히');
   assert.equal(deriveState(await readEvents(taskPaths(home, taskId).events)), 'approved');
   assert.deepEqual(errors, []);
 });
@@ -380,6 +381,7 @@ test('browser: the work summary titles the task, and tests read in plain words w
   await page.getByText('동작 차이').first().waitFor();
 
   const tests = page.locator('details', { hasText: '결과가 바뀐 테스트' });
+  assert.match(await tests.locator('summary').innerText(), /^테스트: 통과 2 → 통과 1·실패 1, 결과가 바뀐 테스트 1개$/);
   await tests.locator('summary').click();
   const changed = await tests.locator('ul').innerText();
   assert.match(changed, new RegExp(`${note} · 통과 → 실패`));

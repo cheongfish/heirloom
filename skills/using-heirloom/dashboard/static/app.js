@@ -654,15 +654,16 @@ function permitPanel(task) {
 
 /**
  * A radio group styled as a SEED segmented control, with any options. Starts empty.
- * `vertical` lists the options one per line, for options that are sentences.
- * @param {{ label: string, options: [string, string][], value: string | null, disabled?: Set<string>, vertical?: boolean, onchange: (value: string) => void }} o
+ * `vertical` lists the options one per line, for options that are sentences; `titles` are
+ * tooltips that say what an option means.
+ * @param {{ label: string, options: [string, string][], value: string | null, disabled?: Set<string>, vertical?: boolean, titles?: Record<string, string>, onchange: (value: string) => void }} o
  */
-function choiceControl({ label, options, value, disabled = new Set(), vertical = false, onchange }) {
+function choiceControl({ label, options, value, disabled = new Set(), vertical = false, titles = {}, onchange }) {
   const root = h('div', { class: `seed-segmented-control__root hl-decision hl-choice${vertical ? ' hl-choice--vertical' : ''}`, role: 'radiogroup', 'aria-label': label });
   root.style.setProperty('--segment-count', String(options.length));
   if (!vertical) root.append(h('div', { class: 'seed-segmented-control__indicator', 'aria-hidden': 'true' }));
   /** @type {HTMLButtonElement[]} */
-  const items = options.map(([v, text]) => h('button', { type: 'button', role: 'radio', class: 'seed-segmented-control__item', 'data-value': v, disabled: disabled.has(v) }, text));
+  const items = options.map(([v, text]) => h('button', { type: 'button', role: 'radio', class: 'seed-segmented-control__item', 'data-value': v, disabled: disabled.has(v), title: titles[v] }, text));
   root.append(...items);
   /** @param {string | null} v */
   const set = (v) => {
@@ -828,10 +829,11 @@ function predictionCard(f, q) {
  * previous and next buttons, the chips, or a horizontal swipe. The strip of chips shows which
  * cards are done, and the deck takes the height of the card in view.
  * @param {string} title
+ * @param {string} note one line under the title: the words the cards use
  * @param {{ id: string, label: string, card: HTMLElement, done: () => boolean }[]} items
  * @returns {{ root: HTMLElement, refresh: () => void }}
  */
-function cardDeck(title, items) {
+function cardDeck(title, note, items) {
   const slides = items.map((it, i) => h('div', { class: 'hl-deck-slide', role: 'group', 'aria-roledescription': '카드', 'aria-label': `${it.label} (${i + 1}/${items.length})` }, it.card));
   const track = h('div', { class: 'hl-deck-track' }, slides);
   let current = 0;
@@ -891,6 +893,7 @@ function cardDeck(title, items) {
     'section',
     { class: 'hl-deck hl-stack', 'aria-label': title },
     h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, title), h('div', { class: 'hl-row' }, position, prev, next)),
+    h('p', { class: 'hl-muted hl-small' }, note),
     h('div', { class: 'hl-row hl-deck-chips' }, chips),
     track,
   );
@@ -936,6 +939,7 @@ function predictPanel(f) {
 function predictDeck(f, questions) {
   const deck = cardDeck(
     '결과 예측',
+    '탐침은 바뀌기 전(base)과 바뀐 뒤(head)에서 똑같이 실행해 결과를 비교하는 명령입니다. 결과를 보기 전에 무엇이 나올지 답하세요.',
     questions.map((q) => ({ id: q.id, label: q.id, card: predictionCard(f, q), done: () => f.predictions.has(q.id) })),
   );
   f.deck = deck;
@@ -977,6 +981,8 @@ const probeTitles = (task, ids) => ids.map((id) => `「${commandOf(task, id)?.ti
 
 /** @type {Record<string, string>} */
 const TEST_STATUS = { pass: '통과', fail: '실패', skip: '건너뜀', absent: '없음' };
+/** Test counts on one side, e.g. "통과 1·실패 1". @param {{ pass: number, fail: number, skip: number }} c */
+const countText = (c) => [c.pass && `통과 ${c.pass}`, c.fail && `실패 ${c.fail}`, c.skip && `건너뜀 ${c.skip}`].filter(Boolean).join('·') || '결과 없음';
 
 /**
  * What a recheck says before the questions: which judgment it builds on, and changes no
@@ -1058,6 +1064,7 @@ function judgeCard(f, q) {
       options: VERDICT_OPTIONS[q.kind] ?? [],
       value: verdict,
       disabled,
+      titles: VERDICT_HELP,
       onchange: (v) => {
         f.verdicts.set(q.id, v);
         f.dirty = true;
@@ -1253,7 +1260,7 @@ function judgePanel(f) {
       ? h(
           'details',
           {},
-          h('summary', {}, `테스트: base ${j.tests.base.counts.pass}/${j.tests.base.counts.fail} → head ${j.tests.head.counts.pass}/${j.tests.head.counts.fail} (통과/실패), 결과가 바뀐 테스트 ${j.tests.changed.length}개`),
+          h('summary', {}, `테스트: ${countText(j.tests.base.counts)} → ${countText(j.tests.head.counts)}, 결과가 바뀐 테스트 ${j.tests.changed.length}개`),
           j.tests.changed.length
             ? h('ul', { class: 'hl-files' }, j.tests.changed.map((/** @type {any} */ t) => h('li', {}, t.plain ? h('span', { title: t.name }, t.plain) : h('code', {}, t.name), h('span', { class: 'hl-muted' }, ` · ${TEST_STATUS[t.base] ?? t.base} → ${TEST_STATUS[t.head] ?? t.head}`))))
             : h('p', { class: 'hl-muted' }, j.tests.comparison === 'tests' ? '없음' : '테스트별 결과를 읽지 못해 종료 코드만 비교했습니다.'),
@@ -1274,7 +1281,7 @@ function judgePanel(f) {
  */
 function judgeDeck(f) {
   const j = f.task.judge;
-  const deck = cardDeck('질문 판정', [
+  const deck = cardDeck('질문 판정', '되돌림은 동작이 틀려 에이전트가 고치게 하고, 분리는 맞는 동작을 이번 PR에서 빼 따로 옮기게 합니다.', [
     ...j.questions.map((/** @type {any} */ q) => ({ id: q.id, label: q.id, card: judgeCard(f, q), done: () => Boolean(q.carried) || f.verdicts.has(q.id) })),
     ...(j.discussions ?? []).map((/** @type {any} */ d) => ({ id: d.id, label: d.id, card: discussionCard(f, d), done: () => f.discussions.has(d.id) })),
   ]);
@@ -1394,8 +1401,13 @@ function judgmentSummaryCard(task) {
   return h(
     'section',
     { class: 'hl-card hl-stack' },
-    h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, '판정 내용'), h('div', { class: 'hl-row' }, a.outcome === 'accepted' ? badge('positive', '모두 수용') : badge('critical', '되돌림'), h('code', { class: 'hl-muted' }, a.id))),
-    h('p', { class: 'hl-muted hl-small' }, `head ${a.target.headSha ? a.target.headSha.slice(0, 12) : '알 수 없음'} · 탐침 묶음 ${short(a.target.probeSetHash)} · ${when(a.judgedAt)}`),
+    h('div', { class: 'hl-spread' }, h('h2', { class: 'hl-section-title' }, '판정 내용'), a.outcome === 'accepted' ? badge('positive', '모두 수용') : badge('critical', '되돌림')),
+    h(
+      'details',
+      { class: 'hl-small' },
+      h('summary', {}, `${when(a.judgedAt)}에 판정 · 자세히`),
+      h('span', { class: 'hl-muted' }, `판정 ${a.id} · head ${a.target.headSha ? a.target.headSha.slice(0, 12) : '알 수 없음'} · 탐침 묶음 ${short(a.target.probeSetHash)}`),
+    ),
     h('div', { class: 'hl-stack-tight' }, h('span', { class: 'hl-muted hl-small' }, '동작 차이'), h('ul', { class: 'hl-files' }, a.behaviorDiffs.final.map((/** @type {string} */ t) => h('li', {}, t)))),
     h(
       'ul',
