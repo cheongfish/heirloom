@@ -275,3 +275,70 @@ test('browser: sending the same question back a second time recommends agreeing 
   assert.equal(deriveState(await readEvents(taskPaths(home, taskId).events)), 'returned');
   assert.deepEqual(errors, []);
 });
+
+test('browser: the work summary titles the task, and tests read in plain words with their code location behind 자세히', { skip, timeout: 120_000 }, async (t) => {
+  const pw = await import(pathToFileURL(path.join(/** @type {string} */ (PLAYWRIGHT_CORE), 'index.mjs')).href);
+  const { chromium } = pw.default ?? pw;
+  const fakes = await tempDir('fakes');
+  const state = path.join(fakes, 'gh.json');
+  await writeFile(state, JSON.stringify({ api: { 'repos/acme/widgets/issues/comments/5': { body: '작은 주문은 할인하지 않는다.', user: { login: 'kim' } } } }));
+  process.env.PATH = [path.join(ROOT, 'tests', 'helpers', 'fake-gh'), process.env.PATH].join(path.delimiter);
+  process.env.FAKE_GH_STATE = state;
+  const summary = '대량 할인 경계를 10개에서 100개로 올림';
+  const plain = '5개 구매는 정가로 결제된다';
+  const note = '12개 구매에 대량 할인이 붙는지 본다';
+  const anchors = [{ file: 'src/cart.mjs', symbol: 'total' }, { file: 'test/small.test.mjs', test: 'small orders pay full price', plain }];
+  const { home, taskId } = await judgedTask({
+    remote: 'https://github.com/acme/widgets.git',
+    baseFiles: { 'test/small.test.mjs': "import { test } from 'node:test';\ntest('small orders pay full price', () => {});\n" },
+    editDraft: (d) => {
+      d.summary = summary;
+      d.testNotes = [{ test: 'bulk discount for 12', plain: note }];
+      d.questions[3].decision = { scope: ['src/cart.mjs'], anchors };
+      d.discussions = [{ id: 'x1', url: 'https://github.com/acme/widgets/pull/3#issuecomment-5', quote: '작은 주문은 할인하지 않는다.', choice: '작은 주문은 할인하지 않는다', scope: ['src/cart.mjs'], anchors }];
+    },
+  });
+  const server = await createDashboardServer({ home, port: 0, version: '0.0.0-test', codeHash: 'test', keystore: 'file' });
+  t.after(() => server.close());
+  const browser = await chromium.launch({ executablePath: CHROMIUM, headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  /** @type {string[]} */
+  const errors = [];
+  page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
+  page.on('dialog', (/** @type {any} */ d) => d.accept());
+
+  await page.goto(`http://127.0.0.1:${server.port}/`);
+  await page.getByRole('link', { name: new RegExp(summary) }).waitFor();
+
+  await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
+  await page.getByRole('heading', { level: 1, name: summary }).waitFor();
+  assert.equal(await page.title(), `${summary} · Heirloom`);
+  await on(page, 'q1');
+  await page.getByLabel('q1 예측').fill(OBSERVED.base);
+  await on(page, 'q2');
+  await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
+  await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
+  await page.getByText('동작 차이').first().waitFor();
+
+  const tests = page.locator('details', { hasText: '결과가 바뀐 테스트' });
+  await tests.locator('summary').click();
+  const changed = await tests.locator('ul').innerText();
+  assert.match(changed, new RegExp(`${note} · 통과 → 실패`));
+  assert.doesNotMatch(changed, /bulk discount for 12/, 'the test name gives way to its note');
+
+  await on(page, 'x1');
+  const card = page.locator('#discussion-x1');
+  assert.equal(await card.getByText(plain).isVisible(), true, 'the test reads in plain words');
+  const where = card.getByText('test/small.test.mjs');
+  assert.equal(await where.isVisible(), false, 'the test file stays out of sight');
+  await card.getByText('자세히').click();
+  assert.equal(await where.isVisible(), true, 'and shows on 자세히');
+
+  await on(page, 'q4');
+  await page.getByRole('radiogroup', { name: 'q4 판정' }).getByRole('radio', { name: '답함' }).click();
+  const fork = page.locator('#question-q4');
+  assert.equal(await fork.getByText(plain).isVisible(), true);
+  assert.equal(await fork.getByText('test/small.test.mjs').isVisible(), false);
+  assert.deepEqual(errors, []);
+});
