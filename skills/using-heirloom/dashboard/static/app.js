@@ -448,13 +448,7 @@ function titleBlock(task) {
     'section',
     { class: 'hl-stack-tight' },
     h('div', { class: 'hl-spread' }, h('h1', { class: 'hl-title' }, taskTitle(task)), h('div', { class: 'hl-row' }, stateBadge(task.state), h('code', { class: 'hl-muted' }, task.taskId))),
-    h(
-      'div',
-      { class: 'hl-spread' },
-      input ? h('p', {}, h('code', {}, input.branch ?? '(분리된 HEAD)'), ' → ', h('code', {}, input.base.ref)) : h('span'),
-      // Discard is rare and cannot be undone: it sits by the title, away from the judgment.
-      judge?.task.taskId === task.taskId ? discardButton : null,
-    ),
+    input ? h('p', {}, h('code', {}, input.branch ?? '(분리된 HEAD)'), ' → ', h('code', {}, input.base.ref)) : null,
   );
 }
 
@@ -628,7 +622,9 @@ function pastReturns(q, verdict, limit) {
   return callout('warning', '설계부터 다시 합의하세요', h('span', {}, `${lead} 다시 고치게 하기 전에 원하는 동작부터 정하세요.`, returnLines(past)));
 }
 
-const discardButton = button(BUTTON.smallOutline, '작업 폐기', () => void discardTask());
+const discardButton = button(BUTTON.critical, '작업 폐기', () => void discardTask());
+/** Discard is rare and cannot be undone: it closes the overview tab, away from the judgment. */
+const discardSection = h('section', { class: 'hl-stack-tight' }, h('div', { class: 'hl-row' }, discardButton), h('p', { class: 'hl-muted hl-small' }, '이 인계를 끝냅니다. 폐기한 작업은 판정하거나 반영할 수 없습니다.'));
 
 async function discardTask() {
   if (!judge) return;
@@ -1614,7 +1610,7 @@ function refreshTabLabels() {
 /** @param {any} task */
 function drawStatic(task) {
   replace(titleSlot, titleBlock(task));
-  replace(panels.overview, changesCard(task), noticesBlock(task), boundaryCard(task));
+  replace(panels.overview, changesCard(task), noticesBlock(task), boundaryCard(task), judge ? discardSection : null);
   refreshTabLabels();
 }
 
