@@ -21,13 +21,13 @@ The dashboard is a local web page where a human predicts, then judges, what a ha
 | 진행 중 (in progress) | Tasks whose draft is still being prepared, and tasks sent back (되돌림) |
 | 최근 끝난 작업 (recently finished) | The last ten finished tasks |
 
-Sections after 승인 대기 are shown only when they have rows; the empty ones are named on one line at the end ("비어 있는 목록: …"). Clicking a task row opens its task screen; the row turns orange on hover or keyboard focus.
+Sections after 승인 대기 are shown only when they have rows; the empty ones are named on one line at the end ("비어 있는 목록: …"). A task row is titled with the draft's one-line work summary (`summary`), or the branch name when the draft has none. Clicking a task row opens its task screen; the row turns orange on hover or keyboard focus.
 
 When the overview is shown, tasks whose PR or MR was created are checked with `gh` or `glab` in the background, so the list never waits for the network. A PR or MR closed without merge marks its task as expired (만료됨), and open screens update. A merged one is not checked again; others are checked again after five minutes. Without `gh` or `glab` nothing changes.
 
 ## Task screen
 
-The task screen shows the title, the state badge, the task ID and `branch → base`, and two tabs.
+The task screen shows the title (the draft's work summary, or the branch name without one), the state badge, the task ID and `branch → base`, and two tabs.
 
 | Tab | Content |
 | --- | --- |
@@ -59,12 +59,12 @@ The questions are shown with the full probe commands, so you can see what will r
 
 - **동작 차이** (behavior differences): the agent's descriptions, each with the probes it rests on. You can reword them; numbers and quoted values cannot be changed.
 - **실행 증거 없음** (no run evidence): claims no probe confirmed.
-- **테스트**: pass/fail counts on base and head and the tests whose result changed.
+- **테스트**: pass/fail counts on base and head and the tests whose result changed, each by what it asserts in plain words when the draft's `testNotes` says, otherwise by name.
 - **Each question**: your prediction with 맞음 / 틀림 / 직접 비교 (right / wrong / compare yourself), the base and head output of its probes, then the verdict control. A wrong prediction cannot be judged 예상대로 (as expected).
   - 되돌림 or 분리 asks for a reason (필수, required); when the question cites the spec it also asks for **spec 처리**: spec이 틀렸다, 미룬다, spec은 스냅샷.
   - A question sent back in an earlier round shows those reasons. Sending the same question back a second time turns the note into **설계부터 다시 합의하세요** (agree on the design first): another round of fixes is unlikely to converge. It is only a recommendation; saving works as usual.
-  - 답함 on a `fork` question asks for the answer; with a decision proposal it also asks **답을 남길 곳**: 이 PR에서만 (default) or 저장소에 계속 유지, with the proposed scope and anchors. A question that asks about an existing record also offers to delete it.
-- **토론에서 정한 결정** (decision from a discussion): one card per candidate the agent found, with the quote, a link to the comment and its author; choose 확정된 결정이 맞다 (it is settled) or 기록하지 않음 (do not record).
+  - 답함 on a `fork` question asks for the answer; with a decision proposal it also asks **답을 남길 곳**: 이 PR에서만 (default) or 저장소에 계속 유지, with the tests that lock the decision in plain words. The scope and anchors (files, test names, symbols) are under **자세히** (details). A question that asks about an existing record also offers to delete it.
+- **토론에서 정한 결정** (decision from a discussion): one card per candidate the agent found, with the quote, a link to the comment and its author, and the tests that lock it in plain words (scope and anchors under **자세히**); choose 확정된 결정이 맞다 (it is settled) or 기록하지 않음 (do not record).
 - **머지할 때 spec 처리** (spec at merge): shown when no question is sent back and the handoff has a spec. 삭제 / 보관 / 유지, preselected from `spec.afterMerge`; 유지 needs an owner.
 - **판정 저장** (save judgment) is enabled when every open question, spec choice and discussion is decided; until then the line above it says what is missing. With a revert or split the button reads "판정 저장 (작업 되돌림)" and asks for a confirmation.
 
