@@ -1378,6 +1378,13 @@ async function saveJudgment() {
 /** @type {Record<string, string>} */
 const VERDICT_LABEL = { 'as-expected': '예상대로', 'my-misunderstanding': '잘못 알았음', answered: '답함', revert: '되돌림', split: '분리' };
 
+/**
+ * Records are written and removed only when the judgment accepts the work (lib/decisions.mjs).
+ * @param {any} a the judgment
+ * @param {string} id the record an accepting judgment writes
+ */
+const recordText = (a, id) => (a.outcome === 'accepted' ? `결정 기록 ${id}로 남김` : '되돌려서 결정 기록을 남기지 않음');
+
 /** The signed judgment, after it was saved. @param {any} task */
 function judgmentSummaryCard(task) {
   const a = task.latestApproval;
@@ -1402,7 +1409,7 @@ function judgmentSummaryCard(task) {
           i.answer !== null ? h('span', { class: 'hl-muted' }, ` · 답: ${i.kind === 'test-lock' ? testLockLabel(i.answer) : i.answer}${i.correct === false ? ' (틀림)' : i.correct === true ? ' (맞음)' : ''}`) : null,
           i.reason ? h('span', { class: 'hl-muted' }, ` · 이유: ${i.reason}`) : null,
           i.spec ? h('span', { class: 'hl-muted' }, ` · spec: ${SPEC_CHOICE_OPTIONS.find(([v]) => v === i.spec.choice)?.[1] ?? i.spec.choice}`) : null,
-          i.keep ? h('span', { class: 'hl-muted' }, i.keep.action === 'record' ? ` · 결정 기록 ${i.keep.id}로 남김` : ` · 결정 기록 ${i.keep.id} 지움`) : null,
+          i.keep ? h('span', { class: 'hl-muted' }, ` · ${i.keep.action === 'record' ? recordText(a, i.keep.id) : a.outcome === 'accepted' ? `결정 기록 ${i.keep.id} 지움` : `되돌려서 지우지 않음 (결정 기록 ${i.keep.id})`}`) : null,
         ),
       ),
       (a.discussions ?? []).map((/** @type {any} */ c) =>
@@ -1411,7 +1418,7 @@ function judgmentSummaryCard(task) {
           {},
           badge(c.confirmed ? 'positive' : 'neutral', DISCUSSION_OPTIONS[c.confirmed ? 0 : 1][1]),
           ` ${c.id} ${candidates.find((/** @type {any} */ d) => d.id === c.id)?.choice ?? ''}`,
-          c.recordId ? h('span', { class: 'hl-muted' }, ` · 결정 기록 ${c.recordId}로 남김`) : null,
+          c.recordId ? h('span', { class: 'hl-muted' }, ` · ${recordText(a, c.recordId)}`) : null,
         ),
       ),
     ),
