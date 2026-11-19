@@ -273,6 +273,8 @@ const stateBadge = (state) => {
 const FINISHED = new Set(['pr_created', 'discarded', 'expired']);
 /** Approved, waiting for the agent to write the records and open the PR. */
 const APPLYING = new Set(['approved', 'applied']);
+/** What the person does next for an approved task. */
+const APPLY_HINT = '에이전트에게 "승인한 작업 반영해 줘"라고 요청하세요. 에이전트가 apply-approval로 결정 기록을 쓰고 PR을 엽니다.';
 
 /** @param {string} taskId @param {string | null} repoId @param {string | null} worktreeId */
 const taskHref = (taskId, repoId, worktreeId) => `/r/${repoId ?? '-'}/w/${worktreeId ?? '-'}/t/${taskId}`;
@@ -384,7 +386,7 @@ async function renderOverview() {
     h('h1', { class: 'hl-title' }, '전체 목록'),
     permits.length ? listSection('탐침 실행 허락 대기', permits.map(taskRow), '') : null,
     listSection('승인 대기', waiting.map(taskRow), '승인을 기다리는 인계가 없습니다.'),
-    optional('반영 대기', applying.map(taskRow)),
+    optional('반영 대기', applying.map(taskRow), applying.length ? h('p', { class: 'hl-empty hl-small' }, `다음 단계: ${APPLY_HINT}`) : null),
     optional('인계되지 않은 변경', unhandedRows, uncheckedNote),
     optional(`오래된 미처리 건 (${data.staleDays}일 이상)`, stale.map(taskRow)),
     optional('진행 중', open.map(taskRow)),
@@ -1611,7 +1613,7 @@ function drawForm(task) {
   replace(panels.judge);
   const card = judgmentSummaryCard(task);
   const pr = prLink(task);
-  replace(panels.approval, pr, card);
+  replace(panels.approval, APPLYING.has(task.state) ? callout('informative', '다음 단계: 반영 요청', APPLY_HINT) : null, pr, card);
   drawTabs(card || pr ? ['overview', 'approval'] : ['overview']);
 }
 

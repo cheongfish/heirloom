@@ -115,6 +115,10 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   assert.match(done, /머지할 때 spec: 유지 \(소유자: 결제팀\)/);
   assert.doesNotMatch(done, /탐침 묶음|ap-[0-9a-z]+/, 'internal ids stay behind 자세히');
   assert.equal(deriveState(await readEvents(taskPaths(home, taskId).events)), 'approved');
+  assert.match(done, /다음 단계: 반영 요청\s*에이전트에게 "승인한 작업 반영해 줘"라고 요청하세요/, 'the next step is to ask the agent to apply it');
+  await page.goto(`http://127.0.0.1:${server.port}/`);
+  await page.getByText('반영 대기', { exact: true }).waitFor();
+  assert.match(await page.locator('main').innerText(), /반영 대기[\s\S]*다음 단계: 에이전트에게 "승인한 작업 반영해 줘"라고 요청하세요/);
   assert.deepEqual(errors, []);
 });
 
