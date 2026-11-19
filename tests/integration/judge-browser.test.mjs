@@ -52,13 +52,18 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   assert.match(before, /qty: 12, unit: 10/, 'the probe command is shown');
   const reveal = page.getByRole('button', { name: '예측 저장하고 결과 보기' });
   assert.equal(await reveal.isDisabled(), true, 'disabled until every prediction is in');
+  await page.getByRole('tab', { name: /개요/ }).click();
+  const overview = await page.locator('#panel-overview').innerText();
+  assert.match(overview, /^동작 차이\s*예측을 저장하면/, 'the overview opens on what changed, held back until the predictions');
+  assert.ok(!overview.includes(OBSERVED.head));
+  await page.getByRole('tab', { name: /예측/ }).click();
 
   await on(page, 'q1');
   await page.getByLabel('q1 예측').fill(OBSERVED.base);
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await reveal.click();
-  await page.getByText('동작 차이').first().waitFor();
+  await page.getByRole('heading', { name: '질문 판정' }).waitFor();
   const after = await page.locator('main').innerText();
   assert.ok(after.includes(OBSERVED.head), 'the head output is revealed');
   assert.match(after, /틀림/);
@@ -148,7 +153,7 @@ test('browser: a choice prediction lists its four choices one per line and is sc
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
-  await page.getByText('동작 차이').first().waitFor();
+  await page.getByRole('heading', { name: '질문 판정' }).waitFor();
   await on(page, 'q1');
   assert.match(await page.locator('#question-q1').innerText(), /맞음/);
   assert.deepEqual(errors, []);
@@ -187,7 +192,7 @@ test('browser: keep a fork answer in the repository and confirm a discussion', {
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
-  await page.getByText('동작 차이').first().waitFor();
+  await page.getByRole('heading', { name: '질문 판정' }).waitFor();
   await on(page, 'q1');
   await page.getByRole('radiogroup', { name: 'q1 판정' }).getByRole('radio', { name: '잘못 알았음' }).click();
   await on(page, 'q2');
@@ -308,7 +313,7 @@ test('browser: sending the same question back a second time recommends agreeing 
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
-  await page.getByText('동작 차이').first().waitFor();
+  await page.getByRole('heading', { name: '질문 판정' }).waitFor();
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 판정' }).getByRole('radio', { name: '예상대로' }).click();
   await on(page, 'q3');
@@ -381,7 +386,7 @@ test('browser: the work summary titles the task, and tests read in plain words w
   assert.equal(await lock.getByText('bulk discount for 12').isVisible(), false, 'its test name stays behind 자세히');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
-  await page.getByText('동작 차이').first().waitFor();
+  await page.getByRole('heading', { name: '질문 판정' }).waitFor();
   await on(page, 'q2');
   assert.match(await lock.innerText(), /결과: 통과 → 실패/);
   assert.equal(await lock.getByText('bulk discount for 12').isVisible(), false);
@@ -409,6 +414,8 @@ test('browser: the work summary titles the task, and tests read in plain words w
 
   await page.getByRole('tab', { name: /개요/ }).click();
   const overview = await page.locator('#panel-overview').innerText();
+  assert.match(overview, /^동작 차이\s*12개 구매 결제액이 108에서 120이 된다/, 'the overview opens on what changed');
+  assert.ok(!overview.includes(repo.dir), 'where the handoff came from stays behind 자세히');
   assert.match(overview, /인계에 빠진 자료\s*최종 리뷰 자료 없음/, 'what is missing reads in plain words');
   assert.doesNotMatch(overview, /sdlcTaskRef/, 'with no internal field names');
   assert.deepEqual(errors, []);

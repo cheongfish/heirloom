@@ -463,7 +463,29 @@ function changedFiles(files) {
   );
 }
 
-/** @param {any} task */
+/**
+ * What the work changed, first on the overview: the behavior differences as judged, or as the
+ * agent wrote them. They hold observed values, so they wait for the predictions.
+ * @param {any} task
+ */
+function changesCard(task) {
+  const a = task.latestApproval;
+  const hidden = task.judge && !task.judge.revealed;
+  const diffs = a?.kind === 'judgment' && a.target.draftSha256 === task.draftSha256 ? a.behaviorDiffs.final : task.draft?.behaviorDiffs?.map((/** @type {any} */ d) => d.text);
+  if (!hidden && !diffs) return null;
+  return h(
+    'section',
+    { class: 'hl-card' },
+    h('h2', { class: 'hl-section-title' }, '동작 차이'),
+    hidden
+      ? h('p', { class: 'hl-muted' }, '예측을 저장하면 에이전트가 설명한 동작 차이가 보입니다.')
+      : diffs.length
+        ? h('ul', { class: 'hl-files hl-stack-tight' }, diffs.map((/** @type {string} */ t) => h('li', {}, t)))
+        : h('p', { class: 'hl-muted' }, '동작 차이 설명이 없습니다.'),
+  );
+}
+
+/** Changed files, and where the handoff came from behind 자세히. @param {any} task */
 function boundaryCard(task) {
   const input = task.input;
   if (!input) return callout('critical', '입력 없음', '이 작업의 input.json을 찾지 못했습니다.');
@@ -471,28 +493,31 @@ function boundaryCard(task) {
     'section',
     { class: 'hl-card' },
     h('h2', { class: 'hl-section-title' }, '작업 경계'),
-    h(
-      'dl',
-      { class: 'hl-meta' },
-      h('dt', {}, '저장소'),
-      h('dd', {}, h('code', {}, input.repo.root)),
-      h('dt', {}, '브랜치'),
-      h('dd', {}, h('code', {}, input.branch ?? '(분리된 HEAD)'), ' → ', h('code', {}, input.base.ref)),
-      h('dt', {}, '검토 대상 상태'),
-      h('dd', {}, '소스 ', h('code', {}, short(input.source.hash)), ' · merge-base ', h('code', {}, input.base.mergeBase.slice(0, 12))),
-      h('dt', {}, '인계 방식'),
-      h('dd', {}, input.trigger === 'manual' ? '수동 요청' : '자동(spec 기반)', input.sdlcTaskRef ? ` · ${input.sdlcTaskRef}` : ''),
-      h('dt', {}, '준비 시각'),
-      h('dd', {}, when(input.createdAt)),
-    ),
     changedFiles(input.source.files),
     h(
       'details',
       {},
-      h('summary', {}, `자료 ${input.materials.length}개`),
-      input.materials.length
-        ? h('ul', { class: 'hl-files' }, input.materials.map((/** @type {any} */ m) => h('li', {}, h('span', { class: 'hl-muted' }, `${m.role} `), h('code', {}, m.ref), h('span', { class: 'hl-muted' }, ` ${short(m.sha256)}`))))
-        : h('p', { class: 'hl-muted' }, '연결된 자료가 없습니다.'),
+      h('summary', {}, '자세히'),
+      h(
+        'dl',
+        { class: 'hl-meta' },
+        h('dt', {}, '저장소'),
+        h('dd', {}, h('code', {}, input.repo.root)),
+        h('dt', {}, '검토 대상 상태'),
+        h('dd', {}, '소스 ', h('code', {}, short(input.source.hash)), ' · merge-base ', h('code', {}, input.base.mergeBase.slice(0, 12))),
+        h('dt', {}, '인계 방식'),
+        h('dd', {}, input.trigger === 'manual' ? '수동 요청' : '자동(spec 기반)', input.sdlcTaskRef ? ` · ${input.sdlcTaskRef}` : ''),
+        h('dt', {}, '준비 시각'),
+        h('dd', {}, when(input.createdAt)),
+        h('dt', {}, '자료'),
+        h(
+          'dd',
+          {},
+          input.materials.length
+            ? h('ul', { class: 'hl-files' }, input.materials.map((/** @type {any} */ m) => h('li', {}, h('span', { class: 'hl-muted' }, `${m.role} `), h('code', {}, m.ref), h('span', { class: 'hl-muted' }, ` ${short(m.sha256)}`))))
+            : '없음',
+        ),
+      ),
     ),
   );
 }
@@ -1556,7 +1581,7 @@ function refreshTabLabels() {
 /** @param {any} task */
 function drawStatic(task) {
   replace(titleSlot, titleBlock(task));
-  replace(panels.overview, boundaryCard(task), noticesBlock(task));
+  replace(panels.overview, changesCard(task), noticesBlock(task), boundaryCard(task));
   refreshTabLabels();
 }
 
