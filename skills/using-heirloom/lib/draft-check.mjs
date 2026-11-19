@@ -281,6 +281,12 @@ async function checkDraftV2({ root, input, draft, repoFiles, conversation, probe
     }
   }
 
+  if (usable) {
+    (Array.isArray(enriched.testNotes) ? enriched.testNotes : []).forEach((/** @type {any} */ n, /** @type {number} */ i) => {
+      if (isObject(n) && typeof n.test === 'string' && !changedTestNames.has(n.test)) errors.push(`$.testNotes[${i}].test: 탐침 실행에서 결과가 바뀐 테스트가 아님 (${n.test})`);
+    });
+  }
+
   const discussions = Array.isArray(enriched.discussions) ? enriched.discussions : [];
   for (let i = 0; i < discussions.length; i += 1) {
     const d = discussions[i];
