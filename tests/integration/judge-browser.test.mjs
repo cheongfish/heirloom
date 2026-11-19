@@ -376,9 +376,15 @@ test('browser: the work summary titles the task, and tests read in plain words w
   await on(page, 'q1');
   await page.getByLabel('q1 예측').fill(OBSERVED.base);
   await on(page, 'q2');
+  const lock = page.locator('#question-q2');
+  assert.equal(await lock.getByText(note).isVisible(), true, 'a test-lock question reads in plain words');
+  assert.equal(await lock.getByText('bulk discount for 12').isVisible(), false, 'its test name stays behind 자세히');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
   await page.getByText('동작 차이').first().waitFor();
+  await on(page, 'q2');
+  assert.match(await lock.innerText(), /결과: 통과 → 실패/);
+  assert.equal(await lock.getByText('bulk discount for 12').isVisible(), false);
 
   const tests = page.locator('details', { hasText: '결과가 바뀐 테스트' });
   assert.match(await tests.locator('summary').innerText(), /^테스트: 통과 2 → 통과 1·실패 1, 결과가 바뀐 테스트 1개$/);

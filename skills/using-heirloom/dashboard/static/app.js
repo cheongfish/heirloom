@@ -799,6 +799,19 @@ const questionSources = (sources) =>
       )
     : null;
 
+/**
+ * A test-lock question's test in plain words; its name, and what each run gave, behind 자세히.
+ * @param {any} q
+ * @param {Child} [more]
+ */
+const testLockTest = (q, more = null) =>
+  h(
+    'div',
+    { class: 'hl-stack-tight' },
+    h('p', {}, q.plain),
+    h('details', { class: 'hl-small' }, h('summary', {}, '자세히'), h('span', { class: 'hl-muted' }, '테스트 ', h('code', {}, q.test), more)),
+  );
+
 /** The answers to a test-lock question. @type {[string, string][]} */
 const TEST_LOCK_OPTIONS = [['yes', '예'], ['no', '아니오']];
 /** @param {string} v */
@@ -809,7 +822,7 @@ function predictionCard(f, q) {
   /** @type {Child[]} */
   const body = [questionHead(q), h('p', { class: 'hl-question' }, q.prompt)];
   if (q.kind === 'predict') body.push(probeCommand(f.task, q.probe));
-  if (q.kind === 'test-lock') body.push(h('p', {}, h('code', {}, q.test), h('span', { class: 'hl-muted' }, ` — ${q.plain}`)));
+  if (q.kind === 'test-lock') body.push(testLockTest(q));
   body.push(questionSources(q.sources));
   /** @param {string} v */
   const set = (v) => {
@@ -1026,11 +1039,14 @@ function judgeCard(f, q) {
     );
   }
   if (q.kind === 'test-lock') {
-    body.push(h('p', {}, h('code', {}, q.test), h('span', { class: 'hl-muted' }, ` — ${q.plain}`)));
+    /** @param {any} t */
+    const change = (t) => `${TEST_STATUS[t.base] ?? t.base} → ${TEST_STATUS[t.head] ?? t.head}`;
+    // A question may name a test file: then each matched test is named with its result.
+    const others = observed.tests.filter((/** @type {any} */ t) => t.name !== q.test);
+    const where = observed.tests.map((/** @type {any} */ t) => t.location).filter(Boolean);
     body.push(
-      observed.tests.length
-        ? h('ul', { class: 'hl-files' }, observed.tests.map((/** @type {any} */ t) => h('li', {}, h('code', {}, t.name), ` ${TEST_STATUS[t.base] ?? t.base} → ${TEST_STATUS[t.head] ?? t.head}`, t.location ? h('span', { class: 'hl-muted' }, ` (${t.location})`) : null)))
-        : h('p', { class: 'hl-muted' }, '이 테스트는 base와 head에서 결과가 같습니다.'),
+      testLockTest(q, [where.length ? ` · ${where.join(', ')}` : null, others.map((/** @type {any} */ t) => [h('br'), h('code', {}, t.name), ` ${change(t)}`])]),
+      h('p', {}, observed.tests.length ? `결과: ${observed.tests.map(change).join(', ')}` : '이 테스트는 base와 head에서 결과가 같습니다.'),
     );
   }
   if (observed.probes.length) body.push(h('p', { class: 'hl-muted hl-small' }, `근거 탐침 ${probeTitles(f.task, observed.probes)} · 출력은 위 탐침 결과에 있습니다.`));
