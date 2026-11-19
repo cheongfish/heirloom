@@ -80,6 +80,7 @@ Write JSON to `draftPath`:
   "taskId": "<taskId>",
   "inputSourceHash": "<source.hash>",
   "probeSetHash": "<probeSetHash of the last probe run>",
+  "summary": "대량 할인 경계를 10개에서 100개로 올림",
   "behaviorDiffs": [
     { "text": "12개 구매 결제액이 108에서 120이 된다", "probes": ["p1"], "codePaths": ["src/cart.mjs"] }
   ],
@@ -90,11 +91,15 @@ Write JSON to `draftPath`:
     { "id": "q4", "kind": "fork", "probes": ["p1"], "codePaths": ["src/cart.mjs"], "prompt": "12개 구매에 할인을 적용해야 하나요?", "whyOpen": "할인 경계를 정한 이유가 코드, 테스트, 커밋에 없다" }
   ],
   "inferences": [{ "text": "<a behavior claim no probe shows>", "reason": "<why it could not be run>" }],
+  "testNotes": [{ "test": "bulk discount for 12", "plain": "12개 구매에 대량 할인이 붙는지 본다" }],
   "notes": ""
 }
 ```
 
 Write the texts in the project's language.
+
+- `summary`: always. One line saying what this work did, in plain words. It titles the task in the dashboard, shown before the person predicts, so it names no probe output.
+- `testNotes`: for each test in `tests.changed` a reviewer must understand, what it asserts in plain words. `test` is its name as `tests.changed` gives it. The dashboard shows `plain` in place of the name.
 
 ### Behavior differences
 
@@ -108,11 +113,12 @@ Ask 3 to 5 questions about what the person most likely does not know yet. The pe
 
 | Kind | Asks | Needs |
 | --- | --- | --- |
-| `predict` | the head result of a probe input. `answerType` `number`, `text`, or `choice` with `choices` | `probe` |
+| `predict` | the head result of a probe input. `answerType` `number` for a numeric result, otherwise `choice` with exactly 4 `choices` | `probe` |
 | `test-lock` | whether a test, read in plain words, guards this change's behavior | `test`: a name from `tests.changed`, or `<file>:<line>` in a test file this change touched; `plain`: what the test asserts |
 | `intent` | whether the spec or the user's words match the actual behavior | `probe`, `sources` with exact quotes |
 | `fork` | a choice the code and tests leave open | `probes`, `codePaths`, `whyOpen`: why the choice is open (no reason in code, tests or commits) |
 
+- A `choice` prediction is scored only when exactly one choice appears in the probe's head output, and submit refuses it otherwise. The other three must not be substrings of that output: a distractor cut from the start of the right answer (`"new"` for `"new v2"`) also appears in it.
 - Prefer probes whose outputs differ and behaviors a reviewer could get wrong. Do not ask what the prompt already gives away.
 - Any question may cite `sources`. Documents: `{"ref": "<path>", "lines": [from, to], "quote": "<exact text from those lines>"}`. Conversation: `{"ref": "@conversation", "quote": "<exact text from one message>"}`, without `lines`. Read `conversation.path`; cite only text the user typed, never agent or tool output. A bare agreement to your proposal is not a stated choice.
 - Ask a `fork` question only for a choice the change makes without a stated reason. A document or typed user message that states both the choice and the reason settles it: cite it in an `intent` question instead.
@@ -127,7 +133,7 @@ A `fork` answer stays in the PR body unless the person keeps it in the repositor
   "scope": ["src/cart/**"],
   "anchors": [
     { "file": "src/cart.mjs", "symbol": "total" },
-    { "file": "test/cart.test.mjs", "test": "small orders pay full price" }
+    { "file": "test/cart.test.mjs", "test": "small orders pay full price", "plain": "5개 구매는 정가로 결제된다" }
   ],
   "replaces": "d-…"
 }
@@ -135,6 +141,7 @@ A `fork` answer stays in the PR body unless the person keeps it in the repositor
 
 - Propose one only for a choice later work on that code must keep. Most answers belong in the PR alone; a record every few PRs at most is normal.
 - `anchors` say where the code holds the choice now: a `symbol` in a file, and at least one `test` that locks it, named as the probe run's test results name it and passing on head. If no test locks the choice yet, write that test first, run the probes again, then draft.
+- Every `test` anchor carries `plain`: what the test asserts, in plain words. The person reads it instead of the file and test name; the record keeps only `file` and `test`.
 - `scope`: code globs whose changes must respect the decision. Never Markdown.
 - `replaces`: an existing decision record (`d-…`, schema 2) this choice replaces; it is removed in the same PR.
 - To ask whether a `possibly-stale` record (see `recall-context`) still holds, set `"retires": "d-…"` on the `fork` question. The person may retire it; it is then removed in this PR.
@@ -150,7 +157,7 @@ A decision settled in a PR review or issue discussion, with no trace in code, te
     "quote": "<exact sentence from that comment>",
     "choice": "<the decision in one line>",
     "scope": ["src/cart/**"],
-    "anchors": [{ "file": "test/cart.test.mjs", "test": "small orders pay full price" }]
+    "anchors": [{ "file": "test/cart.test.mjs", "test": "small orders pay full price", "plain": "5개 구매는 정가로 결제된다" }]
   }
 ]
 ```

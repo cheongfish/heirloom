@@ -142,6 +142,17 @@ export function quotedIn(/** @type {string} */ text) {
 }
 
 /**
+ * The choices of a choice prediction that appear in a probe's head output. A prediction is
+ * scored by machine only when exactly one appears.
+ * @param {string[]} choices
+ * @param {any} probe a probe of `probes/result.json`
+ */
+export function shownChoices(choices, probe) {
+  const flat = normalize(`${probe.head.stdout}\n${probe.head.stderr}`);
+  return choices.filter((c) => flat.includes(normalize(c)));
+}
+
+/**
  * What a probe shows: its command, title and the outputs on both sides.
  * @param {any} probe a probe of `probes/result.json`
  */
@@ -232,6 +243,13 @@ async function checkDraftV2({ root, input, draft, repoFiles, conversation, probe
       if (p && q.answerType === 'number' && numbersIn(`${p.head.stdout}\n${p.head.stderr}`).size === 0) {
         warnings.push(`${at}: 숫자로 답하는 질문인데 탐침 ${p.id}의 head 출력에 숫자가 없음`);
       }
+      if (p && q.answerType === 'choice' && Array.isArray(q.choices) && q.choices.length === 4) {
+        const shown = shownChoices(q.choices, p);
+        if (shown.length !== 1) {
+          const which = shown.length ? ` (${shown.join(', ')})` : '';
+          errors.push(`${at}.choices: 탐침 ${p.id}의 head 출력에 보이는 보기가 ${shown.length}개${which}. 정답 보기 하나만 출력에 있어야 채점됨`);
+        }
+      }
     } else if (q.kind === 'intent') {
       probe(q.probe, `${at}.probe`);
     } else if (q.kind === 'fork') {
@@ -261,6 +279,12 @@ async function checkDraftV2({ root, input, draft, repoFiles, conversation, probe
         if (Number(m[2]) < 1 || Number(m[2]) > lines) errors.push(`${at}.test: ${file}에 ${m[2]}행이 없음`);
       }
     }
+  }
+
+  if (usable) {
+    (Array.isArray(enriched.testNotes) ? enriched.testNotes : []).forEach((/** @type {any} */ n, /** @type {number} */ i) => {
+      if (isObject(n) && typeof n.test === 'string' && !changedTestNames.has(n.test)) errors.push(`$.testNotes[${i}].test: 탐침 실행에서 결과가 바뀐 테스트가 아님 (${n.test})`);
+    });
   }
 
   const discussions = Array.isArray(enriched.discussions) ? enriched.discussions : [];

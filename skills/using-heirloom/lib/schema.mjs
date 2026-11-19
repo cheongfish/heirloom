@@ -226,37 +226,49 @@ export const recordMetaSchema = object(
 /** A decision record id (`d-…`). Axioms belong to the records before 0.4. */
 const decisionId = str({ pattern: /^d-[0-9a-hjkmnp-tv-z]{8}$/ });
 
+/** @param {Record<string, unknown>} o */
+const anchorProblems = (o) => {
+  const problems = [];
+  if (('symbol' in o) === ('test' in o)) problems.push('symbol과 test 중 정확히 하나를 쓴다');
+  if (typeof o.file === 'string' && /[*?[{]/.test(o.file)) problems.push('file은 glob이 아닌 파일 하나여야 함');
+  return problems;
+};
+
 /**
  * Where the code holds a decision now: a symbol in a file, or a test that locks it (by the
  * name the test results report). The file is a repository file, never a glob or Markdown.
  * @type {Validator}
  */
-export const decisionAnchor = object(
+export const decisionAnchor = object({ file: codePath }, { optional: { symbol: nonEmpty, test: nonEmpty }, check: anchorProblems });
+
+/**
+ * An anchor as the draft proposes it: a test anchor also says in plain words what the test
+ * asserts, for the person judging. The record keeps only where the decision is held.
+ * @type {Validator}
+ */
+const draftAnchor = object(
   { file: codePath },
   {
-    optional: { symbol: nonEmpty, test: nonEmpty },
-    check: (o) => {
-      const problems = [];
-      if (('symbol' in o) === ('test' in o)) problems.push('symbol과 test 중 정확히 하나를 쓴다');
-      if (typeof o.file === 'string' && /[*?[{]/.test(o.file)) problems.push('file은 glob이 아닌 파일 하나여야 함');
-      return problems;
-    },
+    optional: { symbol: nonEmpty, test: nonEmpty, plain: nonEmpty },
+    check: (o) => [...anchorProblems(o), ...('plain' in o && !('test' in o) ? ['plain은 테스트 앵커에만 쓴다'] : [])],
   },
 );
 
 /**
  * Anchors of a decision: at least one, and at least one test that locks it.
- * @type {Validator}
+ * @param {Validator} anchor
+ * @returns {Validator}
  */
-const anchorList = (v, at, errors) => {
-  arrayOf(decisionAnchor, { min: 1 })(v, at, errors);
+const anchorList = (anchor) => (v, at, errors) => {
+  arrayOf(anchor, { min: 1 })(v, at, errors);
   if (Array.isArray(v) && v.length && !v.some((a) => typeof a === 'object' && a !== null && 'test' in a)) {
     errors.push(`${at}: 결정을 잠그는 테스트 앵커({ file, test })가 하나 이상 필요함. 없으면 그 테스트를 먼저 쓴다`);
   }
 };
+const draftAnchors = anchorList(draftAnchor);
 
 /** What the agent proposes to keep when the person answers a fork question. */
-export const decisionProposal = object({ scope: arrayOf(codePath, { min: 1 }), anchors: anchorList }, { optional: { replaces: decisionId } });
+export const decisionProposal = object({ scope: arrayOf(codePath, { min: 1 }), anchors: draftAnchors }, { optional: { replaces: decisionId } });
 
 /** The narrow decision record since 0.4. */
 export const decisionSchema = object({
@@ -266,7 +278,7 @@ export const decisionSchema = object({
   choice: nonEmpty,
   question: nonEmpty,
   scope: arrayOf(codePath, { min: 1 }),
-  anchors: anchorList,
+  anchors: anchorList(decisionAnchor),
   source: arrayOf(
     tagged('kind', {
       'fork-answer': object({ kind: oneOf('fork-answer'), approval: approvalId, question: str({ pattern: /^[a-z][a-z0-9-]{0,31}$/ }) }),
@@ -343,9 +355,9 @@ export const draftV2Schema = object(
     questions: arrayOf(
       tagged('kind', {
         predict: object(
-          { id: shortId, kind: oneOf('predict'), probe: shortId, prompt: nonEmpty, answerType: oneOf('number', 'text', 'choice') },
+          { id: shortId, kind: oneOf('predict'), probe: shortId, prompt: nonEmpty, answerType: oneOf('number', 'choice') },
           {
-            optional: { choices: arrayOf(nonEmpty, { min: 2 }), sources: questionSources },
+            optional: { choices: arrayOf(nonEmpty, { min: 4, max: 4 }), sources: questionSources },
             check: (o) => (o.answerType === 'choice') === Array.isArray(o.choices) ? [] : ['answerType이 choice일 때만, 그리고 반드시 choices를 쓴다'],
           },
         ),
@@ -371,10 +383,14 @@ export const draftV2Schema = object(
       // `fetched` is filled by the check: who wrote the comment and a hash of its text.
       discussions: arrayOf(
         object(
-          { id: shortId, url: nonEmpty, quote: nonEmpty, choice: nonEmpty, scope: arrayOf(codePath, { min: 1 }), anchors: anchorList },
+          { id: shortId, url: nonEmpty, quote: nonEmpty, choice: nonEmpty, scope: arrayOf(codePath, { min: 1 }), anchors: draftAnchors },
           { optional: { replaces: decisionId, fetched: object({ author: nullable(nonEmpty), bodySha256: sha256 }) } },
         ),
       ),
+      // What this work did, in one plain line: the title the person sees in the dashboard.
+      summary: str({ nonEmpty: true, check: (s) => (/[\r\n]/.test(s.trim()) ? '한 줄로 쓴다' : null) }),
+      // What a test whose result changed in the probe run asserts, in plain words.
+      testNotes: arrayOf(object({ test: nonEmpty, plain: nonEmpty })),
     },
   },
 );

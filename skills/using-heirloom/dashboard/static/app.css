@@ -44,6 +44,7 @@ h1, h2, h3, p { margin: 0; }
 .hl-main .seed-callout__title, .hl-main .seed-callout__description, .hl-banner-slot .seed-page-banner__description { overflow-wrap: anywhere; }
 
 .hl-muted { color: var(--seed-color-fg-neutral-subtle); }
+.hl-state { font-size: var(--seed-font-size-t3); line-height: var(--seed-line-height-t3); font-weight: var(--seed-font-weight-bold); }
 .hl-small { font-size: var(--seed-font-size-t3); line-height: var(--seed-line-height-t3); }
 .hl-title { font-size: var(--seed-font-size-t9); line-height: var(--seed-line-height-t9); font-weight: var(--seed-font-weight-bold); }
 .hl-section-title { font-size: var(--seed-font-size-t7); line-height: var(--seed-line-height-t7); font-weight: var(--seed-font-weight-bold); }
@@ -60,6 +61,8 @@ h1, h2, h3, p { margin: 0; }
   display: flex; flex-direction: column; gap: var(--seed-dimension-x4);
 }
 .hl-list-card { padding: var(--seed-dimension-x2) 0; gap: 0; }
+/* Slots a card fills later (verdict help, reason fields, past returns) take no gap while empty. */
+.hl-card > :empty { display: none; }
 
 .hl-meta { display: grid; grid-template-columns: max-content 1fr; gap: var(--seed-dimension-x1_5) var(--seed-dimension-x4); }
 .hl-meta dt { color: var(--seed-color-fg-neutral-subtle); }
@@ -77,7 +80,12 @@ textarea.seed-text-input__value.hl-one-line { min-height: 0; resize: none; }
 
 .hl-blocked { color: var(--seed-color-fg-warning); }
 .hl-blocked:empty { display: none; }
-.hl-empty-sections { padding-inline: var(--seed-dimension-x1); }
+/* SEED's disabled fill is the page ground: a disabled main button would read as faint text.
+   Keep its shape on the card colour with an outline. */
+.hl-main :is(.seed-action-button--variant_brandSolid, .seed-action-button--variant_criticalSolid):is(:disabled, [data-disabled]) {
+  background: var(--seed-color-bg-layer-default);
+  box-shadow: inset 0 0 0 1px var(--seed-color-stroke-neutral-weak);
+}
 
 .hl-decision { width: min(100%, 360px); }
 .hl-choice { width: min(100%, 520px); }
@@ -85,9 +93,26 @@ textarea.seed-text-input__value.hl-one-line { min-height: 0; resize: none; }
 @media (max-width: 480px) { .hl-choice .seed-segmented-control__item { white-space: normal; } }
 .hl-decision .seed-segmented-control__item { border: 0; background: transparent; font-family: inherit; min-width: 0; padding-inline: var(--seed-dimension-x3); }
 .hl-decision:not([data-has-value]) > .seed-segmented-control__indicator { display: none; }
+/* Prediction choices are sentences: one per line, wrapped, left aligned. Hover and the
+   chosen line use the brand orange of the task rows below; the chosen line adds their bar. */
+.hl-choice--vertical { grid-auto-flow: row; grid-auto-rows: auto; width: min(100%, 720px); border-radius: var(--seed-radius-r3); }
+.hl-choice--vertical .seed-segmented-control__item { white-space: normal; justify-content: flex-start; text-align: left; padding-block: var(--seed-dimension-x2); border-radius: var(--seed-radius-r2); }
+.hl-choice--vertical .seed-segmented-control__item:not(:is(:disabled, [disabled], [data-disabled])):is(:hover, [data-checked]) {
+  background-color: var(--seed-color-bg-brand-weak);
+  box-shadow: none;
+  color: var(--seed-color-fg-brand);
+}
+.hl-choice--vertical .seed-segmented-control__item:not(:is(:disabled, [disabled], [data-disabled]))[data-checked] { box-shadow: inset 3px 0 0 var(--seed-color-stroke-brand-solid); }
+.hl-choice--vertical .seed-segmented-control__item:not(:is(:disabled, [disabled], [data-disabled])):active { background-color: var(--seed-color-bg-brand-weak-pressed); }
 
 /* Small text links and fold rows still get a 24px target. */
 .hl-back { display: inline-block; padding-block: var(--seed-dimension-x0_5); }
+/* Narrow or touch screens: buttons, choices and the back link are at least 44px tall. */
+@media (max-width: 560px), (pointer: coarse) {
+  :is(.hl-main, .hl-dialog) .seed-action-button { height: auto; min-height: 44px; }
+  .hl-main .seed-segmented-control__item { min-height: 44px; }
+  .hl-back { display: inline-flex; align-items: center; min-height: 44px; }
+}
 details > summary { padding-block: var(--seed-dimension-x0_5); cursor: pointer; color: var(--seed-color-fg-neutral-subtle); }
 details[open] > summary { margin-bottom: var(--seed-dimension-x2); }
 .hl-files { margin: 0; padding-left: var(--seed-dimension-x5); }
@@ -118,9 +143,12 @@ a.seed-list-item__root:active { background-color: var(--seed-color-bg-brand-weak
 
 /* Prediction and judgment (schema 2 drafts) */
 .hl-question { font-weight: 600; }
-.hl-command { display: block; white-space: pre-wrap; word-break: break-all; padding: 6px 8px; border-radius: 6px; background: var(--seed-color-bg-neutral-weak); }
+.hl-command { display: block; white-space: pre-wrap; word-break: break-all; }
 .hl-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
-.hl-output { margin: 0; white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--seed-color-stroke-neutral-muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+.hl-command, .hl-output { padding: var(--seed-dimension-x1_5) var(--seed-dimension-x2); border-radius: var(--seed-radius-r1_5); background: var(--seed-color-bg-neutral-weak); }
+/* Probe output is a read-only value: code on a tinted ground, not a bordered field. */
+.hl-output { margin: 0; white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+.hl-probe + .hl-probe { padding-top: var(--seed-dimension-x3); border-top: 1px solid var(--seed-color-stroke-neutral-muted); }
 
 /* Question cards reviewed side by side (cardDeck in app.js): one card in view, the deck takes
    its height, and the rest wait to the right. */
@@ -135,3 +163,13 @@ a.seed-list-item__root:active { background-color: var(--seed-color-bg-brand-weak
 .hl-deck-track::-webkit-scrollbar { display: none; }
 .hl-deck-slide { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; }
 @media (prefers-reduced-motion: reduce) { .hl-deck-track { transition: none; scroll-behavior: auto; } }
+
+/* Confirmation dialog (confirmDialog in app.js), in place of window.confirm. */
+.hl-dialog {
+  width: min(calc(100% - 2 * var(--seed-dimension-x4)), 440px);
+  padding: var(--seed-dimension-x5);
+  border: 0; border-radius: var(--seed-radius-r4);
+  background: var(--seed-color-bg-layer-floating); color: var(--seed-color-fg-neutral);
+}
+.hl-dialog::backdrop { background: var(--seed-color-bg-overlay); }
+.hl-dialog-actions { justify-content: flex-end; }
