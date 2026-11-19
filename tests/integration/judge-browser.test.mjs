@@ -221,6 +221,50 @@ test('browser: keep a fork answer in the repository and confirm a discussion', {
   assert.deepEqual(errors, []);
 });
 
+test('browser: a judgment that sends work back says the kept answer is not recorded', { skip, timeout: 120_000 }, async (t) => {
+  const pw = await import(pathToFileURL(path.join(/** @type {string} */ (PLAYWRIGHT_CORE), 'index.mjs')).href);
+  const { chromium } = pw.default ?? pw;
+  const anchors = [{ file: 'test/small.test.mjs', test: 'small orders pay full price' }];
+  const { home, taskId, sourceHash } = await judgedTask({
+    baseFiles: { 'test/small.test.mjs': "import { test } from 'node:test';\ntest('small orders pay full price', () => {});\n" },
+    editDraft: (d) => {
+      d.questions[3].decision = { scope: ['src/cart.mjs'], anchors };
+    },
+  });
+  const draft = /** @type {any} */ (await readJson(taskPaths(home, taskId).draft));
+  await recordPredictions({ home, taskId, request: { draftSha256: draftDigest(draft), answers: { q1: OBSERVED.head, q2: 'yes' } } });
+  await judgeTask({
+    home,
+    taskId,
+    keystore: 'file',
+    request: {
+      draftSha256: draftDigest(draft),
+      sourceHash,
+      items: [
+        { id: 'q1', verdict: 'revert', reason: '12개에도 할인이 붙어야 한다' },
+        { id: 'q2', verdict: 'as-expected' },
+        { id: 'q3', verdict: 'as-expected' },
+        { id: 'q4', verdict: 'answered', answer: '100', keep: 'repo' },
+      ],
+    },
+  });
+  const server = await createDashboardServer({ home, port: 0, version: '0.0.0-test', codeHash: 'test', keystore: 'file' });
+  t.after(() => server.close());
+  const browser = await chromium.launch({ executablePath: CHROMIUM, headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  /** @type {string[]} */
+  const errors = [];
+  page.on('pageerror', (/** @type {Error} */ err) => errors.push(err.message));
+
+  await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
+  await page.getByRole('tab', { name: '판정 내용' }).click();
+  const summary = await page.locator('#panel-approval').innerText();
+  assert.match(summary, /q4 .*되돌려서 결정 기록을 남기지 않음/);
+  assert.doesNotMatch(summary, /로 남김/, 'a sent-back judgment writes no record');
+  assert.deepEqual(errors, []);
+});
+
 test('browser: sending the same question back a second time recommends agreeing on the design', { skip, timeout: 120_000 }, async (t) => {
   const pw = await import(pathToFileURL(path.join(/** @type {string} */ (PLAYWRIGHT_CORE), 'index.mjs')).href);
   const { chromium } = pw.default ?? pw;
