@@ -1109,9 +1109,9 @@ function judgeCard(f, q) {
   if (q.kind === 'fork') {
     body.push(h('p', { class: 'hl-muted hl-small' }, `코드: ${q.codePaths.join(', ')} · 열린 이유: ${q.whyOpen}`));
   }
-  const disabled = new Set();
-  if (observed.correct === false) disabled.add('as-expected');
-  if (observed.correct === true) disabled.add('my-misunderstanding');
+  // A right prediction cannot be a misunderstanding, nor a wrong one as expected.
+  const disabled = new Set(observed.correct === false ? ['as-expected'] : observed.correct === true ? ['my-misunderstanding'] : []);
+  const off = (VERDICT_OPTIONS[q.kind] ?? []).find(([v]) => disabled.has(v))?.[1];
   const verdict = f.verdicts.get(q.id) ?? null;
   const help = h('span', { class: 'hl-muted hl-small' }, verdict ? VERDICT_HELP[verdict] : '');
   const extra = h('div', { class: 'hl-stack-tight' });
@@ -1146,6 +1146,7 @@ function judgeCard(f, q) {
         refreshJudge();
       },
     }),
+    off ? h('span', { class: 'hl-muted hl-small' }, `「${off}」: 예측이 ${observed.correct ? '맞아' : '틀려'} 고를 수 없음`) : null,
     help,
     extra,
   );

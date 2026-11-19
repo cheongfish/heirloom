@@ -101,6 +101,7 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   const q1 = page.getByRole('radiogroup', { name: 'q1 판정' });
   await on(page, 'q1');
   assert.equal(await q1.getByRole('radio', { name: '예상대로' }).isDisabled(), true, 'a wrong prediction cannot be judged as expected');
+  assert.equal(await page.locator('#question-q1').getByText('「예상대로」: 예측이 틀려 고를 수 없음').isVisible(), true, 'and the card says why');
 
   await q1.getByRole('radio', { name: '잘못 알았음' }).click();
   await on(page, 'q2');
