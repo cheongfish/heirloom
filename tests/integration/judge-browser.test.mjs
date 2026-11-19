@@ -288,7 +288,7 @@ test('browser: the work summary titles the task, and tests read in plain words w
   const plain = '5개 구매는 정가로 결제된다';
   const note = '12개 구매에 대량 할인이 붙는지 본다';
   const anchors = [{ file: 'src/cart.mjs', symbol: 'total' }, { file: 'test/small.test.mjs', test: 'small orders pay full price', plain }];
-  const { home, taskId } = await judgedTask({
+  const { repo, home, taskId } = await judgedTask({
     remote: 'https://github.com/acme/widgets.git',
     baseFiles: { 'test/small.test.mjs': "import { test } from 'node:test';\ntest('small orders pay full price', () => {});\n" },
     editDraft: (d) => {
@@ -309,7 +309,12 @@ test('browser: the work summary titles the task, and tests read in plain words w
   page.on('dialog', (/** @type {any} */ d) => d.accept());
 
   await page.goto(`http://127.0.0.1:${server.port}/`);
-  await page.getByRole('link', { name: new RegExp(summary) }).waitFor();
+  const row = page.getByRole('link', { name: new RegExp(summary) });
+  await row.waitFor();
+  const rowText = await row.innerText();
+  assert.ok(rowText.includes(path.basename(repo.dir)), 'the row names the repository');
+  assert.ok(!rowText.includes(repo.dir), 'by its folder name, not its full path');
+  assert.ok(!rowText.includes(taskId), 'the task id stays on the task screen');
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
   await page.getByRole('heading', { level: 1, name: summary }).waitFor();

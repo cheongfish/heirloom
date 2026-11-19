@@ -322,6 +322,9 @@ function listSection(title, rows, empty) {
   );
 }
 
+/** The repository's folder name; the full path is on the task screen. @param {string | null} root */
+const repoName = (root) => (root ? root.split(/[\\/]/).filter(Boolean).at(-1) : null) ?? '저장소 알 수 없음';
+
 /** @param {any} t */
 const taskRow = (t) =>
   h(
@@ -331,7 +334,7 @@ const taskRow = (t) =>
       'div',
       { class: 'seed-list-item__content' },
       h('span', { class: 'seed-list-item__title' }, t.summary ?? t.branch ?? '(브랜치 없음)'),
-      h('span', { class: 'seed-list-item__detail' }, [t.summary ? t.branch : null, t.repoRoot ?? '저장소 알 수 없음', t.taskId, `갱신 ${when(t.updatedAt)}`].filter(Boolean).join(' · ')),
+      h('span', { class: 'seed-list-item__detail' }, [t.summary ? t.branch : null, repoName(t.repoRoot), `갱신 ${when(t.updatedAt)}`].filter(Boolean).join(' · ')),
     ),
     h('div', { class: 'seed-list-item__suffix' }, h('div', { class: 'hl-row' }, t.permitPending ? badge('warning', '허락 대기') : null, t.merged === true ? badge('positive', '머지됨') : stateBadge(t.state))),
   );
@@ -359,7 +362,7 @@ async function renderOverview() {
         'div',
         { class: 'seed-list-item__content' },
         h('span', { class: 'seed-list-item__title' }, `${c.branch ?? '(브랜치 없음)'} · 코드 파일 ${c.files.length}개 변경`),
-        h('span', { class: 'seed-list-item__detail' }, `${c.path} · 대상 ${c.base} · 소스 상태 ${short(c.sourceHash)}`),
+        h('span', { class: 'seed-list-item__detail' }, `${c.path} · 대상 ${c.base}`),
       ),
       h('div', { class: 'seed-list-item__suffix' }, badge('warning', '인계 안 됨')),
     ),
