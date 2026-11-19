@@ -322,14 +322,6 @@ function listSection(title, rows, empty) {
   );
 }
 
-/**
- * One line for the overview sections that have nothing to show, so empty cards do not push
- * the waiting approvals down.
- * @param {string[]} titles
- */
-const emptySections = (titles) =>
-  titles.length ? h('p', { class: 'hl-muted hl-small hl-empty-sections' }, `비어 있는 목록: ${titles.join(' · ')}`) : null;
-
 /** @param {any} t */
 const taskRow = (t) =>
   h(
@@ -381,16 +373,9 @@ async function renderOverview() {
       )
     : null;
 
-  // Sections below the waiting approvals are drawn only when they have rows; the empty ones
-  // are named on one line at the end.
-  /** @type {string[]} */
-  const empty = [];
+  // Sections below the waiting approvals are drawn only when they have rows.
   /** @param {string} title @param {Child[]} rows @param {Child} [note] */
-  const optional = (title, rows, note = null) => {
-    if (rows.length || note) return h('div', {}, listSection(title, rows, `${title} 항목이 없습니다.`), note);
-    empty.push(title);
-    return null;
-  };
+  const optional = (title, rows, note = null) => (rows.length || note ? h('div', {}, listSection(title, rows, `${title} 항목이 없습니다.`), note) : null);
   replace(
     main,
     h('h1', { class: 'hl-title' }, '전체 목록'),
@@ -401,7 +386,6 @@ async function renderOverview() {
     optional(`오래된 미처리 건 (${data.staleDays}일 이상)`, stale.map(taskRow)),
     optional('진행 중', open.map(taskRow)),
     optional('최근 끝난 작업', done.map(taskRow)),
-    emptySections(empty),
   );
 }
 
