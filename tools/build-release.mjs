@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Development tool: build what users install (the `release` branch) from a source commit
-// (default `main`). The release tree holds only the plugin directories below; tests, evals,
+// (default `main`). The release tree holds only the plugin paths below; tests, evals,
 // tools, CHANGELOG.md and development files stay on main.
 //
 //   node tools/build-release.mjs --branch release-build/<YYYYMMDD> [--from main] [--base origin/release]
@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 /** Top-level paths copied into the release tree. */
-export const RELEASE_PATHS = Object.freeze(['.claude-plugin', '.codex-plugin', '.antigravity-plugin', '.cursor-plugin', '.gitattributes', 'hooks', 'hooks.json', 'rules', 'skills', 'examples']);
+export const RELEASE_PATHS = Object.freeze(['.claude-plugin', '.codex-plugin', '.antigravity-plugin', '.cursor-plugin', '.gitattributes', 'plugin.json', 'hooks', 'hooks.json', 'rules', 'skills', 'examples']);
 
 /**
  * @param {string} cwd

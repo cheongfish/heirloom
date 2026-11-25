@@ -1,0 +1,7 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "heirloom",
+  "version": "0.5.0",
+  "description": "Prepares handoffs for human approval and preserves project decisions.",
+  "license": "Apache-2.0"
+}

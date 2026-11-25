@@ -1,6 +1,12 @@
 # Install
 
-Install from the `release` branch: it holds only the plugin files (host manifests, `.gitattributes`, `hooks/`, `hooks.json`, `rules/`, `skills/`, `examples/`; `.cursor-plugin/` also holds Cursor's rule). Ask the user before installing; trust prompts are theirs to answer.
+Install from the `release` branch. It contains `plugin.json`, the host manifests, `.gitattributes`, `hooks/`, `hooks.json`, `rules/`, `skills/`, and `examples/`. The `.cursor-plugin/` directory also contains Cursor's rule. Ask the user before installing. The user answers trust prompts.
+
+## Agent Plugins 1.0
+
+Clone the `release` branch and point your client's plugin loader at the checkout root, where `plugin.json` lives. Follow the installation instructions for your [Agent Plugins client](https://agent-plugins.org/compatible-clients).
+
+The standard discovers the bundled skills. Running them requires Node.js 20 or later and access to the local Git repository. Session-start instructions, stop reminders, and conversation capture depend on [host integration](hosts.md#support-level).
 
 ## Claude Code
 

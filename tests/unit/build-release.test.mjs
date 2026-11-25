@@ -16,6 +16,7 @@ const FILES = {
   '.antigravity-plugin/plugin.json': '{}\n',
   '.cursor-plugin/plugin.json': '{}\n',
   '.cursor-plugin/rules/heirloom.mdc': '---\nalwaysApply: true\n---\n',
+  'plugin.json': '{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"heirloom"}\n',
   'hooks.json': '{}\n',
   'rules/heirloom.md': '---\ntrigger: always_on\n---\n',
   'hooks/hooks.json': '{}\n',
@@ -45,6 +46,7 @@ test('the build branch holds only the plugin directories; the working tree, HEAD
   for (const p of ['.antigravity-plugin', 'hooks.json', 'rules']) assert.ok(RELEASE_PATHS.includes(p), `${p} is released for Antigravity`);
   assert.ok(RELEASE_PATHS.includes('.cursor-plugin'), 'the Cursor manifest and its rule are released');
   assert.ok(RELEASE_PATHS.includes('.gitattributes'), 'installs cloned on Windows keep LF hooks');
+  assert.equal(repo.git('show', 'release-build/20261113:plugin.json'), FILES['plugin.json'].trim());
   assert.equal(repo.git('show', 'release-build/20261113:skills/a/scripts/x.mjs'), 'export {};');
   assert.equal(repo.git('rev-parse', 'HEAD'), head);
   assert.equal(repo.git('branch', '--show-current'), 'main');
