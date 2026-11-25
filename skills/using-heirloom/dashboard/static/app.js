@@ -453,11 +453,13 @@ const taskTitle = (task) => task.draft?.summary ?? task.input?.branch ?? '인계
 function titleBlock(task) {
   const input = task.input;
   document.title = `${taskTitle(task)} · Heirloom`;
+  const specs = input?.materials.filter((/** @type {any} */ m) => m.role === 'spec') ?? [];
   return h(
     'section',
     { class: 'hl-stack-tight' },
-    h('div', { class: 'hl-spread' }, h('h1', { class: 'hl-title' }, taskTitle(task)), h('div', { class: 'hl-row' }, stateBadge(task.state), h('code', { class: 'hl-muted' }, task.taskId))),
-    input ? h('p', {}, h('code', {}, input.branch ?? '(분리된 HEAD)'), ' → ', h('code', {}, input.base.ref)) : null,
+    h('div', { class: 'hl-spread' }, h('h1', { class: 'hl-title' }, taskTitle(task)), stateBadge(task.state)),
+    input ? h('p', {}, repoName(input.repo.root), ' · ', h('code', {}, input.branch ?? '(분리된 HEAD)'), ' → ', h('code', {}, input.base.ref), ` · 변경 파일 ${input.source.files.length}개`) : null,
+    specs.length ? h('p', { class: 'hl-small' }, '작업 명세 ', specs.map((/** @type {any} */ m) => m.ref).join(', ')) : null,
   );
 }
 
@@ -537,6 +539,8 @@ function boundaryCard(task) {
       h(
         'dl',
         { class: 'hl-meta' },
+        h('dt', {}, '작업 ID'),
+        h('dd', {}, h('code', {}, task.taskId)),
         h('dt', {}, '저장소'),
         h('dd', {}, h('code', {}, input.repo.root)),
         h('dt', {}, '검토 대상 상태'),
@@ -693,7 +697,8 @@ function permitPanel(task) {
       'section',
       { class: 'hl-card hl-stack' },
       h('h2', { class: 'hl-section-title' }, '탐침 실행 허락'),
-      h('p', { class: 'hl-muted hl-small' }, '이번 변경이 실제로 무엇을 바꾸는지 base와 head에서 직접 실행해 확인하려는 명령입니다.'),
+      h('p', {}, '이 명령을 변경 전과 변경 후의 임시 작업 트리에서 실행해 결과를 비교합니다.'),
+      task.input?.source.files.length ? changedFiles(task.input.source.files) : null,
       h(
         'ul',
         { class: 'hl-files' },
@@ -806,7 +811,7 @@ const AFTER_MERGE_HELP = {
  * @property {HTMLElement} why what is still needed before saving, next to the button
  * @property {boolean} dirty
  * @property {boolean} busy
- * @property {{ refresh: () => void } | null} deck the question cards, reviewed side by side
+ * @property {{ refresh: () => void, show: (id: string) => void } | null} deck the question cards, reviewed side by side
  */
 
 /** @type {JudgeForm | null} */
@@ -829,7 +834,7 @@ function newJudgeForm(task) {
     lifecycle: h('div', { class: 'hl-stack' }),
     lifecycleFor: null,
     status: h('div', { class: 'hl-stack' }),
-    why: h('span', { class: 'hl-small hl-blocked' }),
+    why: h('div', { class: 'hl-small hl-blocked hl-stack-tight' }),
     dirty: false,
     busy: false,
     deck: null,
@@ -897,8 +902,8 @@ function predictionCard(f, q) {
     refreshJudge();
   };
   if (q.kind === 'test-lock') body.push(choiceControl({ label: `${q.id} 답`, options: TEST_LOCK_OPTIONS, value: f.predictions.get(q.id) ?? null, onchange: set }));
-  else if (q.answerType === 'choice') body.push(choiceControl({ label: `${q.id} 답`, options: q.choices.map((/** @type {string} */ c) => [c, c]), value: f.predictions.get(q.id) ?? null, vertical: true, onchange: set }));
-  else body.push(fieldBlock('내 예측', textInput({ value: f.predictions.get(q.id) ?? '', label: `${q.id} 예측`, placeholder: q.answerType === 'number' ? '숫자' : '결과', oninput: set })));
+  else if (q.answerType === 'choice' && q.choices?.length === 4) body.push(choiceControl({ label: `${q.id} 답`, options: q.choices.map((/** @type {string} */ c) => [c, c]), value: f.predictions.get(q.id) ?? null, vertical: true, onchange: set }));
+  else body.push(callout('warning', '예측 보기 없음', '에이전트에게 이 질문에 보기 4개를 넣고 초안을 다시 제출해 달라고 요청하세요.'));
   return h('section', { class: 'hl-card hl-stack', id: `question-${q.id}` }, body);
 }
 
@@ -909,7 +914,7 @@ function predictionCard(f, q) {
  * @param {string} title
  * @param {string} note one line under the title: the words the cards use
  * @param {{ id: string, label: string, card: HTMLElement, done: () => boolean }[]} items
- * @returns {{ root: HTMLElement, refresh: () => void }}
+ * @returns {{ root: HTMLElement, refresh: () => void, show: (id: string) => void }}
  */
 function cardDeck(title, note, items) {
   const slides = items.map((it, i) => h('div', { class: 'hl-deck-slide', role: 'group', 'aria-roledescription': '카드', 'aria-label': `${it.label} (${i + 1}/${items.length})` }, it.card));
@@ -978,7 +983,16 @@ function cardDeck(title, note, items) {
     h('div', { class: 'hl-row hl-deck-chips' }, chips),
     track,
   );
-  return { root, refresh };
+  return {
+    root,
+    refresh,
+    show: (id) => {
+      const index = items.findIndex((item) => item.id === id);
+      if (index === -1) return;
+      go(index);
+      root.scrollIntoView({ block: 'start' });
+    },
+  };
 }
 
 /** @param {JudgeForm} f */
@@ -1043,7 +1057,10 @@ function probeResults(j) {
   return h(
     'section',
     { class: 'hl-card hl-stack' },
-    h('h2', { class: 'hl-section-title' }, '탐침 결과'),
+    h('div', { class: 'hl-spread' },
+      h('h2', { class: 'hl-section-title' }, '탐침 결과'),
+      button(BUTTON.smallOutline, '질문으로 돌아가기', () => document.querySelector('#panel-judge .hl-deck')?.scrollIntoView({ block: 'start' })),
+    ),
     h('p', { class: 'hl-muted hl-small' }, '탐침은 바뀌기 전(base)과 바뀐 뒤(head)에서 똑같이 실행해 결과를 비교하는 명령입니다.'),
     j.probes.map((/** @type {any} */ p) =>
       h(
@@ -1064,6 +1081,23 @@ const probeTitles = (task, ids) => ids.map((id) => `「${commandOf(task, id)?.ti
 const TEST_STATUS = { pass: '통과', fail: '실패', skip: '건너뜀', absent: '없음' };
 /** Test counts on one side, e.g. "통과 1·실패 1". @param {{ pass: number, fail: number, skip: number }} c */
 const countText = (c) => [c.pass && `통과 ${c.pass}`, c.fail && `실패 ${c.fail}`, c.skip && `건너뜀 ${c.skip}`].filter(Boolean).join('·') || '결과 없음';
+
+/** @param {any} probe */
+function questionEvidence(probe) {
+  /** @param {string} label @param {any} run */
+  const value = (label, run) => {
+    const output = run.stdout.trim();
+    const brief = !run.error && !run.timedOut && run.exitCode === 0 && output.length <= 120 && !output.includes('\n');
+    return h('div', { class: 'hl-stack-tight' }, h('strong', {}, label), brief ? h('code', {}, output || '(출력 없음)') : h('span', {}, '전체 실행 결과에서 확인'));
+  };
+  return h(
+    'div',
+    { class: 'hl-stack-tight hl-evidence' },
+    h('strong', {}, probe.title),
+    h('div', { class: 'hl-compare' }, value('변경 전', probe.base), value('변경 후', probe.head)),
+    h('button', { type: 'button', class: BUTTON.smallOutline, onclick: () => document.getElementById(`probe-${probe.id}`)?.scrollIntoView({ block: 'start' }) }, '전체 실행 결과 보기'),
+  );
+}
 
 /**
  * What a recheck says before the questions: which judgment it builds on, and changes no
@@ -1087,6 +1121,21 @@ function carriedCard(q) {
     questionHead(q),
     h('p', { class: 'hl-question' }, q.prompt),
     h('div', { class: 'hl-row' }, badge('positive', VERDICT_LABEL[q.carried.verdict] ?? q.carried.verdict), badge('neutral', '이전 판정 유지'), q.carried.answer !== null ? h('span', { class: 'hl-muted' }, `답: ${q.carried.answer}`) : null),
+  );
+}
+
+/** @param {any} j @param {string} id */
+function decisionEvidence(j, id) {
+  const record = j.decisionsToReview?.find((/** @type {any} */ r) => r.id === id);
+  if (!record) return callout('neutral', `기존 결정 ${id}`, '결정과 앵커 확인 결과를 불러오지 못했습니다.');
+  const checks = record.anchors.filter((/** @type {any} */ a) => !a.found || a.lastRun?.status === 'fail');
+  return h(
+    'div',
+    { class: 'hl-evidence hl-stack-tight' },
+    h('div', { class: 'hl-row' }, h('strong', {}, `기존 결정 ${id}`), record.anchorCheck === 'possibly-stale' ? badge('warning', '다시 확인 필요') : null),
+    h('p', {}, record.choice),
+    h('p', {}, '적용 범위 ', record.scope.join(', ')),
+    checks.length ? h('ul', { class: 'hl-files' }, checks.map((/** @type {any} */ a) => h('li', {}, anchorText(a), a.found ? ' · 마지막 탐침 테스트 실패' : ' · 앵커를 찾을 수 없음'))) : h('p', {}, '현재 확인에서 사라지거나 실패한 앵커가 없습니다.'),
   );
 }
 
@@ -1117,8 +1166,11 @@ function judgeCard(f, q) {
       h('p', {}, observed.tests.length ? `결과: ${observed.tests.map(change).join(', ')}` : '이 테스트는 base와 head에서 결과가 같습니다.'),
     );
   }
-  if (observed.probes.length) body.push(h('p', { class: 'hl-muted hl-small' }, `근거 탐침 ${probeTitles(f.task, observed.probes)} · 출력은 위 탐침 결과에 있습니다.`));
+  for (const probe of j.probes) {
+    if (observed.probes.includes(probe.id)) body.push(questionEvidence(probe));
+  }
   if (q.kind === 'fork') {
+    if (q.retires) body.push(decisionEvidence(j, q.retires));
     body.push(h('p', { class: 'hl-muted hl-small' }, `코드: ${q.codePaths.join(', ')} · 열린 이유: ${q.whyOpen}`));
   }
   // A right prediction cannot be a misunderstanding, nor a wrong one as expected.
@@ -1322,6 +1374,10 @@ function judgePanel(f) {
   return h(
     'div',
     { class: 'hl-stack' },
+    recheckNotice(j),
+    judgeDeck(f),
+    f.lifecycle,
+    f.status,
     h(
       'section',
       { class: 'hl-card hl-stack' },
@@ -1352,10 +1408,6 @@ function judgePanel(f) {
         )
       : null,
     probeResults(j),
-    recheckNotice(j),
-    judgeDeck(f),
-    f.lifecycle,
-    f.status,
     h('div', { class: 'hl-row' }, submit, f.why),
   );
 }
@@ -1374,29 +1426,29 @@ function judgeDeck(f) {
   return deck.root;
 }
 
-/** Why the current step cannot be saved yet. @param {JudgeForm} f @returns {string[]} */
+/** Why the current step cannot be saved yet. @param {JudgeForm} f */
 function judgeBlockers(f) {
   const j = f.task.judge;
-  /** @type {string[]} */
+  /** @type {{ text: string, ids: string[] }[]} */
   const why = [];
+  /** @param {string} label @param {any[]} questions */
+  const missing = (label, questions) => {
+    if (!questions.length) return;
+    const ids = questions.map((q) => q.id);
+    why.push({ text: `${label}: ${ids.join(', ')}`, ids });
+  };
   if (!j.revealed) {
-    const open = j.questions.filter((/** @type {any} */ q) => q.predictFirst && !f.predictions.has(q.id));
-    if (open.length) why.push(`예측하지 않은 질문: ${open.map((/** @type {any} */ q) => q.id).join(', ')}`);
+    missing('예측하지 않은 질문', j.questions.filter((/** @type {any} */ q) => q.predictFirst && !f.predictions.has(q.id)));
     return why;
   }
-  const undecided = j.questions.filter((/** @type {any} */ q) => !q.carried && !f.verdicts.has(q.id));
-  if (undecided.length) why.push(`판정하지 않은 질문: ${undecided.map((/** @type {any} */ q) => q.id).join(', ')}`);
-  const noReason = j.questions.filter((/** @type {any} */ q) => RETURNING.has(f.verdicts.get(q.id) ?? '') && !f.reasons.get(q.id)?.trim());
-  if (noReason.length) why.push(`이유가 없는 되돌림·분리: ${noReason.map((/** @type {any} */ q) => q.id).join(', ')}`);
-  const noAnswer = j.questions.filter((/** @type {any} */ q) => f.verdicts.get(q.id) === 'answered' && !f.answers.get(q.id)?.trim());
-  if (noAnswer.length) why.push(`답이 없는 열린 선택: ${noAnswer.map((/** @type {any} */ q) => q.id).join(', ')}`);
-  const unconfirmed = (j.discussions ?? []).filter((/** @type {any} */ d) => !f.discussions.has(d.id));
-  if (unconfirmed.length) why.push(`확인하지 않은 토론 결정: ${unconfirmed.map((/** @type {any} */ d) => d.id).join(', ')}`);
-  const noSpec = j.questions.filter((/** @type {any} */ q) => q.citesSpec && RETURNING.has(f.verdicts.get(q.id) ?? '') && !f.specChoices.has(q.id));
-  if (noSpec.length) why.push(`spec 처리를 고르지 않은 질문: ${noSpec.map((/** @type {any} */ q) => q.id).join(', ')}`);
+  missing('판정하지 않은 질문', j.questions.filter((/** @type {any} */ q) => !q.carried && !f.verdicts.has(q.id)));
+  missing('이유가 없는 되돌림·분리', j.questions.filter((/** @type {any} */ q) => RETURNING.has(f.verdicts.get(q.id) ?? '') && !f.reasons.get(q.id)?.trim()));
+  missing('답이 없는 열린 선택', j.questions.filter((/** @type {any} */ q) => f.verdicts.get(q.id) === 'answered' && !f.answers.get(q.id)?.trim()));
+  missing('확인하지 않은 토론 결정', (j.discussions ?? []).filter((/** @type {any} */ d) => !f.discussions.has(d.id)));
+  missing('spec 처리를 고르지 않은 질문', j.questions.filter((/** @type {any} */ q) => q.citesSpec && RETURNING.has(f.verdicts.get(q.id) ?? '') && !f.specChoices.has(q.id)));
   const accepting = ![...f.verdicts.values()].some((v) => RETURNING.has(v));
-  if (accepting && j.specs?.length && f.afterMerge === 'keep' && !f.owner.trim()) why.push('유지할 spec의 소유자');
-  if (f.diffs.some((d) => !d.trim())) why.push('비어 있는 동작 차이 설명');
+  if (accepting && j.specs?.length && f.afterMerge === 'keep' && !f.owner.trim()) why.push({ text: '유지할 spec의 소유자', ids: [] });
+  if (f.diffs.some((d) => !d.trim())) why.push({ text: '비어 있는 동작 차이 설명', ids: [] });
   return why;
 }
 
@@ -1411,7 +1463,12 @@ function refreshJudge() {
     target.toggleAttribute('data-disabled', target.disabled);
     if (judge.task.judge.revealed) target.textContent = [...judge.verdicts.values()].some((v) => RETURNING.has(v)) ? '판정 저장 (작업 되돌림)' : '판정 저장';
   }
-  judge.why.textContent = why.length ? `저장 전에 필요: ${why.join(' · ')}` : '';
+  const missingIds = [...new Set(why.flatMap(({ ids }) => ids))];
+  replace(
+    judge.why,
+    why.length ? h('p', {}, `저장 전에 필요: ${why.map(({ text }) => text).join(' · ')}`) : null,
+    missingIds.length ? h('div', { class: 'hl-row' }, missingIds.map((id) => button(BUTTON.smallOutline, `${id} 확인`, () => judge?.deck?.show(id)))) : null,
+  );
   discardButton.disabled = judge.busy;
   refreshTabLabels();
 }
@@ -1567,7 +1624,7 @@ function tabLabel(id) {
   const discussions = j.discussions ?? [];
   const done = asked.filter((/** @type {any} */ q) => judge?.verdicts.has(q.id)).length + discussions.filter((/** @type {any} */ d) => judge?.discussions.has(d.id)).length;
   const total = asked.length + discussions.length;
-  return [h('span', {}, `판정 ${done}/${total}`), done === total ? badge('positive', '완료') : null];
+  return [h('span', {}, `판정 ${done}/${total}`), judge && !judgeBlockers(judge).length ? badge('positive', '완료') : null];
 }
 
 function positionIndicator() {

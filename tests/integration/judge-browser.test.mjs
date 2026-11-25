@@ -59,18 +59,21 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).waitFor();
   const before = await page.locator('main').innerText();
-  assert.ok(!before.includes(OBSERVED.head), 'no head output on the page before the reveal');
+  assert.equal(await page.locator('#probe-p1').count(), 0, 'no observed output section before the reveal');
+  const numericPrediction = page.getByRole('radiogroup', { name: 'q1 답' });
+  assert.deepEqual(await numericPrediction.getByRole('radio').allTextContents(), ['108', '96', '120', '132']);
+  assert.equal(await page.locator('#question-q1 input, #question-q1 textarea').count(), 0);
   assert.match(before, /qty: 12, unit: 10/, 'the probe command is shown');
   const reveal = page.getByRole('button', { name: '예측 저장하고 결과 보기' });
   assert.equal(await reveal.isDisabled(), true, 'disabled until every prediction is in');
   await page.getByRole('tab', { name: /개요/ }).click();
   const overview = await page.locator('#panel-overview').innerText();
   assert.match(overview, /^동작 차이\s*예측을 저장하면/, 'the overview opens on what changed, held back until the predictions');
-  assert.ok(!overview.includes(OBSERVED.head));
+  assert.doesNotMatch(overview, /108에서 120/);
   await page.getByRole('tab', { name: /예측/ }).click();
 
   await on(page, 'q1');
-  await page.getByLabel('q1 예측').fill(OBSERVED.base);
+  await page.getByRole('radiogroup', { name: 'q1 답' }).getByRole('radio', { name: OBSERVED.base, exact: true }).click();
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await reveal.click();
@@ -82,7 +85,7 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   await page.keyboard.press('Escape');
   await dialog.waitFor({ state: 'detached' });
   assert.equal(await page.locator(':focus').getAttribute('id'), 'reveal', 'and goes back to the button that asked');
-  assert.ok(!(await page.locator('main').innerText()).includes(OBSERVED.head), 'nothing is saved or shown after cancelling');
+  assert.equal(await page.locator('#probe-p1').count(), 0, 'no observed output after cancelling');
   await reveal.click();
   await confirmWith(page, '결과 보기');
   await page.getByRole('heading', { name: '질문 판정' }).waitFor();
@@ -100,6 +103,9 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   }
   const q1 = page.getByRole('radiogroup', { name: 'q1 판정' });
   await on(page, 'q1');
+  const evidence = page.locator('#question-q1 .hl-evidence');
+  assert.match(await evidence.innerText(), /변경 전\s+108\s+변경 후\s+120/);
+  assert.equal(await evidence.getByRole('button', { name: '전체 실행 결과 보기' }).isVisible(), true);
   assert.equal(await q1.getByRole('radio', { name: '예상대로' }).isDisabled(), true, 'a wrong prediction cannot be judged as expected');
   assert.equal(await page.locator('#question-q1').getByText('「예상대로」: 예측이 틀려 고를 수 없음').isVisible(), true, 'and the card says why');
 
@@ -111,6 +117,7 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   await page.getByRole('radiogroup', { name: 'q4 판정' }).getByRole('radio', { name: '답함' }).click();
   const submit = page.getByRole('button', { name: /^판정 저장/ });
   assert.equal(await submit.isDisabled(), true, 'the open choice still needs an answer');
+  assert.doesNotMatch(await page.locator('#tab-judge').innerText(), /완료/);
   await page.getByLabel('q4 답').fill('100으로 한다');
 
   // Sending back q3, which cites the spec, asks what the spec becomes and hides the lifetime.
@@ -120,8 +127,10 @@ test('browser: predict, reveal, judge', { skip, timeout: 120_000 }, async (t) =>
   assert.equal(await page.getByRole('radiogroup', { name: 'spec 수명' }).count(), 0, 'no lifetime while work goes back');
   assert.equal(await submit.isDisabled(), true, 'the spec choice is required');
   const why = page.getByText(/^저장 전에 필요: spec 처리를 고르지 않은 질문: q3$/);
-  const [button, reason] = [await submit.boundingBox(), await why.boundingBox()];
-  assert.ok(reason.x > button.x + button.width && reason.y < button.y + button.height, 'the reason sits right next to the disabled button');
+  assert.equal(await why.isVisible(), true);
+  await on(page, 'q4');
+  await page.getByRole('button', { name: 'q3 확인', exact: true }).click();
+  assert.equal(await page.getByRole('button', { name: 'q3로 이동' }).getAttribute('aria-current'), 'true');
   await page.getByRole('radiogroup', { name: 'q3 spec 처리' }).getByRole('radio', { name: 'spec이 틀렸다' }).click();
   assert.equal(await submit.isDisabled(), false);
 
@@ -218,7 +227,7 @@ test('browser: keep a fork answer in the repository and confirm a discussion', {
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
   await on(page, 'q1');
-  await page.getByLabel('q1 예측').fill(OBSERVED.base);
+  await page.getByRole('radiogroup', { name: 'q1 답' }).getByRole('radio', { name: OBSERVED.base, exact: true }).click();
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
@@ -372,7 +381,7 @@ test('browser: sending the same question back a second time recommends agreeing 
 
   await page.goto(`http://127.0.0.1:${server.port}/r/-/w/-/t/${taskId}`);
   await on(page, 'q1');
-  await page.getByLabel('q1 예측').fill(OBSERVED.head);
+  await page.getByRole('radiogroup', { name: 'q1 답' }).getByRole('radio', { name: OBSERVED.head, exact: true }).click();
   await on(page, 'q2');
   await page.getByRole('radiogroup', { name: 'q2 답' }).getByRole('radio', { name: '예' }).click();
   await page.getByRole('button', { name: '예측 저장하고 결과 보기' }).click();
@@ -445,7 +454,7 @@ test('browser: the work summary titles the task, and tests read in plain words w
   await page.getByRole('heading', { level: 1, name: summary }).waitFor();
   assert.equal(await page.title(), `${summary} · Heirloom`);
   await on(page, 'q1');
-  await page.getByLabel('q1 예측').fill(OBSERVED.base);
+  await page.getByRole('radiogroup', { name: 'q1 답' }).getByRole('radio', { name: OBSERVED.base, exact: true }).click();
   await on(page, 'q2');
   const lock = page.locator('#question-q2');
   assert.equal(await lock.getByText(note).isVisible(), true, 'a test-lock question reads in plain words');

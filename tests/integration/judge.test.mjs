@@ -5,12 +5,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { CART_HEAD, OBSERVED, SPEC, handIn, judgedTask } from '../helpers/judge-fixture.mjs';
 import { createDashboardServer } from '../../skills/using-heirloom/dashboard/server.mjs';
+import { draftDigest } from '../../skills/using-heirloom/lib/canonical.mjs';
 import { deriveState, readEvents } from '../../skills/using-heirloom/lib/events.mjs';
 import { approvalFiles, taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
 import { prepareHandoff } from '../../skills/using-heirloom/lib/prepare.mjs';
@@ -72,9 +73,9 @@ test('before the predictions are saved, the screen gets questions and commands b
   assert.equal(before.body.judge.revealed, false);
   assert.deepEqual(before.body.judge.questions.map((/** @type {any} */ q) => [q.id, q.predictFirst]), [['q1', true], ['q2', true], ['q3', false], ['q4', false]]);
   assert.match(before.body.judge.commands[0].run.join(' '), /qty: 12, unit: 10/, 'the person sees what will run');
-  // Hashes, ids and times hold digits too; what is left must not show a result.
-  const visible = before.text.replace(/[0-9a-f]{12,}/g, '#').replace(/\d{4}-\d\d-\d\dT[\d:.]+Z/g, '#').replace(/t-\d{8}-\w+/g, '#');
-  for (const value of [OBSERVED.base, OBSERVED.head, 'behaviorDiffs', 'stdout', '다른 통화', 'changed']) {
+  assert.deepEqual(before.body.judge.questions[0].choices, ['108', '96', '120', '132']);
+  const visible = before.text;
+  for (const value of ['behaviorDiffs', 'stdout', '다른 통화', 'changed', 'correct']) {
     assert.ok(!visible.includes(value), `no ${value} before the reveal`);
   }
 
@@ -83,7 +84,7 @@ test('before the predictions are saved, the screen gets questions and commands b
   const missing = await post(taskId, 'predict', { draftSha256: task.draftSha256, answers: { q1: '108' } });
   assert.equal(missing.status, 400);
   assert.match(missing.body.error.message, /q2: 답은/);
-  assert.equal((await post(taskId, 'predict', { draftSha256: task.draftSha256, answers: { q1: '많이', q2: 'yes' } })).status, 400, 'a number question needs a number');
+  assert.equal((await post(taskId, 'predict', { draftSha256: task.draftSha256, answers: { q1: '121', q2: 'yes' } })).status, 400, 'even a numeric answer must be one of the choices');
   assert.equal((await post(taskId, 'predict', { draftSha256: task.draftSha256, answers: { q1: '108', q2: 'yes', q3: 'x' } })).status, 400, 'only predicted questions');
   const saved = await post(taskId, 'predict', { draftSha256: task.draftSha256, answers: { q1: '108', q2: 'yes' } });
   assert.equal(saved.status, 200, saved.text);
@@ -96,6 +97,29 @@ test('before the predictions are saved, the screen gets questions and commands b
   assert.equal(after.judge.observed.q1.correct, false);
   assert.deepEqual(after.judge.observed.q2.tests.map((/** @type {any} */ x) => [x.name, x.base, x.head]), [['bulk discount for 12', 'pass', 'fail']]);
   assert.equal(after.draft.behaviorDiffs.length, 1);
+});
+
+test('a pending numeric-entry draft must be updated; saved numeric predictions can still be judged', async (t) => {
+  const { home, taskId } = await judgedTask();
+  const { get, post } = await server(t, home);
+  const files = taskPaths(home, taskId);
+  const draft = JSON.parse(await readFile(files.draft, 'utf8'));
+  draft.questions[0].answerType = 'number';
+  delete draft.questions[0].choices;
+  await writeFile(files.draft, JSON.stringify(draft));
+  const draftSha256 = draftDigest(draft);
+  const answers = { q1: OBSERVED.base, q2: 'yes' };
+
+  const blocked = await post(taskId, 'predict', { draftSha256, answers });
+  assert.equal(blocked.status, 409);
+  assert.match(blocked.body.error.message, /보기를 4개/);
+  assert.equal((await get(taskId)).body.judge.revealed, false);
+  await writeFile(files.answers, JSON.stringify({ schemaVersion: 1, draftSha256, answeredAt: new Date().toISOString(), answers }));
+
+  const task = (await get(taskId)).body;
+  assert.equal(task.judge.observed.q1.correct, false);
+  const judgment = await post(taskId, 'judge', judgeBody(task));
+  assert.equal(judgment.status, 200, judgment.text);
 });
 
 test('judgment: verdicts are checked, then signed; all accepted approves the task', async (t) => {

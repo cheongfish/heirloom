@@ -9,9 +9,12 @@ import path from 'node:path';
 
 import { judge, judgedTask } from '../helpers/judge-fixture.mjs';
 import { tempDir } from '../helpers/git-fixture.mjs';
+import { judgeView, recordPredictions } from '../../skills/using-heirloom/dashboard/judge.mjs';
 import { applyApproval } from '../../skills/using-heirloom/lib/apply.mjs';
+import { draftDigest } from '../../skills/using-heirloom/lib/canonical.mjs';
 import { writePrBody } from '../../skills/using-heirloom/lib/judgment-pr.mjs';
 import { recall } from '../../skills/using-heirloom/lib/recall.mjs';
+import { taskPaths } from '../../skills/using-heirloom/lib/paths.mjs';
 import { readRecords, serializeRecord } from '../../skills/using-heirloom/lib/records.mjs';
 
 /** A test that passes on base and head, so it can anchor a decision. */
@@ -118,6 +121,25 @@ test('keeping a fork answer in the repository writes a record that replaces the 
   const body = path.join(await tempDir('body'), 'body.md');
   const written = await writePrBody({ home: t.home, taskId: t.taskId, bodyFile: body });
   assert.match(written.section, new RegExp(`- 결정: .*"100개부터 할인한다" \\(저장소에 결정 기록 ${item.keep.id}로 남김, ${OLD_ID} 대체\\)`));
+});
+
+test('the revealed judgment shows the existing choice, scope and missing anchor for a decision under review', async () => {
+  const fixture = withFork((q) => { q.retires = OLD_ID; });
+  const { ['test/small.test.mjs']: omitted, ...baseFiles } = fixture.baseFiles;
+  const { home, taskId } = await judgedTask({ ...fixture, baseFiles });
+  const draft = JSON.parse(await readFile(taskPaths(home, taskId).draft, 'utf8'));
+  const before = await judgeView({ home, taskId });
+  assert.ok(before && !('decisionsToReview' in before));
+  await recordPredictions({ home, taskId, request: { draftSha256: draftDigest(draft), answers: { q1: '108', q2: 'yes' } } });
+
+  const after = await judgeView({ home, taskId });
+  assert.ok(after && 'decisionsToReview' in after);
+  const record = after.decisionsToReview[0];
+  assert.equal(record?.id, OLD_ID);
+  assert.deepEqual(record?.scope, ['src/cart.mjs']);
+  assert.equal(record?.choice, '할인 경계는 10개다');
+  assert.equal(record?.anchorCheck, 'possibly-stale');
+  assert.equal(record?.anchors.find((a) => a.file === 'test/small.test.mjs')?.found, false);
 });
 
 test('retiring a record removes it; an answer kept in the PR only writes nothing', async () => {

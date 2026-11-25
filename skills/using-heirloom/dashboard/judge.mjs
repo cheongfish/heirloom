@@ -18,6 +18,7 @@ import { newApprovalId, newRecordId } from '../lib/ids.mjs';
 import { loadApprovalBaseline } from '../lib/baseline.mjs';
 import { loadProjectConfig } from '../lib/config.mjs';
 import { approvalFiles, taskPaths } from '../lib/paths.mjs';
+import { recall } from '../lib/recall.mjs';
 import { ACCEPTING, assertValid, judgmentSchema } from '../lib/schema.mjs';
 import { sign } from '../lib/sign.mjs';
 import { AFTER_MERGE, SPEC_CHOICES, citedSpecParts, specRefs, specSourcesOf } from '../lib/spec-handling.mjs';
@@ -173,13 +174,13 @@ export function predictionCorrect(q, answer, probes) {
  * @param {{ home: string, taskId: string }} options
  */
 export async function judgeView({ home, taskId }) {
-  const { input, draft, probes, answers, events } = await loadTask(home, taskId);
+  const { input, draft, probes, answers, events, state } = await loadTask(home, taskId);
   if (!isJudgedDraft(draft)) return null;
   const returned = returnsByQuestion(events);
   const saved = answersFor(answers, draft);
   const commands = (probes?.probes ?? []).map((/** @type {any} */ p) => ({ id: p.id, title: p.title, run: p.run }));
   const { basedOn, carried } = await carriedVerdicts({ home, taskId, input, draft, probes });
-  const questions = draft.questions.map((/** @type {any} */ q) => {
+  const questions = /** @type {any[]} */ (draft.questions).map((q) => {
     const kept = carried.get(q.id);
     return {
       ...q,
@@ -204,6 +205,10 @@ export async function judgeView({ home, taskId }) {
     setupFailed: Boolean(probes?.setup && [...(probes.setup.base ?? []), ...(probes.setup.head ?? [])].some((/** @type {any} */ s) => s.exitCode !== 0)),
   };
   if (!saved) return base;
+  const retires = [...new Set(questions.filter((q) => !q.carried && q.retires).map((q) => q.retires))];
+  const recalled = state === 'awaiting_approval' && input && retires.length
+    ? await recall({ cwd: input.repo.root, home, ids: retires, limit: retires.length }).catch(() => null)
+    : null;
   return {
     ...base,
     predictions: saved.answers,
@@ -211,6 +216,7 @@ export async function judgeView({ home, taskId }) {
     behaviorDiffs: draft.behaviorDiffs,
     discussions: draft.discussions ?? [],
     inferences: draft.inferences,
+    decisionsToReview: (recalled?.records ?? []).map(({ id, choice, scope, anchorCheck, anchors }) => ({ id, choice, scope, anchorCheck, anchors })),
     notes: draft.notes,
     probes: (probes?.probes ?? []).map(probeView),
     tests: probes?.tests ? { comparison: probes.tests.comparison, changed: withNotes(probes.tests.changed, draft.testNotes), base: { exitCode: probes.tests.base.exitCode, counts: probes.tests.base.counts }, head: { exitCode: probes.tests.head.exitCode, counts: probes.tests.head.counts } } : null,
@@ -256,8 +262,10 @@ export function redactedDraft(draft) {
 function checkAnswer(q, answer) {
   if (typeof answer !== 'string' || !answer.trim() || answer.length > MAX_TEXT) throw bad(`${q.id}: 답은 ${MAX_TEXT}자 이하의 비어 있지 않은 문자열이어야 함`);
   if (q.kind === 'test-lock' && answer !== 'yes' && answer !== 'no') throw bad(`${q.id}: 답은 yes 또는 no여야 함`);
-  if (q.kind === 'predict' && q.answerType === 'choice' && !q.choices.includes(answer)) throw bad(`${q.id}: 보기 중 하나를 골라야 함`);
-  if (q.kind === 'predict' && q.answerType === 'number' && numbersIn(answer).size === 0) throw bad(`${q.id}: 숫자로 답해야 함`);
+  if (q.kind === 'predict') {
+    if (q.answerType !== 'choice' || q.choices?.length !== 4) throw new HeirloomError('E_CONFLICT', `${q.id}: 에이전트가 보기를 4개 넣어 초안을 다시 제출해야 함`);
+    if (!q.choices.includes(answer)) throw bad(`${q.id}: 보기 중 하나를 골라야 함`);
+  }
 }
 
 /**
@@ -281,7 +289,7 @@ export async function recordPredictions({ home, taskId, request, now = new Date(
     for (const q of predicted) {
       const answer = request.answers[q.id];
       checkAnswer(q, answer);
-      saved[q.id] = /** @type {string} */ (answer).trim();
+      saved[q.id] = /** @type {string} */ (answer);
     }
     const extra = Object.keys(request.answers).filter((id) => !predicted.some((/** @type {any} */ q) => q.id === id));
     if (extra.length) throw bad(`예측하는 질문이 아님: ${extra.join(', ')}`);
