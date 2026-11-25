@@ -355,11 +355,8 @@ export const draftV2Schema = object(
     questions: arrayOf(
       tagged('kind', {
         predict: object(
-          { id: shortId, kind: oneOf('predict'), probe: shortId, prompt: nonEmpty, answerType: oneOf('number', 'choice') },
-          {
-            optional: { choices: arrayOf(nonEmpty, { min: 4, max: 4 }), sources: questionSources },
-            check: (o) => (o.answerType === 'choice') === Array.isArray(o.choices) ? [] : ['answerType이 choice일 때만, 그리고 반드시 choices를 쓴다'],
-          },
+          { id: shortId, kind: oneOf('predict'), probe: shortId, prompt: nonEmpty, answerType: oneOf('choice'), choices: arrayOf(nonEmpty, { min: 4, max: 4 }) },
+          { optional: { sources: questionSources } },
         ),
         'test-lock': object(
           { id: shortId, kind: oneOf('test-lock'), test: nonEmpty, plain: nonEmpty, prompt: nonEmpty },

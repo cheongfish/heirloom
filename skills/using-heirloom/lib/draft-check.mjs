@@ -240,10 +240,12 @@ async function checkDraftV2({ root, input, draft, repoFiles, conversation, probe
 
     if (q.kind === 'predict') {
       const p = probe(q.probe, `${at}.probe`);
-      if (p && q.answerType === 'number' && numbersIn(`${p.head.stdout}\n${p.head.stderr}`).size === 0) {
-        warnings.push(`${at}: 숫자로 답하는 질문인데 탐침 ${p.id}의 head 출력에 숫자가 없음`);
-      }
-      if (p && q.answerType === 'choice' && Array.isArray(q.choices) && q.choices.length === 4) {
+      if (q.answerType === 'choice' && Array.isArray(q.choices) && q.choices.length === 4 && q.choices.every((c) => typeof c === 'string')) {
+        if (new Set(q.choices.map(normalize)).size !== 4) {
+          errors.push(`${at}.choices: 서로 다른 보기 4개를 써야 함`);
+          continue;
+        }
+        if (!p) continue;
         const shown = shownChoices(q.choices, p);
         if (shown.length !== 1) {
           const which = shown.length ? ` (${shown.join(', ')})` : '';

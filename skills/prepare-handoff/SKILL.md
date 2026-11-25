@@ -20,7 +20,7 @@ Pass the actual spec, final review file (`--review`) if available, and reviewed 
 
 Read the result:
 
-- `alreadyPrepared: true`, `state` `awaiting_approval` or later: report the existing handoff and stop without drafting.
+- `alreadyPrepared: true`, `state` `awaiting_approval` or later: report the existing handoff and stop without drafting. If the user asks to add missing prediction choices to an unrevealed draft in `awaiting_approval`, use the existing probe results, replace the numeric-entry questions with four-choice questions and resubmit the draft for the same task.
 - `alreadyPrepared: true`, `state` `returned`: nothing changed since the person sent the work back. Fix what `previousJudgment` lists first, then run this skill again.
 - Non-null `previousJudgment`: the last judgment returned these questions (`verdict` `revert`: the behavior is wrong; `split`: move it out of this branch), with the person's `reason`. This round must address each one; ask about the changed behavior again, keeping the returned question's `id` so the dashboard can tell it is the same question. `timesReturned` counts how often that question has been sent back; at 2 or more, the fixes are not converging: before another round, report it to the user and recommend agreeing on the design of that behavior first, and continue only when the user says how. When a returned question cited the spec, `spec.choice` says what the spec becomes, and `spec.parts` lists the cited lines:
   - `spec-wrong`: the behavior should never have been there. Fix or remove the cited lines and leave one line `거절: <reason>` in their place.
@@ -85,7 +85,7 @@ Write JSON to `draftPath`:
     { "text": "12개 구매 결제액이 108에서 120이 된다", "probes": ["p1"], "codePaths": ["src/cart.mjs"] }
   ],
   "questions": [
-    { "id": "q1", "kind": "predict", "probe": "p1", "prompt": "단가 10원으로 12개를 사면 결제액은?", "answerType": "number" },
+    { "id": "q1", "kind": "predict", "probe": "p1", "prompt": "단가 10원으로 12개를 사면 결제액은?", "answerType": "choice", "choices": ["108", "96", "120", "132"] },
     { "id": "q2", "kind": "test-lock", "test": "test/cart.test.mjs:41", "plain": "100개 이상이면 10% 할인된다", "prompt": "이 테스트는 12개 구매의 결제액을 확인하나요?" },
     { "id": "q3", "kind": "intent", "probe": "p1", "sources": [{ "ref": "docs/specs/cart.md", "lines": [40, 52], "quote": "10개 이상 구매하면 대량 할인을 적용한다" }], "prompt": "spec의 의도와 실제 결과가 같나요?" },
     { "id": "q4", "kind": "fork", "probes": ["p1"], "codePaths": ["src/cart.mjs"], "prompt": "12개 구매에 할인을 적용해야 하나요?", "whyOpen": "할인 경계를 정한 이유가 코드, 테스트, 커밋에 없다" }
@@ -113,12 +113,12 @@ Ask 3 to 5 questions about what the person most likely does not know yet. The pe
 
 | Kind | Asks | Needs |
 | --- | --- | --- |
-| `predict` | the head result of a probe input. `answerType` `number` for a numeric result, otherwise `choice` with exactly 4 `choices` | `probe` |
+| `predict` | the head result of a probe input, including numeric results | `probe`, `answerType: "choice"` and exactly four distinct strings in `choices` |
 | `test-lock` | whether a test, read in plain words, guards this change's behavior | `test`: a name from `tests.changed`, or `<file>:<line>` in a test file this change touched; `plain`: what the test asserts |
 | `intent` | whether the spec or the user's words match the actual behavior | `probe`, `sources` with exact quotes |
 | `fork` | a choice the code and tests leave open | `probes`, `codePaths`, `whyOpen`: why the choice is open (no reason in code, tests or commits) |
 
-- A `choice` prediction is scored only when exactly one choice appears in the probe's head output, and submit refuses it otherwise. The other three must not be substrings of that output: a distractor cut from the start of the right answer (`"new"` for `"new v2"`) also appears in it.
+- Include one choice that appears in the probe's head output and three plausible alternatives that do not. Submit checks that exactly one choice appears. Use whole output values for numeric choices and avoid alternatives that occur as substrings, such as `"12"` when the output is `"120"`.
 - Prefer probes whose outputs differ and behaviors a reviewer could get wrong. Do not ask what the prompt already gives away.
 - Any question may cite `sources`. Documents: `{"ref": "<path>", "lines": [from, to], "quote": "<exact text from those lines>"}`. Conversation: `{"ref": "@conversation", "quote": "<exact text from one message>"}`, without `lines`. Read `conversation.path`; cite only text the user typed, never agent or tool output. A bare agreement to your proposal is not a stated choice.
 - Ask a `fork` question only for a choice the change makes without a stated reason. A document or typed user message that states both the choice and the reason settles it: cite it in an `intent` question instead.
