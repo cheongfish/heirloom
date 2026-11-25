@@ -159,6 +159,7 @@ export async function recall({ cwd, home, paths = [], topics = [], ids = [], lim
     records.push({
       id: c.id,
       choice: c.record.doc.meta.choice,
+      scope: c.record.doc.meta.scope,
       status: c.record.status,
       anchorCheck: check.result,
       anchors: check.anchors,

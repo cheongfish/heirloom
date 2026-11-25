@@ -74,7 +74,7 @@ function draft() {
       { text: '라벨이 "old"에서 “new v2”로 바뀐다', probes: ['p2'], codePaths: [] },
     ],
     questions: [
-      { id: 'q1', kind: 'predict', probe: 'p1', prompt: '단가 10원으로 12개를 사면 결제액은?', answerType: 'number' },
+      { id: 'q1', kind: 'predict', probe: 'p1', prompt: '단가 10원으로 12개를 사면 결제액은?', answerType: 'choice', choices: ['108', '96', '120', '132'] },
       { id: 'q2', kind: 'test-lock', test: 'test/cart.test.mjs:3', plain: '12개 구매는 108원이다', prompt: '이 테스트는 12개 구매의 결제액을 확인하나요?' },
       {
         id: 'q3',
@@ -239,7 +239,7 @@ test('v2: schema shape: kinds, choices, ids, code paths', async () => {
   d.questions[3].codePaths = ['src/missing.mjs'];
   d.behaviorDiffs[0].codePaths = ['src/other.mjs'];
   const { errors } = await run(root, d);
-  assert.ok(errors.includes('$.questions[4]: answerType이 choice일 때만, 그리고 반드시 choices를 쓴다'), errors.join('\n'));
+  assert.ok(errors.includes('$.questions[4].choices: 필수 필드가 없음'), errors.join('\n'));
   assert.ok(errors.includes('$.questions[5].kind: predict, test-lock, intent, fork 중 하나여야 함'), errors.join('\n'));
   assert.ok(errors.includes('$.questions[4].id: 질문 id가 중복됨 (q1)'), errors.join('\n'));
   assert.ok(errors.includes('$.questions[3].codePaths[0]: 저장소에 맞는 파일이 없음 (src/missing.mjs)'), errors.join('\n'));
@@ -259,31 +259,34 @@ test('v2: a choice prediction needs exactly four choices, exactly one of them in
   assert.deepEqual((await run(root, withChoices(['old v1', 'v3', 'v4', '빈 문자열']))).errors, [
     '$.questions[4].choices: 탐침 p2의 head 출력에 보이는 보기가 0개. 정답 보기 하나만 출력에 있어야 채점됨',
   ]);
+  assert.deepEqual((await run(root, withChoices(['new v2', 'v3', 'v4', ' v3 ']))).errors, [
+    '$.questions[4].choices: 서로 다른 보기 4개를 써야 함',
+  ]);
   // "new" is part of "new v2": a distractor cut from the answer makes the question unscorable.
   assert.deepEqual((await run(root, withChoices(['new v2', 'new', 'v3', '빈 문자열']))).errors, [
     '$.questions[4].choices: 탐침 p2의 head 출력에 보이는 보기가 2개 (new v2, new). 정답 보기 하나만 출력에 있어야 채점됨',
   ]);
 });
 
-test('v2: a free-text prediction is no longer accepted', async () => {
+test('v2: free-text and numeric entry predictions are refused', async () => {
   const root = await fixture();
   const d = draft();
-  d.questions.push({ id: 'q5', kind: 'predict', probe: 'p2', prompt: '라벨은?', answerType: 'text' });
-  assert.deepEqual((await run(root, d)).errors, ['$.questions[4].answerType: "number", "choice" 중 하나여야 함']);
+  for (const type of ['text', 'number']) {
+    d.questions[0].answerType = type;
+    assert.deepEqual((await run(root, d)).errors, ['$.questions[0].answerType: "choice" 중 하나여야 함']);
+  }
 });
 
-test('v2: warnings: too many questions, none, an unexplained changed probe, a number question without a number', async () => {
+test('v2: warnings: too many questions, none, an unexplained changed probe', async () => {
   const root = await fixture();
   const d = draft();
-  for (let i = 5; i <= 6; i += 1) d.questions.push({ id: `q${i}`, kind: 'predict', probe: 'p2', prompt: '?', answerType: 'number' });
+  for (let i = 5; i <= 6; i += 1) d.questions.push({ id: `q${i}`, kind: 'predict', probe: 'p2', prompt: '?', answerType: 'choice', choices: ['old', 'new', 'empty', 'default'] });
   d.behaviorDiffs.pop();
   const p = probes();
   p.probes[1].head = side('label: "new"\n');
   const { errors, warnings } = await run(root, d, { probes: p });
   assert.deepEqual(errors, []);
   assert.deepEqual(warnings, [
-    '$.questions[4]: 숫자로 답하는 질문인데 탐침 p2의 head 출력에 숫자가 없음',
-    '$.questions[5]: 숫자로 답하는 질문인데 탐침 p2의 head 출력에 숫자가 없음',
     '$.questions: 질문이 6개. 이 변경은 한 번에 이해하기에 클 수 있음(기본 3~5개)',
     '탐침 p2: base와 head의 출력이 다르지만 어느 behaviorDiffs에도 쓰이지 않음',
   ]);

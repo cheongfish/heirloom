@@ -196,7 +196,7 @@ test('v2 draft: submit checks it against the last probe run; the readable copy h
     probeSetHash,
     behaviorDiffs: [{ text: '12개 구매 결제액이 108에서 120이 된다', probes: ['p1'], codePaths: ['src/cart.mjs'] }],
     questions: [
-      { id: 'q1', kind: 'predict', probe: 'p1', prompt: '단가 10원으로 12개를 사면 결제액은?', answerType: 'number' },
+      { id: 'q1', kind: 'predict', probe: 'p1', prompt: '단가 10원으로 12개를 사면 결제액은?', answerType: 'choice', choices: ['108', '96', '120', '132'] },
       { id: 'q2', kind: 'test-lock', test: 'bulk discount for 12', plain: '12개 구매는 108원이다', prompt: '이 테스트는 이번 변경의 동작을 막나요?' },
       { id: 'q3', kind: 'intent', probe: 'p1', sources: [{ ref: SPEC, lines: [3, 3], quote: '할인 경계를 100개로 바꾼다.' }], prompt: 'spec의 의도와 같나요?' },
     ],
@@ -217,7 +217,8 @@ test('v2 draft: submit checks it against the last probe run; the readable copy h
   const handoff = await readFile(paths.handoff, 'utf8');
   assert.match(handoff, /## 질문 \(3\)/);
   assert.match(handoff, /### q2 테스트가 막는 동작/);
-  assert.doesNotMatch(handoff, /120|108에서/, 'no observed value or behavior description before the person predicts');
+  assert.match(handoff, /보기: 108 \/ 96 \/ 120 \/ 132/);
+  assert.doesNotMatch(handoff, /108에서 120이 된다/, 'only answer choices are visible before the person predicts');
 });
 
 // ---------------------------------------------------------------- pytest

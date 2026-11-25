@@ -27,7 +27,7 @@ When the overview is shown, tasks whose PR or MR was created are checked with `g
 
 ## Task screen
 
-The task screen shows the title (the draft's work summary, or the branch name without one), the state badge, the task ID and `branch → base`, and two tabs.
+The task header shows the draft's work summary (or branch name), state, repository name, `branch → base`, changed file count and spec references. The task ID and full repository path are under **자세히** in the overview.
 
 | Tab | Content |
 | --- | --- |
@@ -51,23 +51,24 @@ The browser opens once per new request, as after a submit (`dashboard.openBrowse
 
 The questions are shown with the full probe commands, so you can see what will run. Nothing that shows a result is on the page yet: the server does not send it.
 
-- `predict` questions take a number or one of four choices, listed one per line; `test-lock` questions take 예 / 아니오 (yes / no). A `test-lock` card shows what the test asserts in plain words; the test name is under **자세히**.
+- `predict` questions show four choices, one per line, including when the result is a number. `test-lock` questions show 예 / 아니오 (yes / no), the test assertion in plain words, and the test name under **자세히**.
+- If a pending draft from an earlier version asks for a typed number, ask the agent to add four choices and resubmit it. A draft whose predictions are already saved can still be judged.
 - Questions whose verdict is kept from the previous judgment are listed under "이전 판정 유지" (previous judgment kept) and are not asked.
 - **예측 저장하고 결과 보기** (save predictions and reveal) is enabled once every question has a prediction, and asks for a confirmation: saved predictions cannot be changed. While it is disabled, the line next to it says what is missing.
 
 ### After the reveal
 
 - **동작 차이** (behavior differences): the agent's descriptions, each with the probes it rests on (by title). You can reword them; numbers and quoted values cannot be changed.
-- **탐침 결과** (probe results): each probe once, with its command and its base and head output as read-only values. Question cards name the probes they rest on instead of repeating them.
+- **탐침 결과** (probe results): each full probe with its command and its base and head output. The question card shows short outputs next to the judgment and provides **전체 실행 결과 보기** (see full execution result).
 - **실행 증거 없음** (no run evidence): claims no probe confirmed.
 - **테스트**: pass/fail counts on base and head (e.g. 통과 2 → 통과 1·실패 1) and the tests whose result changed, each by what it asserts in plain words when the draft's `testNotes` says, otherwise by name.
 - **Each question**: your prediction with 맞음 / 틀림 / 직접 비교 (right / wrong / compare yourself), the probes it rests on, then the verdict control. A wrong prediction cannot be judged 예상대로 (as expected), and a right one not 잘못 알았음; the line under the control says so. Each verdict option has a tooltip with its meaning.
   - 되돌림 or 분리 asks for a reason (필수, required); when the question cites the spec it also asks for **spec 처리**: spec이 틀렸다, 미룬다, spec은 스냅샷.
   - A question sent back in an earlier round shows those reasons. Sending the same question back a second time turns the note into **설계부터 다시 합의하세요** (agree on the design first): another round of fixes is unlikely to converge. It is only a recommendation; saving works as usual.
-  - 답함 on a `fork` question asks for the answer; with a decision proposal it also asks **답을 남길 곳**: 이 PR에서만 (default) or 저장소에 계속 유지, with the tests that lock the decision in plain words. The scope and anchors (files, test names, symbols) are under **자세히** (details). A question that asks about an existing record also offers to delete it.
+  - 답함 on a `fork` question asks for the answer. With a decision proposal it also asks **답을 남길 곳**: 이 PR에서만 (default) or 저장소에 계속 유지, with the tests that lock the decision in plain words. The scope and anchors (files, test names, symbols) are under **자세히** (details). When a question asks whether to retire an existing record, the card shows the recalled choice, scope and any missing or failed anchors before offering to remove it.
 - **토론에서 정한 결정** (decision from a discussion): one card per candidate the agent found, with the quote, a link to the comment and its author, and the tests that lock it in plain words (scope and anchors under **자세히**); choose 확정된 결정이 맞다 (it is settled) or 기록하지 않음 (do not record).
 - **머지할 때 spec 처리** (spec at merge): shown when no question is sent back and the handoff has a spec. 삭제 / 보관 / 유지, preselected from `spec.afterMerge`; 유지 needs an owner.
-- **판정 저장** (save judgment) is enabled when every open question, spec choice and discussion is decided; until then the line next to it says what is missing. With a revert or split the button reads "판정 저장 (작업 되돌림)" and asks for a confirmation.
+- **판정 저장** (save judgment) is enabled when the answers, spec choices and discussion decisions are complete. Until then the note next to it says what is missing, with buttons to open the corresponding cards. With a revert or split the button reads "판정 저장 (작업 되돌림)" and asks for a confirmation.
 
 Confirmations are a dialog in the page, not the browser's: focus starts on the confirming button, which names the step (결과 보기, 저장, 폐기, 실행), and Escape or 취소 cancels.
 

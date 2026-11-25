@@ -36,7 +36,7 @@ A handoff only means the agent reports the work is ready. It is not proof that t
 
 A human does this. See [Dashboard](dashboard.md) for the screens.
 
-1. **Predict.** For each `predict` and `test-lock` question, write your answer first. Until you save, the server sends no output, behavior description or changed test. Saved predictions cannot be changed.
+1. **Predict.** Select one of four answers for each `predict` question and yes or no for each `test-lock` question. Until you save, the server sends no output, behavior description or changed test. Saved predictions cannot be changed.
 2. **Reveal.** The probe outputs, the behavior descriptions and the changed tests appear, with each prediction marked right or wrong where a machine can tell.
 3. **Judge each question.**
 

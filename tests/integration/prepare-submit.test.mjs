@@ -51,7 +51,7 @@ async function validDraft(home, taskId, sourceHash) {
     probeSetHash: probes.probeSetHash,
     behaviorDiffs: [{ text: `a의 값이 ${base}에서 ${head}가 된다`, probes: ['p1'], codePaths: ['src/a.mjs'] }],
     questions: [
-      { id: 'q1', kind: 'predict', probe: 'p1', prompt: '이제 a의 값은?', answerType: 'number' },
+      { id: 'q1', kind: 'predict', probe: 'p1', prompt: '이제 a의 값은?', answerType: 'choice', choices: [base, '30', head, '40'] },
       { id: 'q2', kind: 'intent', probe: 'p1', sources: [{ ref: SPEC, lines: [4, 4], quote: '변환 결과는 반올림하지 않는다.' }], prompt: 'spec의 의도와 같나요?' },
     ],
     inferences: [{ text: '다른 모듈은 a를 읽지 않는다', reason: '호출부를 실행해 보지 않았다' }],
